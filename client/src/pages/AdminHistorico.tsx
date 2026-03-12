@@ -160,12 +160,15 @@ export default function AdminHistorico() {
           {/* Painel de filtros */}
           <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
             {/* Resultado */}
-            <Select value={resultado} onValueChange={setResultado}>
+            <Select
+              value={resultado || "_todos"}
+              onValueChange={(v) => setResultado(v === "_todos" ? "" : v)}
+            >
               <SelectTrigger className="h-8 text-xs">
                 <SelectValue placeholder="Todos os resultados" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todos os resultados</SelectItem>
+                <SelectItem value="_todos">Todos os resultados</SelectItem>
                 <SelectItem value="encontrado">Encontrado</SelectItem>
                 <SelectItem value="nao_encontrado">Não encontrado</SelectItem>
                 <SelectItem value="bloqueado">Bloqueado</SelectItem>
