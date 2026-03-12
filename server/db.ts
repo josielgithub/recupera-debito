@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   Cliente,
@@ -251,11 +251,15 @@ export async function countProcessosPorStatus(): Promise<Record<string, number>>
   return map;
 }
 
+type OrderByColuna = "cnj" | "statusResumido" | "clienteNome" | "parceiroNome" | "updatedAt";
+
 interface FiltrosProcessos {
   status?: StatusResumido[];
   dataInicio?: Date;
   dataFim?: Date;
   busca?: string;
+  orderBy?: OrderByColuna;
+  orderDir?: "asc" | "desc";
 }
 
 export async function listAllProcessos(page = 1, pageSize = 50, filtros?: FiltrosProcessos) {
@@ -272,13 +276,27 @@ export async function listAllProcessos(page = 1, pageSize = 50, filtros?: Filtro
     condicoes.push(gte(processos.updatedAt, filtros.dataInicio));
   }
   if (filtros?.dataFim) {
-    // Incluir o dia inteiro: até 23:59:59 do dia informado
     const fim = new Date(filtros.dataFim);
     fim.setHours(23, 59, 59, 999);
     condicoes.push(lte(processos.updatedAt, fim));
   }
 
   const whereClause = condicoes.length > 0 ? and(...condicoes) : undefined;
+
+  // Mapear coluna de ordenação para expressão Drizzle
+  const dir = filtros?.orderDir ?? "desc";
+  const colunaOrdem = (() => {
+    const col = filtros?.orderBy ?? "updatedAt";
+    const colMap = {
+      cnj: processos.cnj,
+      statusResumido: processos.statusResumido,
+      clienteNome: clientes.nome,
+      parceiroNome: parceiros.nomeEscritorio,
+      updatedAt: processos.updatedAt,
+    } as const;
+    const expr = colMap[col];
+    return dir === "asc" ? asc(expr) : desc(expr);
+  })();
 
   const baseQuery = db
     .select({
@@ -306,7 +324,7 @@ export async function listAllProcessos(page = 1, pageSize = 50, filtros?: Filtro
 
   const [rows, countRows] = await Promise.all([
     (whereClause ? baseQuery.where(whereClause) : baseQuery)
-      .orderBy(desc(processos.updatedAt))
+      .orderBy(colunaOrdem)
       .limit(pageSize)
       .offset((page - 1) * pageSize),
     (whereClause ? countQuery.where(whereClause) : countQuery),

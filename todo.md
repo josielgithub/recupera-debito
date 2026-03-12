@@ -73,3 +73,9 @@
 - [x] Frontend: badge de filtros ativos com opção de limpar individualmente
 - [x] Frontend: contador de resultados filtrados
 - [x] Testes: cobertura do novo endpoint com filtros (24 testes passando)
+
+## Ordenação por Coluna na Tabela de Processos
+- [x] Backend: parâmetros orderBy e orderDir no endpoint admin.processos
+- [x] Frontend: cabeçalhos clicáveis com ícones de seta (asc/desc/neutro)
+- [x] Frontend: estado de ordenação persistido junto com filtros
+- [x] Testes: cobertura do novo parâmetro de ordenação (27 testes passando)

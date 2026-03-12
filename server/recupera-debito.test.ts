@@ -146,6 +146,38 @@ describe("admin.processos (filtros)", () => {
       expect(result.message).not.toContain("ZodError");
     }
   });
+
+  it("aceita todos os campos de ordenação válidos", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const colunas = ["cnj", "statusResumido", "clienteNome", "parceiroNome", "updatedAt"] as const;
+    const direcoes = ["asc", "desc"] as const;
+    for (const orderBy of colunas) {
+      for (const orderDir of direcoes) {
+        const result = await caller.admin.processos({ page: 1, orderBy, orderDir }).catch((e: Error) => e);
+        if (result instanceof Error) {
+          expect(result.message).not.toContain("ZodError");
+          expect(result.message).not.toContain("invalid_enum_value");
+        }
+      }
+    }
+  });
+
+  it("rejeita coluna de ordenação inválida", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.admin.processos({ page: 1, orderBy: "campoInexistente" as any })
+    ).rejects.toThrow();
+  });
+
+  it("rejeita direção de ordenação inválida", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    await expect(
+      caller.admin.processos({ page: 1, orderDir: "random" as any })
+    ).rejects.toThrow();
+  });
 });
 
 // ─── Testes: Rota admin.atualizarStatusProcesso ──────────────────────────────

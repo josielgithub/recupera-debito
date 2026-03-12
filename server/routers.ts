@@ -159,9 +159,11 @@ export const appRouter = router({
       .input(z.object({
         page: z.number().min(1).default(1),
         status: z.array(z.enum(STATUS_RESUMIDO)).optional(),
-        dataInicio: z.string().optional(), // ISO date string
-        dataFim: z.string().optional(),    // ISO date string
+        dataInicio: z.string().optional(),
+        dataFim: z.string().optional(),
         busca: z.string().optional(),
+        orderBy: z.enum(["cnj", "statusResumido", "clienteNome", "parceiroNome", "updatedAt"]).optional(),
+        orderDir: z.enum(["asc", "desc"]).optional(),
       }))
       .query(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
@@ -170,6 +172,8 @@ export const appRouter = router({
           dataInicio: input.dataInicio ? new Date(input.dataInicio) : undefined,
           dataFim: input.dataFim ? new Date(input.dataFim) : undefined,
           busca: input.busca,
+          orderBy: input.orderBy,
+          orderDir: input.orderDir,
         });
       }),
 

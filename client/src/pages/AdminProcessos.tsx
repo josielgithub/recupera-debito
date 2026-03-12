@@ -44,6 +44,9 @@ import {
   CalendarRange,
   SlidersHorizontal,
   ChevronDown,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from "lucide-react";
 import { STATUS_RESUMIDO_LABELS, STATUS_CORES } from "@shared/const";
 import { toast } from "sonner";
@@ -179,6 +182,48 @@ function StatusMultiSelect({
   );
 }
 
+// ─── Tipos de ordenação ──────────────────────────────────────────────────────
+type OrderByColuna = "cnj" | "statusResumido" | "clienteNome" | "parceiroNome" | "updatedAt";
+type OrderDir = "asc" | "desc";
+
+// ─── Componente de cabeçalho ordenável ───────────────────────────────────────
+function SortableHead({
+  coluna,
+  label,
+  ordenacao,
+  onSort,
+  className,
+}: {
+  coluna: OrderByColuna;
+  label: string;
+  ordenacao: { col: OrderByColuna; dir: OrderDir };
+  onSort: (col: OrderByColuna) => void;
+  className?: string;
+}) {
+  const ativo = ordenacao.col === coluna;
+  return (
+    <TableHead
+      className={`text-xs font-semibold cursor-pointer select-none group hover:bg-muted/50 transition-colors ${className ?? ""}`}
+      onClick={() => onSort(coluna)}
+    >
+      <div className="flex items-center gap-1">
+        <span>{label}</span>
+        <span className={`transition-opacity ${ativo ? "opacity-100" : "opacity-0 group-hover:opacity-50"}`}>
+          {ativo ? (
+            ordenacao.dir === "asc" ? (
+              <ArrowUp className="w-3 h-3 text-primary" />
+            ) : (
+              <ArrowDown className="w-3 h-3 text-primary" />
+            )
+          ) : (
+            <ArrowUpDown className="w-3 h-3 text-muted-foreground" />
+          )}
+        </span>
+      </div>
+    </TableHead>
+  );
+}
+
 // ─── Componente Principal ────────────────────────────────────────────────────
 export default function AdminProcessos() {
   const [pagina, setPagina] = useState(1);
@@ -187,6 +232,18 @@ export default function AdminProcessos() {
   const [filtroAberto, setFiltroAberto] = useState(false);
   const [editando, setEditando] = useState<ProcessoRow | null>(null);
   const [novoStatus, setNovoStatus] = useState("");
+  const [ordenacao, setOrdenacao] = useState<{ col: OrderByColuna; dir: OrderDir }>({
+    col: "updatedAt",
+    dir: "desc",
+  });
+
+  function handleSort(col: OrderByColuna) {
+    setOrdenacao((prev) => ({
+      col,
+      dir: prev.col === col && prev.dir === "desc" ? "asc" : "desc",
+    }));
+    setPagina(1);
+  }
 
   // Contar filtros ativos
   const filtrosAtivos = [
@@ -202,6 +259,8 @@ export default function AdminProcessos() {
     dataInicio: filtrosAplicados.dataInicio || undefined,
     dataFim: filtrosAplicados.dataFim || undefined,
     busca: filtrosAplicados.busca || undefined,
+    orderBy: ordenacao.col,
+    orderDir: ordenacao.dir,
   });
 
   const atualizarMutation = trpc.admin.atualizarStatusProcesso.useMutation({
@@ -445,11 +504,11 @@ export default function AdminProcessos() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/30">
-                    <TableHead className="text-xs font-semibold">CNJ</TableHead>
-                    <TableHead className="text-xs font-semibold">Cliente</TableHead>
-                    <TableHead className="text-xs font-semibold">Escritório</TableHead>
-                    <TableHead className="text-xs font-semibold">Status</TableHead>
-                    <TableHead className="text-xs font-semibold">Atualizado</TableHead>
+                    <SortableHead coluna="cnj" label="CNJ" ordenacao={ordenacao} onSort={handleSort} />
+                    <SortableHead coluna="clienteNome" label="Cliente" ordenacao={ordenacao} onSort={handleSort} />
+                    <SortableHead coluna="parceiroNome" label="Escritório" ordenacao={ordenacao} onSort={handleSort} />
+                    <SortableHead coluna="statusResumido" label="Status" ordenacao={ordenacao} onSort={handleSort} />
+                    <SortableHead coluna="updatedAt" label="Atualizado" ordenacao={ordenacao} onSort={handleSort} />
                     <TableHead className="text-xs font-semibold w-16">Ação</TableHead>
                   </TableRow>
                 </TableHeader>
