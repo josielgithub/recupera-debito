@@ -244,35 +244,64 @@ function CardProcesso({ processo, total }: { processo: ProcessoResultado; total:
   );
 }
 
+function formatarTelefone(valor: string): string {
+  const d = valor.replace(/\D/g, "").slice(0, 11);
+  if (d.length <= 2) return d;
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+}
+
+function validarTelefone(tel: string): boolean {
+  const d = tel.replace(/\D/g, "");
+  return d.length >= 10 && d.length <= 11;
+}
+
 export default function Home() {
   const [cpf, setCpf] = useState("");
+  const [telefone, setTelefone] = useState("");
   const [cpfConsulta, setCpfConsulta] = useState<string | null>(null);
+  const [telefoneConsulta, setTelefoneConsulta] = useState<string | null>(null);
   const [erroValidacao, setErroValidacao] = useState("");
+  const [erroTelefone, setErroTelefone] = useState("");
 
   const { data, isLoading, error } = trpc.consulta.porCpf.useQuery(
-    { cpf: cpfConsulta ?? "" },
-    { enabled: !!cpfConsulta, retry: false }
+    { cpf: cpfConsulta ?? "", telefone: telefoneConsulta ?? "" },
+    { enabled: !!cpfConsulta && !!telefoneConsulta, retry: false }
   );
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErroValidacao("");
+    setErroTelefone("");
+    let valido = true;
+
     const cpfLimpo = cpf.replace(/\D/g, "");
     if (cpfLimpo.length !== 11) {
       setErroValidacao("Digite um CPF completo com 11 dígitos.");
-      return;
-    }
-    if (!validarCpf(cpfLimpo)) {
+      valido = false;
+    } else if (!validarCpf(cpfLimpo)) {
       setErroValidacao("CPF inválido. Verifique os dígitos e tente novamente.");
-      return;
+      valido = false;
     }
+
+    if (!validarTelefone(telefone)) {
+      setErroTelefone("Digite um telefone válido com DDD (ex: (11) 99999-0000).");
+      valido = false;
+    }
+
+    if (!valido) return;
     setCpfConsulta(cpf);
+    setTelefoneConsulta(telefone);
   }
 
   function handleNovaBusca() {
     setCpf("");
+    setTelefone("");
     setCpfConsulta(null);
+    setTelefoneConsulta(null);
     setErroValidacao("");
+    setErroTelefone("");
   }
 
   const erroMsg =
@@ -363,11 +392,39 @@ export default function Home() {
                     )}
                   </div>
 
+                  <div className="space-y-1.5">
+                    <label htmlFor="telefone" className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-muted-foreground" />
+                      Telefone / Celular
+                    </label>
+                    <Input
+                      id="telefone"
+                      type="tel"
+                      inputMode="numeric"
+                      placeholder="(00) 00000-0000"
+                      value={telefone}
+                      onChange={(e) => {
+                        setTelefone(formatarTelefone(e.target.value));
+                        setErroTelefone("");
+                        if (telefoneConsulta) setTelefoneConsulta(null);
+                      }}
+                      className="text-base h-11 font-mono"
+                      maxLength={15}
+                      autoComplete="tel"
+                    />
+                    {erroTelefone && (
+                      <p className="text-sm text-destructive flex items-center gap-1.5 mt-1">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                        {erroTelefone}
+                      </p>
+                    )}
+                  </div>
+
                   <div className="flex items-start gap-2 p-3 bg-muted/40 rounded-lg text-xs text-muted-foreground border border-border/40">
                     <Shield className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-green-600" />
                     <span>
-                      Consulta protegida. Seu IP e CPF são registrados de forma anônima (hash) para
-                      segurança do sistema. Limite de consultas por período aplicado.
+                      Consulta protegida. Seu IP, CPF e telefone são registrados de forma segura para
+                      controle de acesso. Limite de consultas por período aplicado.
                     </span>
                   </div>
 

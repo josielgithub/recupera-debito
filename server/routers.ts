@@ -60,64 +60,41 @@ export const appRouter = router({
       .input(
         z.object({
           cpf: z.string().min(11).max(18),
-          captchaToken: z.string().optional(), // validado no frontend via Cloudflare Turnstile
+          telefone: z.string().min(10).max(20),
+          captchaToken: z.string().optional(),
         })
       )
       .query(async ({ input, ctx }) => {
         const ip = getClientIp(ctx.req as Parameters<typeof getClientIp>[0]);
         const cpfLimpo = input.cpf.replace(/\D/g, "");
         const cpfFormatado = `${cpfLimpo.slice(0, 3)}.${cpfLimpo.slice(3, 6)}.${cpfLimpo.slice(6, 9)}-${cpfLimpo.slice(9)}`;
+        const cpfMascarado = `***.${cpfLimpo.slice(3, 6)}.${cpfLimpo.slice(6, 9)}-**`;
+        const telefoneLimpo = input.telefone.trim();
 
         // Rate limit por IP
         const ipOk = await checkRateLimit(`ip:${hashValue(ip)}`, true);
         if (!ipOk) {
-          await registrarLogConsulta({
-            ipHash: hashValue(ip),
-            cpfHash: hashValue(cpfLimpo),
-            resultado: "bloqueado",
-          });
-          throw new TRPCError({
-            code: "TOO_MANY_REQUESTS",
-            message: "Muitas consultas realizadas. Tente novamente em alguns minutos.",
-          });
+          await registrarLogConsulta({ ipHash: hashValue(ip), cpfHash: hashValue(cpfLimpo), cpfMascarado, telefone: telefoneLimpo, resultado: "bloqueado" });
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Muitas consultas realizadas. Tente novamente em alguns minutos." });
         }
 
         // Rate limit por CPF
         const cpfOk = await checkRateLimit(`cpf:${hashValue(cpfLimpo)}`, false);
         if (!cpfOk) {
-          await registrarLogConsulta({
-            ipHash: hashValue(ip),
-            cpfHash: hashValue(cpfLimpo),
-            resultado: "bloqueado",
-          });
-          throw new TRPCError({
-            code: "TOO_MANY_REQUESTS",
-            message: "Muitas consultas realizadas. Tente novamente em alguns minutos.",
-          });
+          await registrarLogConsulta({ ipHash: hashValue(ip), cpfHash: hashValue(cpfLimpo), cpfMascarado, telefone: telefoneLimpo, resultado: "bloqueado" });
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Muitas consultas realizadas. Tente novamente em alguns minutos." });
         }
 
         const cliente = await getClienteByCpf(cpfFormatado);
 
         if (!cliente) {
-          await registrarLogConsulta({
-            ipHash: hashValue(ip),
-            cpfHash: hashValue(cpfLimpo),
-            resultado: "nao_encontrado",
-          });
-          // Mensagem genérica para não expor se CPF existe
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Não foi possível localizar informações para o CPF informado.",
-          });
+          await registrarLogConsulta({ ipHash: hashValue(ip), cpfHash: hashValue(cpfLimpo), cpfMascarado, telefone: telefoneLimpo, resultado: "nao_encontrado" });
+          throw new TRPCError({ code: "NOT_FOUND", message: "Não foi possível localizar informações para o CPF informado." });
         }
 
         const processosCliente = await getProcessosByCpf(cpfFormatado);
 
-        await registrarLogConsulta({
-          ipHash: hashValue(ip),
-          cpfHash: hashValue(cpfLimpo),
-          resultado: "encontrado",
-        });
+        await registrarLogConsulta({ ipHash: hashValue(ip), cpfHash: hashValue(cpfLimpo), cpfMascarado, telefone: telefoneLimpo, resultado: "encontrado" });
 
         return {
           nomeCliente: cliente.nome,
@@ -126,11 +103,7 @@ export const appRouter = router({
             statusResumido: p.statusResumido,
             ultimaAtualizacao: p.ultimaAtualizacaoApi ?? p.updatedAt,
             parceiro: p.parceiro
-              ? {
-                  nome: p.parceiro.nomeEscritorio,
-                  whatsapp: p.parceiro.whatsapp,
-                  email: p.parceiro.email,
-                }
+              ? { nome: p.parceiro.nomeEscritorio, whatsapp: p.parceiro.whatsapp, email: p.parceiro.email }
               : null,
           })),
         };
@@ -218,7 +191,8 @@ export const appRouter = router({
       .input(z.object({ limit: z.number().min(1).max(500).default(100) }))
       .query(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
-        return listLogsConsulta(input.limit);
+        const result = await listLogsConsulta(1, input.limit);
+        return result.logs;
       }),
 
     rodarRotina7dias: protectedProcedure.mutation(async ({ ctx }) => {
@@ -262,6 +236,25 @@ export const appRouter = router({
           email: input.email ?? null,
         });
         return { id };
+      }),
+
+    // Histórico de consultas públicas
+    historicoConsultas: protectedProcedure
+      .input(z.object({
+        page: z.number().min(1).default(1),
+        resultado: z.enum(["encontrado", "nao_encontrado", "bloqueado"]).optional(),
+        dataInicio: z.string().optional(),
+        dataFim: z.string().optional(),
+        telefone: z.string().optional(),
+      }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        return listLogsConsulta(input.page, 50, {
+          resultado: input.resultado,
+          dataInicio: input.dataInicio ? new Date(input.dataInicio) : undefined,
+          dataFim: input.dataFim ? new Date(input.dataFim) : undefined,
+          telefone: input.telefone,
+        });
       }),
 
     // Gerar planilha modelo para download (base64)

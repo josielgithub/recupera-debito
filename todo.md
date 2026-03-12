@@ -79,3 +79,13 @@
 - [x] Frontend: cabeçalhos clicáveis com ícones de seta (asc/desc/neutro)
 - [x] Frontend: estado de ordenação persistido junto com filtros
 - [x] Testes: cobertura do novo parâmetro de ordenação (27 testes passando)
+
+## Telefone e Histórico de Consultas
+- [x] Schema: adicionar colunas telefone e cpf_mascarado na tabela logs_consulta
+- [x] Migração SQL aplicada
+- [x] Backend: salvar telefone e cpfMascarado em todos os logs
+- [x] Backend: endpoint admin.historicoConsultas com paginação e filtros
+- [x] Portal público: campo de telefone/celular com máscara e validação
+- [x] Admin: aba "Histórico" com tabela paginada (CPF mascarado, telefone, IP, data, resultado)
+- [x] Admin: exportar histórico em CSV (com filtros aplicados)
+- [x] Testes: 27 testes passando (TypeScript sem erros)

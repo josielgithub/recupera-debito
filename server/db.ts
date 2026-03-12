@@ -397,10 +397,48 @@ export async function registrarLogConsulta(data: InsertLogConsulta): Promise<voi
   await db.insert(logsConsulta).values(data);
 }
 
-export async function listLogsConsulta(limit = 100) {
+export async function listLogsConsulta(
+  page = 1,
+  pageSize = 50,
+  filtros?: { resultado?: string; dataInicio?: Date; dataFim?: Date; telefone?: string }
+) {
   const db = await getDb();
-  if (!db) return [];
-  return db.select().from(logsConsulta).orderBy(desc(logsConsulta.createdAt)).limit(limit);
+  if (!db) return { logs: [], total: 0 };
+
+  const condicoes: ReturnType<typeof and>[] = [];
+  if (filtros?.resultado) {
+    condicoes.push(eq(logsConsulta.resultado, filtros.resultado as "encontrado" | "nao_encontrado" | "bloqueado"));
+  }
+  if (filtros?.dataInicio) {
+    condicoes.push(gte(logsConsulta.createdAt, filtros.dataInicio));
+  }
+  if (filtros?.dataFim) {
+    const fim = new Date(filtros.dataFim);
+    fim.setHours(23, 59, 59, 999);
+    condicoes.push(lte(logsConsulta.createdAt, fim));
+  }
+
+  const whereClause = condicoes.length > 0 ? and(...condicoes) : undefined;
+
+  const baseQ = db.select().from(logsConsulta);
+  const countQ = db.select({ count: sql<number>`count(*)` }).from(logsConsulta);
+
+  const [logs, countRows] = await Promise.all([
+    (whereClause ? baseQ.where(whereClause) : baseQ)
+      .orderBy(desc(logsConsulta.createdAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
+    (whereClause ? countQ.where(whereClause) : countQ),
+  ]);
+
+  // Filtro de telefone em memória (busca parcial)
+  let resultado = logs;
+  if (filtros?.telefone) {
+    const t = filtros.telefone.replace(/\D/g, "");
+    resultado = logs.filter((l) => l.telefone?.replace(/\D/g, "").includes(t));
+  }
+
+  return { logs: resultado, total: Number(countRows[0]?.count ?? 0) };
 }
 
 // ─── Logs de Importação ────────────────────────────────────────────────────

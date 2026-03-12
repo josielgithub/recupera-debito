@@ -107,8 +107,10 @@ export type InsertProcesso = typeof processos.$inferInsert;
 // ─── Logs de Consulta Pública ──────────────────────────────────────────────
 export const logsConsulta = mysqlTable("logs_consulta", {
   id: int("id").autoincrement().primaryKey(),
-  ipHash: varchar("ip_hash", { length: 64 }).notNull(), // SHA-256 do IP
-  cpfHash: varchar("cpf_hash", { length: 64 }).notNull(), // SHA-256 do CPF
+  ipHash: varchar("ip_hash", { length: 64 }).notNull(),       // SHA-256 do IP
+  cpfHash: varchar("cpf_hash", { length: 64 }).notNull(),     // SHA-256 do CPF
+  cpfMascarado: varchar("cpf_mascarado", { length: 14 }),     // ex: ***.982.247-**
+  telefone: varchar("telefone", { length: 20 }),              // número informado pelo consulente
   resultado: mysqlEnum("resultado", ["encontrado", "nao_encontrado", "bloqueado"]).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
