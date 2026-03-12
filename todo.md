@@ -54,3 +54,15 @@
 - [x] Autenticação admin via Manus OAuth (role=admin)
 - [x] Variável: CODILO_CALLBACK_SECRET para validação de webhook
 - [x] Documentação de configuração
+
+## Funcionalidades Adicionais (fase 2)
+- [x] Indicador visual de progresso dos 12 status no portal público
+- [x] Página de processos filtrados por status no admin
+- [x] Tabela de todos os processos com busca no admin
+- [x] Gestão de parceiros/escritórios (CRUD) no admin
+- [x] Geração e download de planilha modelo (.xlsx)
+- [x] Endpoint para gerar planilha modelo de importação
+- [x] Atualização manual de status de processo no admin
+- [x] Página de documentação/configuração (variáveis de ambiente)
+- [x] Indicador de status da integração Codilo no dashboard
+- [x] Paginação na tabela de processos

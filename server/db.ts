@@ -251,15 +251,35 @@ export async function countProcessosPorStatus(): Promise<Record<string, number>>
   return map;
 }
 
-export async function listAllProcessos(page = 1, pageSize = 50): Promise<Processo[]> {
+export async function listAllProcessos(page = 1, pageSize = 50) {
   const db = await getDb();
-  if (!db) return [];
-  return db
-    .select()
-    .from(processos)
-    .orderBy(desc(processos.updatedAt))
-    .limit(pageSize)
-    .offset((page - 1) * pageSize);
+  if (!db) return { processos: [], total: 0 };
+
+  const [rows, countRows] = await Promise.all([
+    db
+      .select({
+        id: processos.id,
+        cnj: processos.cnj,
+        statusResumido: processos.statusResumido,
+        statusInterno: processos.statusInterno,
+        advogado: processos.advogado,
+        updatedAt: processos.updatedAt,
+        monitoramentoAtivo: processos.monitoramentoAtivo,
+        semAtualizacao7dias: processos.semAtualizacao7dias,
+        clienteNome: clientes.nome,
+        clienteCpf: clientes.cpf,
+        parceiroNome: parceiros.nomeEscritorio,
+      })
+      .from(processos)
+      .leftJoin(clientes, eq(processos.clienteId, clientes.id))
+      .leftJoin(parceiros, eq(processos.parceiroId, parceiros.id))
+      .orderBy(desc(processos.updatedAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
+    db.select({ count: sql<number>`count(*)` }).from(processos),
+  ]);
+
+  return { processos: rows, total: Number(countRows[0]?.count ?? 0) };
 }
 
 // ─── Rate Limit ────────────────────────────────────────────────────────────

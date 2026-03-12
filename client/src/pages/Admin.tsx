@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
@@ -33,15 +33,16 @@ import {
   Users,
   FileText,
   AlertCircle,
+  Download,
+  Building2,
+  Settings,
 } from "lucide-react";
 import { STATUS_RESUMIDO_LABELS, STATUS_CORES } from "@shared/const";
-
-
-function StatusBadge({ status }: { status: string }) {
-  const label = STATUS_RESUMIDO_LABELS[status] ?? status;
-  const cor = STATUS_CORES[status] ?? "bg-gray-100 text-gray-800";
-  return <Badge className={`${cor} border-0 text-xs whitespace-nowrap`}>{label}</Badge>;
-}
+import { toast } from "sonner";
+import AdminProcessos from "./AdminProcessos";
+import AdminParceiros from "./AdminParceiros";
+import AdminConfig from "./AdminConfig";
+import { useRef } from "react";
 
 function formatarData(data: Date | string | null | undefined): string {
   if (!data) return "—";
@@ -89,9 +90,10 @@ function DashboardView() {
   const { data, isLoading, refetch } = trpc.admin.dashboard.useQuery();
   const rotinaMutation = trpc.admin.rodarRotina7dias.useMutation({
     onSuccess: (r) => {
-      alert(`Rotina executada: ${r.afetados} processo(s) marcado(s).`);
+      toast.success(`Rotina executada: ${r.afetados} processo(s) marcado(s).`);
       refetch();
     },
+    onError: (err) => toast.error(`Erro: ${err.message}`),
   });
 
   if (isLoading) {
@@ -110,18 +112,20 @@ function DashboardView() {
       {/* Resumo geral */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Total de processos", value: total, icon: FileText, color: "text-primary" },
-          { label: "Concluídos ganho", value: contagens["concluido_ganho"] ?? 0, icon: CheckCircle2, color: "text-green-600" },
-          { label: "Em andamento", value: contagens["em_andamento"] ?? 0, icon: Activity, color: "text-yellow-600" },
-          { label: "Sem atualização 7d", value: data?.semAtualizacao?.length ?? 0, icon: AlertTriangle, color: "text-orange-600" },
+          { label: "Total de processos", value: total, icon: FileText, color: "text-primary bg-primary/10" },
+          { label: "Concluídos – Ganho", value: contagens["concluido_ganho"] ?? 0, icon: CheckCircle2, color: "text-green-700 bg-green-50" },
+          { label: "Em andamento", value: contagens["em_andamento"] ?? 0, icon: Activity, color: "text-yellow-700 bg-yellow-50" },
+          { label: "Sem atualização 7d", value: data?.semAtualizacao?.length ?? 0, icon: AlertTriangle, color: "text-orange-700 bg-orange-50" },
         ].map((item) => (
           <Card key={item.label} className="shadow-sm">
             <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs text-muted-foreground font-medium">{item.label}</p>
-                <item.icon className={`w-4 h-4 ${item.color}`} />
+              <div className="flex items-center justify-between mb-3">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${item.color}`}>
+                  <item.icon className="w-4 h-4" />
+                </div>
               </div>
-              <p className={`text-2xl font-bold ${item.color}`}>{item.value}</p>
+              <p className="text-2xl font-bold text-foreground">{item.value}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{item.label}</p>
             </CardContent>
           </Card>
         ))}
@@ -140,15 +144,15 @@ function DashboardView() {
               size="sm"
               onClick={() => rotinaMutation.mutate()}
               disabled={rotinaMutation.isPending}
-              className="text-xs"
+              className="text-xs h-8"
             >
               <RefreshCw className={`w-3 h-3 mr-1 ${rotinaMutation.isPending ? "animate-spin" : ""}`} />
-              Rodar rotina 7 dias
+              Rotina 7 dias
             </Button>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
             {STATUS_ORDER.map((status) => {
               const count = contagens[status] ?? 0;
               const label = STATUS_RESUMIDO_LABELS[status] ?? status;
@@ -156,10 +160,10 @@ function DashboardView() {
               return (
                 <div
                   key={status}
-                  className="flex items-center gap-3 p-3 rounded-lg border border-border/60 bg-card"
+                  className="flex items-center gap-2.5 p-3 rounded-lg border border-border/60 bg-card"
                 >
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${iconColor}`}>
-                    <span className="text-xs font-bold">{count}</span>
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${iconColor}`}>
+                    <span className="text-sm font-bold">{count}</span>
                   </div>
                   <p className="text-xs text-muted-foreground leading-tight">{label}</p>
                 </div>
@@ -171,28 +175,24 @@ function DashboardView() {
 
       {/* Listas filtradas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Ganhos */}
         <ProcessosList
           titulo="Concluídos – Ganho"
           processos={data?.ganhos ?? []}
           icon={<CheckCircle2 className="w-4 h-4 text-green-600" />}
           emptyMsg="Nenhum processo ganho registrado."
         />
-        {/* Cumprimento */}
         <ProcessosList
           titulo="Cumprimento de sentença"
           processos={data?.cumprimentos ?? []}
           icon={<ChevronRight className="w-4 h-4 text-teal-600" />}
           emptyMsg="Nenhum processo em cumprimento."
         />
-        {/* Perdidos */}
         <ProcessosList
           titulo="Concluídos – Perdido"
           processos={data?.perdidos ?? []}
           icon={<XCircle className="w-4 h-4 text-red-600" />}
           emptyMsg="Nenhum processo perdido registrado."
         />
-        {/* Sem atualização */}
         <ProcessosList
           titulo="Sem atualização há 7 dias"
           processos={data?.semAtualizacao ?? []}
@@ -219,32 +219,26 @@ function ProcessosList({
   destaque?: boolean;
 }) {
   return (
-    <Card className={`shadow-sm ${destaque ? "border-orange-200" : ""}`}>
+    <Card className={`shadow-sm ${destaque && processos.length > 0 ? "border-orange-200" : ""}`}>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-semibold flex items-center gap-2">
           {icon}
           {titulo}
-          <Badge variant="outline" className="ml-auto text-xs">
-            {processos.length}
-          </Badge>
+          <Badge variant="outline" className="ml-auto text-xs">{processos.length}</Badge>
         </CardTitle>
       </CardHeader>
       <CardContent>
         {processos.length === 0 ? (
           <p className="text-xs text-muted-foreground py-4 text-center">{emptyMsg}</p>
         ) : (
-          <div className="space-y-1 max-h-48 overflow-y-auto">
+          <div className="space-y-1 max-h-52 overflow-y-auto">
             {processos.slice(0, 20).map((p) => (
               <div
                 key={p.cnj}
                 className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-muted/30 text-xs"
               >
-                <span className="font-mono text-muted-foreground truncate max-w-[140px]">
-                  {p.cnj}
-                </span>
-                <span className="text-muted-foreground ml-2 flex-shrink-0">
-                  {formatarData(p.updatedAt)}
-                </span>
+                <span className="font-mono text-muted-foreground truncate max-w-[150px]">{p.cnj}</span>
+                <span className="text-muted-foreground ml-2 flex-shrink-0">{formatarData(p.updatedAt)}</span>
               </div>
             ))}
             {processos.length > 20 && (
@@ -271,17 +265,29 @@ function ImportacaoView() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const importarMutation = trpc.admin.importarPlanilha.useMutation({
-    onSuccess: (data) => setResultado(data),
-    onError: (err) => alert(`Erro na importação: ${err.message}`),
+    onSuccess: (data) => {
+      setResultado(data);
+      toast.success(`Importação concluída: ${data.linhasOk} linha(s) importada(s).`);
+    },
+    onError: (err) => toast.error(`Erro na importação: ${err.message}`),
   });
 
+  const { data: modelo } = trpc.admin.gerarPlanilhaModelo.useQuery();
   const { data: historico } = trpc.admin.historicoImportacoes.useQuery();
+
+  function downloadModelo() {
+    if (!modelo) return;
+    const link = document.createElement("a");
+    link.href = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${modelo.base64}`;
+    link.download = modelo.filename;
+    link.click();
+  }
 
   async function handleImportar() {
     if (!arquivo) return;
     const buffer = await arquivo.arrayBuffer();
     const bytes = new Uint8Array(buffer);
-    let binary = '';
+    let binary = "";
     for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]!);
     const base64 = btoa(binary);
     importarMutation.mutate({
@@ -295,23 +301,36 @@ function ImportacaoView() {
     <div className="space-y-6">
       <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Upload className="w-4 h-4 text-primary" />
-            Importar planilha Excel
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Upload className="w-4 h-4 text-primary" />
+              Importar planilha Excel
+            </CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs h-8"
+              onClick={downloadModelo}
+              disabled={!modelo}
+            >
+              <Download className="w-3.5 h-3.5 mr-1" />
+              Baixar modelo
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="p-4 bg-muted/30 rounded-lg border border-dashed border-border text-sm text-muted-foreground space-y-1">
-            <p className="font-medium text-foreground text-xs uppercase tracking-wide">
-              Colunas esperadas na planilha:
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 text-xs mt-2">
+          <div className="p-3 bg-muted/30 rounded-lg border border-border/40 text-xs">
+            <p className="font-semibold text-foreground mb-2">Colunas esperadas na planilha:</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
               {["cpf", "nome", "cnj", "status_interno", "advogado", "nome_escritorio", "whatsapp_escritorio", "email_escritorio"].map((col) => (
-                <code key={col} className="bg-muted px-1.5 py-0.5 rounded text-foreground">
+                <code key={col} className="bg-muted px-1.5 py-0.5 rounded text-foreground font-mono">
                   {col}
                 </code>
               ))}
             </div>
+            <p className="text-muted-foreground mt-2">
+              Baixe o modelo acima para garantir o formato correto. Colunas obrigatórias: <strong>cpf</strong>, <strong>nome</strong>, <strong>cnj</strong>.
+            </p>
           </div>
 
           <div
@@ -321,19 +340,13 @@ function ImportacaoView() {
             <FileSpreadsheet className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
             {arquivo ? (
               <div>
-                <p className="font-medium text-foreground text-sm">{arquivo.name}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {(arquivo.size / 1024).toFixed(1)} KB
-                </p>
+                <p className="font-semibold text-foreground text-sm">{arquivo.name}</p>
+                <p className="text-xs text-muted-foreground mt-1">{(arquivo.size / 1024).toFixed(1)} KB</p>
               </div>
             ) : (
               <div>
-                <p className="text-sm font-medium text-foreground">
-                  Clique para selecionar o arquivo
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Formatos aceitos: .xlsx, .xls, .csv
-                </p>
+                <p className="text-sm font-medium text-foreground">Clique para selecionar o arquivo</p>
+                <p className="text-xs text-muted-foreground mt-1">Formatos aceitos: .xlsx, .xls, .csv</p>
               </div>
             )}
             <input
@@ -368,7 +381,7 @@ function ImportacaoView() {
         </CardContent>
       </Card>
 
-      {/* Resultado da importação */}
+      {/* Resultado */}
       {resultado && (
         <Card className="shadow-sm">
           <CardHeader>
@@ -385,7 +398,7 @@ function ImportacaoView() {
               </div>
               <div className="text-center p-3 bg-green-50 rounded-lg">
                 <p className="text-2xl font-bold text-green-700">{resultado.linhasOk}</p>
-                <p className="text-xs text-green-600">Importadas com sucesso</p>
+                <p className="text-xs text-green-600">Importadas</p>
               </div>
               <div className="text-center p-3 bg-red-50 rounded-lg">
                 <p className="text-2xl font-bold text-red-700">{resultado.linhasErro}</p>
@@ -402,10 +415,7 @@ function ImportacaoView() {
                   {resultado.detalhes
                     .filter((d) => d.status === "erro")
                     .map((d) => (
-                      <div
-                        key={d.linha}
-                        className="flex items-start gap-2 p-2 bg-red-50 rounded text-xs"
-                      >
+                      <div key={d.linha} className="flex items-start gap-2 p-2 bg-red-50 rounded text-xs">
                         <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
                         <span>
                           <strong>Linha {d.linha}:</strong>{" "}
@@ -450,9 +460,7 @@ function ImportacaoView() {
                     <TableCell className="text-xs text-center">{h.totalLinhas}</TableCell>
                     <TableCell className="text-xs text-center text-green-700">{h.linhasOk}</TableCell>
                     <TableCell className="text-xs text-center text-red-700">{h.linhasErro}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {formatarData(h.createdAt)}
-                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{formatarData(h.createdAt)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -474,9 +482,7 @@ function LogsView() {
         <CardTitle className="text-sm font-semibold flex items-center gap-2">
           <Activity className="w-4 h-4 text-primary" />
           Logs de consulta pública
-          <Badge variant="outline" className="ml-auto text-xs">
-            {logs?.length ?? 0}
-          </Badge>
+          <Badge variant="outline" className="ml-auto text-xs">{logs?.length ?? 0}</Badge>
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -586,9 +592,7 @@ export default function Admin() {
                 Sua conta não possui permissão de administrador.
               </p>
             </div>
-            <Button variant="outline" onClick={() => logout()}>
-              Sair
-            </Button>
+            <Button variant="outline" onClick={() => logout()}>Sair</Button>
           </CardContent>
         </Card>
       </div>
@@ -596,38 +600,42 @@ export default function Admin() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-slate-50">
       {/* Header Admin */}
-      <header className="bg-sidebar text-sidebar-foreground border-b border-sidebar-border shadow-sm">
+      <header className="bg-slate-900 text-white border-b border-slate-700 shadow-sm sticky top-0 z-10">
         <div className="container py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-sidebar-primary rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
               <Scale className="w-4 h-4 text-white" />
             </div>
             <div>
               <p className="text-sm font-semibold">Recupera Débito</p>
-              <p className="text-xs text-sidebar-foreground/60">Dashboard Administrativo</p>
+              <p className="text-xs text-slate-400">Dashboard Administrativo</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden sm:flex items-center gap-2">
-              <div className="w-7 h-7 bg-sidebar-accent rounded-full flex items-center justify-center">
-                <Users className="w-3.5 h-3.5 text-sidebar-accent-foreground" />
+              <div className="w-7 h-7 bg-slate-700 rounded-full flex items-center justify-center">
+                <Users className="w-3.5 h-3.5 text-slate-300" />
               </div>
               <div>
-                <p className="text-xs font-medium">{user.name ?? user.email}</p>
-                <p className="text-xs text-sidebar-foreground/60">Administrador</p>
+                <p className="text-xs font-medium text-white">{user.name ?? user.email}</p>
+                <p className="text-xs text-slate-400">Administrador</p>
               </div>
             </div>
+            <Separator orientation="vertical" className="h-6 bg-slate-700 hidden sm:block" />
             <Button
               variant="ghost"
               size="sm"
               onClick={() => logout()}
-              className="text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent text-xs"
+              className="text-slate-300 hover:text-white hover:bg-slate-700 text-xs"
             >
               <LogOut className="w-3.5 h-3.5 mr-1" />
               Sair
             </Button>
+            <a href="/" className="text-xs text-slate-400 hover:text-white transition-colors hidden sm:block">
+              ← Portal público
+            </a>
           </div>
         </div>
       </header>
@@ -635,10 +643,18 @@ export default function Admin() {
       {/* Conteúdo */}
       <div className="container py-6">
         <Tabs defaultValue="dashboard">
-          <TabsList className="mb-6">
+          <TabsList className="mb-6 bg-white border border-border shadow-sm">
             <TabsTrigger value="dashboard" className="flex items-center gap-1.5 text-xs">
               <LayoutDashboard className="w-3.5 h-3.5" />
               Dashboard
+            </TabsTrigger>
+            <TabsTrigger value="processos" className="flex items-center gap-1.5 text-xs">
+              <FileText className="w-3.5 h-3.5" />
+              Processos
+            </TabsTrigger>
+            <TabsTrigger value="parceiros" className="flex items-center gap-1.5 text-xs">
+              <Building2 className="w-3.5 h-3.5" />
+              Escritórios
             </TabsTrigger>
             <TabsTrigger value="importacao" className="flex items-center gap-1.5 text-xs">
               <Upload className="w-3.5 h-3.5" />
@@ -648,17 +664,18 @@ export default function Admin() {
               <Activity className="w-3.5 h-3.5" />
               Logs
             </TabsTrigger>
+            <TabsTrigger value="config" className="flex items-center gap-1.5 text-xs">
+              <Settings className="w-3.5 h-3.5" />
+              Config
+            </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="dashboard">
-            <DashboardView />
-          </TabsContent>
-          <TabsContent value="importacao">
-            <ImportacaoView />
-          </TabsContent>
-          <TabsContent value="logs">
-            <LogsView />
-          </TabsContent>
+          <TabsContent value="dashboard"><DashboardView /></TabsContent>
+          <TabsContent value="processos"><AdminProcessos /></TabsContent>
+          <TabsContent value="parceiros"><AdminParceiros /></TabsContent>
+          <TabsContent value="importacao"><ImportacaoView /></TabsContent>
+          <TabsContent value="logs"><LogsView /></TabsContent>
+          <TabsContent value="config"><AdminConfig /></TabsContent>
         </Tabs>
       </div>
     </div>

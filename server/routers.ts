@@ -10,17 +10,22 @@ import {
   countProcessosPorStatus,
   getClienteByCpf,
   getProcessosByCpf,
+  getProcessoByCnj,
   listAllProcessos,
   listLogsConsulta,
   listLogsImportacao,
+  listParceiros,
   listProcessosPorStatus,
   listProcessosSemAtualizacao7dias,
   marcarProcessosSemAtualizacao,
   registrarLogConsulta,
   registrarLogImportacao,
+  updateProcessoStatus,
+  upsertParceiro,
 } from "./db";
 import { processarPlanilha } from "./importacao";
 import { createHash } from "crypto";
+import * as XLSX from "xlsx";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 function hashValue(value: string): string {
@@ -205,6 +210,75 @@ export const appRouter = router({
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
       const afetados = await marcarProcessosSemAtualizacao();
       return { afetados };
+    }),
+
+    // Atualizar status de processo manualmente
+    atualizarStatusProcesso: protectedProcedure
+      .input(z.object({
+        cnj: z.string(),
+        status: z.enum(STATUS_RESUMIDO),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const processo = await getProcessoByCnj(input.cnj);
+        if (!processo) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+        await updateProcessoStatus(input.cnj, input.status as StatusResumido, processo.rawPayload);
+        return { ok: true };
+      }),
+
+    // Listar parceiros
+    parceiros: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return listParceiros();
+    }),
+
+    // Criar/atualizar parceiro
+    upsertParceiro: protectedProcedure
+      .input(z.object({
+        nomeEscritorio: z.string().min(2),
+        whatsapp: z.string().optional(),
+        email: z.string().email().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const id = await upsertParceiro({
+          nomeEscritorio: input.nomeEscritorio,
+          whatsapp: input.whatsapp ?? null,
+          email: input.email ?? null,
+        });
+        return { id };
+      }),
+
+    // Gerar planilha modelo para download (base64)
+    gerarPlanilhaModelo: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+
+      const wb = XLSX.utils.book_new();
+      const dados = [
+        [
+          "cpf", "nome", "cnj", "status_interno", "advogado",
+          "nome_escritorio", "whatsapp_escritorio", "email_escritorio"
+        ],
+        [
+          "529.982.247-25", "Maria da Silva", "0000001-02.2023.8.26.0001",
+          "Em análise", "Dr. João Santos",
+          "Escritório Exemplo", "(11) 99999-0000", "contato@escritorio.com"
+        ],
+        [
+          "111.444.777-35", "Carlos Oliveira", "0000002-03.2023.8.26.0001",
+          "", "Dra. Ana Lima",
+          "Escritório Exemplo", "(11) 99999-0000", "contato@escritorio.com"
+        ],
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(dados);
+      // Largura das colunas
+      ws["!cols"] = [
+        { wch: 18 }, { wch: 25 }, { wch: 28 }, { wch: 20 }, { wch: 20 },
+        { wch: 25 }, { wch: 20 }, { wch: 28 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, "Processos");
+      const buf = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+      return { base64: buf as string, filename: "modelo_importacao_recupera_debito.xlsx" };
     }),
   }),
 });
