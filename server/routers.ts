@@ -156,10 +156,21 @@ export const appRouter = router({
     }),
 
     processos: protectedProcedure
-      .input(z.object({ page: z.number().min(1).default(1) }))
+      .input(z.object({
+        page: z.number().min(1).default(1),
+        status: z.array(z.enum(STATUS_RESUMIDO)).optional(),
+        dataInicio: z.string().optional(), // ISO date string
+        dataFim: z.string().optional(),    // ISO date string
+        busca: z.string().optional(),
+      }))
       .query(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
-        return listAllProcessos(input.page, 50);
+        return listAllProcessos(input.page, 50, {
+          status: input.status as StatusResumido[] | undefined,
+          dataInicio: input.dataInicio ? new Date(input.dataInicio) : undefined,
+          dataFim: input.dataFim ? new Date(input.dataFim) : undefined,
+          busca: input.busca,
+        });
       }),
 
     processosPorStatus: protectedProcedure

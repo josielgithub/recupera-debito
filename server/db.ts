@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lt, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   Cliente,
@@ -251,35 +251,81 @@ export async function countProcessosPorStatus(): Promise<Record<string, number>>
   return map;
 }
 
-export async function listAllProcessos(page = 1, pageSize = 50) {
+interface FiltrosProcessos {
+  status?: StatusResumido[];
+  dataInicio?: Date;
+  dataFim?: Date;
+  busca?: string;
+}
+
+export async function listAllProcessos(page = 1, pageSize = 50, filtros?: FiltrosProcessos) {
   const db = await getDb();
   if (!db) return { processos: [], total: 0 };
 
+  // Construir condições WHERE dinamicamente
+  const condicoes: ReturnType<typeof and>[] = [];
+
+  if (filtros?.status && filtros.status.length > 0) {
+    condicoes.push(inArray(processos.statusResumido, filtros.status));
+  }
+  if (filtros?.dataInicio) {
+    condicoes.push(gte(processos.updatedAt, filtros.dataInicio));
+  }
+  if (filtros?.dataFim) {
+    // Incluir o dia inteiro: até 23:59:59 do dia informado
+    const fim = new Date(filtros.dataFim);
+    fim.setHours(23, 59, 59, 999);
+    condicoes.push(lte(processos.updatedAt, fim));
+  }
+
+  const whereClause = condicoes.length > 0 ? and(...condicoes) : undefined;
+
+  const baseQuery = db
+    .select({
+      id: processos.id,
+      cnj: processos.cnj,
+      statusResumido: processos.statusResumido,
+      statusInterno: processos.statusInterno,
+      advogado: processos.advogado,
+      updatedAt: processos.updatedAt,
+      monitoramentoAtivo: processos.monitoramentoAtivo,
+      semAtualizacao7dias: processos.semAtualizacao7dias,
+      clienteNome: clientes.nome,
+      clienteCpf: clientes.cpf,
+      parceiroNome: parceiros.nomeEscritorio,
+    })
+    .from(processos)
+    .leftJoin(clientes, eq(processos.clienteId, clientes.id))
+    .leftJoin(parceiros, eq(processos.parceiroId, parceiros.id));
+
+  const countQuery = db
+    .select({ count: sql<number>`count(*)` })
+    .from(processos)
+    .leftJoin(clientes, eq(processos.clienteId, clientes.id))
+    .leftJoin(parceiros, eq(processos.parceiroId, parceiros.id));
+
   const [rows, countRows] = await Promise.all([
-    db
-      .select({
-        id: processos.id,
-        cnj: processos.cnj,
-        statusResumido: processos.statusResumido,
-        statusInterno: processos.statusInterno,
-        advogado: processos.advogado,
-        updatedAt: processos.updatedAt,
-        monitoramentoAtivo: processos.monitoramentoAtivo,
-        semAtualizacao7dias: processos.semAtualizacao7dias,
-        clienteNome: clientes.nome,
-        clienteCpf: clientes.cpf,
-        parceiroNome: parceiros.nomeEscritorio,
-      })
-      .from(processos)
-      .leftJoin(clientes, eq(processos.clienteId, clientes.id))
-      .leftJoin(parceiros, eq(processos.parceiroId, parceiros.id))
+    (whereClause ? baseQuery.where(whereClause) : baseQuery)
       .orderBy(desc(processos.updatedAt))
       .limit(pageSize)
       .offset((page - 1) * pageSize),
-    db.select({ count: sql<number>`count(*)` }).from(processos),
+    (whereClause ? countQuery.where(whereClause) : countQuery),
   ]);
 
-  return { processos: rows, total: Number(countRows[0]?.count ?? 0) };
+  // Filtro de busca textual em memória (CNJ, nome, CPF, parceiro)
+  let resultado = rows;
+  if (filtros?.busca && filtros.busca.trim()) {
+    const termo = filtros.busca.trim().toLowerCase();
+    resultado = rows.filter(
+      (p) =>
+        p.cnj.toLowerCase().includes(termo) ||
+        (p.clienteNome ?? "").toLowerCase().includes(termo) ||
+        (p.clienteCpf ?? "").includes(termo) ||
+        (p.parceiroNome ?? "").toLowerCase().includes(termo)
+    );
+  }
+
+  return { processos: resultado, total: Number(countRows[0]?.count ?? 0) };
 }
 
 // ─── Rate Limit ────────────────────────────────────────────────────────────

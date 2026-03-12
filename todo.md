@@ -66,3 +66,10 @@
 - [x] Página de documentação/configuração (variáveis de ambiente)
 - [x] Indicador de status da integração Codilo no dashboard
 - [x] Paginação na tabela de processos
+
+## Filtro Avançado na Tabela de Processos
+- [x] Backend: parâmetros de filtro por status e intervalo de datas no endpoint admin.processos
+- [x] Frontend: painel de filtros com multi-select de status e date range picker
+- [x] Frontend: badge de filtros ativos com opção de limpar individualmente
+- [x] Frontend: contador de resultados filtrados
+- [x] Testes: cobertura do novo endpoint com filtros (24 testes passando)

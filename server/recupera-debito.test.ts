@@ -110,6 +110,44 @@ describe("auth.logout", () => {
   });
 });
 
+// ─── Testes: Rota admin.processos (filtros) ───────────────────────────────────
+describe("admin.processos (filtros)", () => {
+  it("lança FORBIDDEN para usuário não-admin", async () => {
+    const { ctx } = createAuthContext();
+    const ctxUser = { ...ctx, user: { ...ctx.user!, role: "user" as const } };
+    const caller = appRouter.createCaller(ctxUser);
+    await expect(caller.admin.processos({ page: 1 })).rejects.toThrow();
+  });
+
+  it("aceita filtros opcionais sem erros de validação Zod", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    // Não conecta ao DB em teste unitário, mas a validação Zod deve passar
+    // O erro será de DB (sem conexão), não de validação
+    const result = await caller.admin.processos({
+      page: 1,
+      status: ["concluido_ganho", "em_andamento"],
+      dataInicio: "2024-01-01",
+      dataFim: "2024-12-31",
+      busca: "teste",
+    }).catch((e: Error) => e);
+    // Aceita erro de DB (sem conexão), mas não de validação Zod
+    if (result instanceof Error) {
+      expect(result.message).not.toContain("ZodError");
+      expect(result.message).not.toContain("invalid_type");
+    }
+  });
+
+  it("aceita page sem filtros opcionais", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.admin.processos({ page: 1 }).catch((e: Error) => e);
+    if (result instanceof Error) {
+      expect(result.message).not.toContain("ZodError");
+    }
+  });
+});
+
 // ─── Testes: Rota admin.atualizarStatusProcesso ──────────────────────────────
 describe("admin.atualizarStatusProcesso", () => {
   it("lança FORBIDDEN para usuário não-admin", async () => {
