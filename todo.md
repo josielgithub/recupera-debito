@@ -144,3 +144,10 @@
 ## Bug: Erro "undefined" na Consulta
 
 - [x] Diagnosticar e corrigir erro "undefined" na consulta (aba Codilo) — handleConsultar usava consultar.data antes do re-render
+
+## Bug: Busca por CPF retornava "0 processos"
+
+- [x] Diagnosticar causa raiz: API Codilo /autorequest não suporta busca por CPF (só por CNJ)
+- [x] Reformular endpoint codiloConsultarDocumento: busca por CPF no banco local, CNPJ/nome na API Codilo
+- [x] Frontend: painel reformulado com aviso explicativo, opção de disparar atualização via Codilo, exibição de nome/CPF do cliente e detalhes completos dos processos
+- [x] 27 testes passando, TypeScript sem erros

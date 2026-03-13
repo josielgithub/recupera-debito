@@ -324,17 +324,63 @@ export const appRouter = router({
         }
       }),
 
-    // Consulta processos na API Codilo por CPF, CNPJ ou nome
+    // Busca processos no banco local por CPF e opcionalmente dispara atualização via Codilo
     codiloConsultarDocumento: protectedProcedure
       .input(z.object({
         documento: z.string().min(1),
         tipo: z.enum(["cpf", "cnpj", "nome"]).default("cpf"),
+        atualizarViaCodilo: z.boolean().default(false),
       }))
       .mutation(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
         try {
+          const docLimpo = input.tipo !== "nome" ? input.documento.replace(/\D/g, "") : input.documento;
+
+          if (input.tipo === "cpf") {
+            // Formata CPF para busca no banco
+            const cpfFormatado = docLimpo.length === 11
+              ? `${docLimpo.slice(0,3)}.${docLimpo.slice(3,6)}.${docLimpo.slice(6,9)}-${docLimpo.slice(9)}`
+              : docLimpo;
+            const cliente = await getClienteByCpf(cpfFormatado);
+            if (!cliente) {
+              return { ok: true, resultado: { processos: [], total: 0, cliente: null, fonte: "banco_local" as const } };
+            }
+            const processosCliente = await getProcessosByCpf(cpfFormatado);
+
+            // Se solicitado, dispara atualização via Codilo para cada processo
+            let atualizacaoInfo: string | null = null;
+            if (input.atualizarViaCodilo && processosCliente.length > 0) {
+              const lista = processosCliente.map(p => ({ id: p.id, cnj: p.cnj }));
+              dispararAtualizacaoBackground(lista).catch(err =>
+                console.error("[Codilo] Erro ao disparar atualização por CPF:", err)
+              );
+              atualizacaoInfo = `Disparando atualização para ${lista.length} processo(s) via Codilo em background.`;
+            }
+
+            return {
+              ok: true,
+              resultado: {
+                processos: processosCliente.map(p => ({
+                  cnj: p.cnj,
+                  statusResumido: p.statusResumido,
+                  statusInterno: p.statusInterno,
+                  advogado: p.advogado,
+                  monitoramentoAtivo: p.monitoramentoAtivo,
+                  ultimaAtualizacaoApi: p.ultimaAtualizacaoApi,
+                  semAtualizacao7dias: p.semAtualizacao7dias,
+                  parceiro: p.parceiro ? { nome: p.parceiro.nomeEscritorio, whatsapp: p.parceiro.whatsapp, email: p.parceiro.email } : null,
+                })),
+                total: processosCliente.length,
+                cliente: { nome: cliente.nome, cpf: cliente.cpf },
+                fonte: "banco_local" as const,
+                atualizacaoInfo,
+              },
+            };
+          }
+
+          // Para CNPJ ou nome: busca diretamente na API Codilo (GET /autorequest)
           const resultado = await searchProcessByDocument(input.documento, input.tipo);
-          return { ok: true, resultado };
+          return { ok: true, resultado: { ...resultado, fonte: "codilo_api" as const, cliente: null, atualizacaoInfo: null } };
         } catch (err) {
           return { ok: false, erro: String(err), resultado: null };
         }

@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import {
   Zap,
   RefreshCw,
@@ -18,6 +19,10 @@ import {
   Activity,
   FileText,
   Clock,
+  Building2,
+  User,
+  RefreshCcw,
+  Database,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -133,8 +138,24 @@ function PainelStatusConexao() {
 function PainelConsultaDocumento() {
   const [documento, setDocumento] = useState("");
   const [tipo, setTipo] = useState<"cpf" | "cnpj" | "nome">("cpf");
+  const [atualizarViaCodilo, setAtualizarViaCodilo] = useState(false);
 
   const consultar = trpc.admin.codiloConsultarDocumento.useMutation();
+
+  const STATUS_LABELS: Record<string, string> = {
+    em_analise_inicial: "Em análise inicial",
+    protocolado: "Protocolado",
+    em_andamento: "Em andamento",
+    aguardando_audiencia: "Aguardando audiência",
+    aguardando_sentenca: "Aguardando sentença",
+    em_recurso: "Em recurso",
+    cumprimento_de_sentenca: "Cumprimento de sentença",
+    concluido_ganho: "Concluído – ganho",
+    concluido_perdido: "Concluído – perdido",
+    aguardando_documentos: "Aguardando documentos",
+    acordo_negociacao: "Acordo/negociação",
+    arquivado_encerrado: "Arquivado/encerrado",
+  };
 
   const handleConsultar = async () => {
     if (!documento.trim()) {
@@ -142,10 +163,16 @@ function PainelConsultaDocumento() {
       return;
     }
     try {
-      const res = await consultar.mutateAsync({ documento: documento.trim(), tipo });
+      const res = await consultar.mutateAsync({ documento: documento.trim(), tipo, atualizarViaCodilo });
       if (res?.ok) {
         const total = res.resultado?.total ?? 0;
-        toast.success(`Consulta realizada — ${total} processo(s) encontrado(s)`);
+        if (total === 0) {
+          toast.info("Nenhum processo encontrado para este CPF no banco de dados");
+        } else {
+          toast.success(`${total} processo(s) encontrado(s)${
+            atualizarViaCodilo ? " — atualização via Codilo disparada em background" : ""
+          }`);
+        }
       } else {
         toast.error(`Erro na consulta: ${res?.erro ?? "Resposta inválida"}`);
       }
@@ -154,15 +181,22 @@ function PainelConsultaDocumento() {
     }
   };
 
-  type ProcessoItem = {
-    numero?: string; cnj?: string; id?: string; status?: string; situacao?: string;
-    tribunal?: string; vara?: string; comarca?: string; assunto?: string; classe?: string;
-    dataUltimaAtualizacao?: string; ultimaMovimentacao?: string;
-  };
-  // Usa consultar.data que é atualizado após mutateAsync resolver
   const resultadoConsulta = consultar.data;
-  const processos: ProcessoItem[] = Array.isArray(resultadoConsulta?.resultado?.processos)
-    ? (resultadoConsulta!.resultado!.processos as ProcessoItem[])
+  const resultado = resultadoConsulta?.resultado;
+
+  type ProcessoLocal = {
+    cnj: string;
+    statusResumido: string;
+    statusInterno?: string | null;
+    advogado?: string | null;
+    monitoramentoAtivo: boolean;
+    ultimaAtualizacaoApi?: Date | null;
+    semAtualizacao7dias: boolean;
+    parceiro?: { nome: string; whatsapp?: string | null; email?: string | null } | null;
+  };
+
+  const processos: ProcessoLocal[] = Array.isArray(resultado?.processos)
+    ? (resultado!.processos as ProcessoLocal[])
     : [];
 
   return (
@@ -170,13 +204,25 @@ function PainelConsultaDocumento() {
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-semibold flex items-center gap-2">
           <Search className="w-4 h-4 text-primary" />
-          Consultar Processos na Codilo
+          Consultar Processos por CPF
         </CardTitle>
         <CardDescription className="text-xs">
-          Busca processos diretamente na API Codilo por CPF, CNPJ ou nome
+          Busca processos no banco de dados local por CPF. Para CNPJ ou nome, consulta diretamente a API Codilo.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Aviso informativo sobre a busca por CPF */}
+        {tipo === "cpf" && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 flex gap-2">
+            <Database className="w-4 h-4 shrink-0 mt-0.5" />
+            <div>
+              <strong>Busca no banco local:</strong> A API Codilo não suporta busca por CPF diretamente.
+              A consulta por CPF busca no banco de dados interno os processos já importados.
+              Use a opção abaixo para disparar atualização via Codilo após encontrar os processos.
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="w-full sm:w-36">
             <Label className="text-xs mb-1.5 block">Tipo</Label>
@@ -185,20 +231,20 @@ function PainelConsultaDocumento() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="cpf">CPF <span className="text-muted-foreground text-[10px]">(key: doc)</span></SelectItem>
-                <SelectItem value="cnpj">CNPJ <span className="text-muted-foreground text-[10px]">(key: doc)</span></SelectItem>
-                <SelectItem value="nome">Nome <span className="text-muted-foreground text-[10px]">(key: nomeparte)</span></SelectItem>
+                <SelectItem value="cpf">CPF</SelectItem>
+                <SelectItem value="cnpj">CNPJ</SelectItem>
+                <SelectItem value="nome">Nome</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="flex-1">
             <Label className="text-xs mb-1.5 block">
-              {tipo === "cpf" ? "CPF (somente dígitos)" : tipo === "cnpj" ? "CNPJ (somente dígitos)" : "Nome completo"}
+              {tipo === "cpf" ? "CPF" : tipo === "cnpj" ? "CNPJ" : "Nome completo"}
             </Label>
             <Input
               value={documento}
               onChange={(e) => setDocumento(e.target.value)}
-              placeholder={tipo === "cpf" ? "52998224725" : tipo === "cnpj" ? "12345678000195" : "Maria da Silva"}
+              placeholder={tipo === "cpf" ? "000.000.000-00 ou somente dígitos" : tipo === "cnpj" ? "00.000.000/0000-00" : "Maria da Silva"}
               className="h-9 text-sm"
               onKeyDown={(e) => e.key === "Enter" && handleConsultar()}
             />
@@ -220,6 +266,25 @@ function PainelConsultaDocumento() {
           </div>
         </div>
 
+        {/* Opção de atualizar via Codilo (apenas para CPF) */}
+        {tipo === "cpf" && (
+          <div className="flex items-center gap-3 rounded-lg border bg-muted/30 p-3">
+            <Switch
+              id="atualizar-codilo"
+              checked={atualizarViaCodilo}
+              onCheckedChange={setAtualizarViaCodilo}
+            />
+            <div>
+              <Label htmlFor="atualizar-codilo" className="text-xs font-medium cursor-pointer">
+                Disparar atualização via Codilo após consultar
+              </Label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Cria autorequests na Codilo para cada processo encontrado (processamento em background)
+              </p>
+            </div>
+          </div>
+        )}
+
         {resultadoConsulta && (
           <div>
             <Separator className="my-3" />
@@ -229,32 +294,84 @@ function PainelConsultaDocumento() {
                 <span>{resultadoConsulta.erro ?? "Erro desconhecido"}</span>
               </div>
             ) : processos.length === 0 ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <FileText className="w-4 h-4" />
-                <span>Nenhum processo encontrado para este documento</span>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <FileText className="w-4 h-4" />
+                  <span>Nenhum processo encontrado para este {tipo === "cpf" ? "CPF no banco de dados" : "documento"}.</span>
+                </div>
+                {tipo === "cpf" && (
+                  <p className="text-xs text-muted-foreground">
+                    Verifique se o CPF está cadastrado e se há processos importados para este cliente.
+                  </p>
+                )}
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
+                {/* Informações do cliente */}
+                {resultado?.cliente && (
+                  <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2">
+                    <User className="w-4 h-4 text-primary shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold">{resultado.cliente.nome}</p>
+                      <p className="text-xs text-muted-foreground">{resultado.cliente.cpf}</p>
+                    </div>
+                    <Badge variant="secondary" className="ml-auto text-[10px]">
+                      {processos.length} processo(s)
+                    </Badge>
+                  </div>
+                )}
+
+                {/* Aviso de atualização disparada */}
+                {resultado?.atualizacaoInfo && (
+                  <div className="flex items-center gap-2 text-xs text-green-700 rounded-lg border border-green-200 bg-green-50 p-2">
+                    <RefreshCcw className="w-3.5 h-3.5 shrink-0" />
+                    <span>{resultado.atualizacaoInfo}</span>
+                  </div>
+                )}
+
+                {/* Lista de processos */}
                 <p className="text-xs text-muted-foreground font-medium">
-                  {processos.length} processo(s) encontrado(s) na Codilo:
+                  {resultado?.fonte === "banco_local" ? "Processos no banco de dados:" : "Processos na Codilo:"}
                 </p>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
+                <div className="space-y-2 max-h-80 overflow-y-auto">
                   {processos.map((p, i) => (
-                    <div key={i} className="rounded-lg border bg-muted/20 p-3 text-xs space-y-1">
+                    <div key={i} className="rounded-lg border bg-muted/20 p-3 text-xs space-y-1.5">
                       <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="font-mono font-semibold">{p.cnj ?? p.numero ?? p.id ?? "—"}</span>
-                        {(p.situacao ?? p.status) && (
-                          <Badge variant="outline" className="text-[10px]">{p.situacao ?? p.status}</Badge>
-                        )}
+                        <span className="font-mono font-semibold text-[11px]">{p.cnj}</span>
+                        <Badge
+                          variant={p.statusResumido === "concluido_ganho" ? "default" : p.statusResumido === "concluido_perdido" ? "destructive" : "secondary"}
+                          className="text-[10px]"
+                        >
+                          {STATUS_LABELS[p.statusResumido] ?? p.statusResumido}
+                        </Badge>
                       </div>
-                      {p.tribunal && <p className="text-muted-foreground">{p.tribunal}{p.vara ? ` — ${p.vara}` : ""}{p.comarca ? ` (${p.comarca})` : ""}</p>}
-                      {(p.classe ?? p.assunto) && <p className="text-muted-foreground truncate">{p.classe ?? p.assunto}</p>}
-                      {(p.ultimaMovimentacao ?? p.dataUltimaAtualizacao) && (
+                      {p.statusInterno && (
+                        <p className="text-muted-foreground text-[10px]">Status interno: {p.statusInterno}</p>
+                      )}
+                      {p.parceiro && (
                         <p className="text-muted-foreground flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {p.ultimaMovimentacao ?? (p.dataUltimaAtualizacao ? new Date(p.dataUltimaAtualizacao).toLocaleString("pt-BR") : "")}
+                          <Building2 className="w-3 h-3" />
+                          {p.parceiro.nome}
+                          {p.parceiro.whatsapp ? ` • ${p.parceiro.whatsapp}` : ""}
                         </p>
                       )}
+                      {p.advogado && (
+                        <p className="text-muted-foreground">Adv: {p.advogado}</p>
+                      )}
+                      <div className="flex items-center gap-3 flex-wrap">
+                        {p.ultimaAtualizacaoApi && (
+                          <p className="text-muted-foreground flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {new Date(p.ultimaAtualizacaoApi).toLocaleString("pt-BR")}
+                          </p>
+                        )}
+                        {p.monitoramentoAtivo && (
+                          <Badge variant="outline" className="text-[10px] border-green-300 text-green-700">• Monitorado</Badge>
+                        )}
+                        {p.semAtualizacao7dias && (
+                          <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700">⚠ Sem atualização 7d</Badge>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
