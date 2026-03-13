@@ -423,22 +423,48 @@ export const appRouter = router({
 
     // Dispara criação de autorequests em background (não-bloqueante)
     // Ideal para muitos processos: cria as requisições e retorna imediatamente.
-    // Os resultados serão processados pela rotina agendada.
+    // Após criar os autorequests, aguarda 3 minutos e busca os resultados disponíveis.
     codiloDispararBackground: protectedProcedure.mutation(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
 
-      const { processos } = await listAllProcessos(1, 10000);
-      const lista = processos.map((p: { id: number; cnj: string }) => ({ id: p.id, cnj: p.cnj }));
+      const { processos: todosProcessos } = await listAllProcessos(1, 10000);
+      const lista = todosProcessos.map((p: { id: number; cnj: string; statusResumido: string }) => ({
+        id: p.id,
+        cnj: p.cnj,
+        statusResumido: p.statusResumido,
+      }));
 
-      // Dispara em background sem aguardar resultado
-      dispararAtualizacaoBackground(lista).then(async (resultados) => {
-        const criados = resultados.filter(r => r.autorequest_id).length;
-        console.log(`[Codilo] Background: ${criados}/${lista.length} autorequests criados.`);
-      }).catch(err => console.error("[Codilo] Erro no disparo background:", err));
+      // Fase 1: Dispara autorequests em background
+      // Fase 2: Após 3 minutos, busca resultados e atualiza banco
+      ;(async () => {
+        try {
+          const resultados = await dispararAtualizacaoBackground(lista);
+          const criados = resultados.filter(r => r.autorequest_id).length;
+          console.log(`[Codilo] Background fase 1: ${criados}/${lista.length} autorequests criados. Aguardando 3 minutos para buscar resultados...`);
+
+          // Aguarda 3 minutos para a Codilo processar as requisições
+          await new Promise(r => setTimeout(r, 3 * 60 * 1000));
+
+          // Fase 2: Busca resultados e atualiza banco
+          console.log("[Codilo] Background fase 2: buscando resultados e atualizando banco...");
+          const resultado = await updateProcessStatus(
+            lista,
+            async (_id, statusNovo, statusInterno, rawPayload) => {
+              const proc = lista.find((p) => p.id === _id);
+              if (proc) {
+                await updateProcessoStatus(proc.cnj, statusNovo as StatusResumido, rawPayload);
+              }
+            }
+          );
+          console.log(`[Codilo] Background fase 2 concluída: ${resultado.atualizados} atualizados, ${resultado.semAlteracao} sem alteração, ${resultado.erros} erros.`);
+        } catch (err) {
+          console.error("[Codilo] Erro no background:", err);
+        }
+      })();
 
       return {
         total: lista.length,
-        mensagem: `Disparando atualização para ${lista.length} processos em background. Os status serão atualizados conforme a Codilo processar as requisições (pode levar alguns minutos).`,
+        mensagem: `Disparando atualização para ${lista.length} processos em background. Os autorequests serão criados agora e os resultados buscados após ~3 minutos. Acompanhe os logs do servidor.`,
       };
     }),
 

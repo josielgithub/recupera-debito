@@ -142,6 +142,11 @@ export interface CodiloProcesso {
   dataUltimaAtualizacao?: string;
   partes?: Array<{ nome: string; tipo: string }>;
   movimentacoes?: Array<{ data: string; descricao: string }>;
+  // Campos do formato real da Codilo (GET /request/{id})
+  cover?: Array<{ description: string; value: string }>;
+  properties?: Record<string, unknown>;
+  people?: Array<{ pole: string; description: string; name: string; lawyers?: Array<{ name: string; oab?: string }> }>;
+  steps?: Array<{ seq: string; timestamp: string; title: string; description: string; actionBy?: string }>;
   [key: string]: unknown;
 }
 
@@ -182,13 +187,13 @@ export interface CodiloAutoRequest {
   createdAt: string;
   requests: Array<{
     id: string;
-    status: "pending" | "done" | "error" | "warning";
+    status: "pending" | "done" | "success" | "error" | "warning";
     platform: string;
     query: string;
     court?: string;
     uf?: string;
     respondedAt?: string | null;
-    result?: CodiloProcesso;
+    result?: CodiloProcesso; // geralmente null no autorequest; buscar via GET /request/{id}
     [key: string]: unknown;
   }>;
 }
@@ -250,9 +255,68 @@ export async function getAutoRequest(id: string): Promise<CodiloAutoRequest | nu
 }
 
 /**
- * Busca um processo pelo número CNJ usando fluxo assíncrono:
- * 1. POST /autorequest para criar a requisição
- * 2. Polling em GET /autorequest/{id} até status "done" ou timeout
+ * Busca o resultado de uma request individual via GET /request/{id}.
+ * O resultado real fica neste endpoint, não no autorequest.
+ */
+async function getRequestResult(requestId: string): Promise<CodiloProcesso | null> {
+  try {
+    const result = await codiloRequest<{
+      success: boolean;
+      type: string;
+      data: Array<{
+        cover: Array<{ description: string; value: string }>;
+        properties?: Record<string, unknown>;
+        people?: unknown[];
+        steps?: unknown[];
+      }>;
+    }>("get", `${CAPTURA_BASE}/request/${requestId}`);
+
+    if (!result.data || !Array.isArray(result.data) || result.data.length === 0) return null;
+
+    const processo = result.data[0];
+    const cover = processo.cover ?? [];
+
+    // Extrai campos do cover (array de { description, value })
+    const getCover = (desc: string): string | undefined =>
+      cover.find(c => c.description?.toLowerCase() === desc.toLowerCase())?.value;
+
+    // Status: preferir "Fase Processual" > "Status" > "Situação"
+    const fase = getCover("Fase Processual");
+    const status = getCover("Status") ?? getCover("Situação") ?? getCover("Situacao");
+    const statusFinal = fase ?? status ?? "";
+
+    return {
+      cnj: getCover("Número") ?? getCover("Numero"),
+      status: statusFinal,
+      situacao: statusFinal,
+      classe: getCover("Classe"),
+      assunto: getCover("Assunto(s)") ?? getCover("Assunto"),
+      tribunal: getCover("Serventia") ?? getCover("Tribunal"),
+      vara: getCover("Serventia"),
+      comarca: getCover("Serventia"),
+      uf: (processo.properties as Record<string, string> | undefined)?.uf,
+      ultimaMovimentacao: getCover("Dt. Distribuição") ?? getCover("Última Movimentação"),
+      cover,
+      properties: processo.properties,
+      people: processo.people as CodiloProcesso["people"],
+      steps: processo.steps as CodiloProcesso["steps"],
+    } as CodiloProcesso;
+  } catch (err) {
+    if (err instanceof AxiosError && err.response?.status === 404) return null;
+    const msg = err instanceof AxiosError
+      ? `HTTP ${err.response?.status}: ${JSON.stringify(err.response?.data)}`
+      : String(err);
+    console.error(`[Codilo] Erro ao buscar resultado da request ${requestId}: ${msg}`);
+    return null;
+  }
+}
+
+/**
+ * Busca um processo pelo número CNJ usando fluxo assíncrono correto:
+ * 1. POST /autorequest para criar a requisição (ou reutiliza existente)
+ * 2. Polling em GET /autorequest/{id} até encontrar request com status "success"
+ * 3. Busca resultado via GET /request/{id} (onde o resultado real fica)
+ * 4. Extrai status do campo cover[{ description: "Status" | "Fase Processual" }]
  *
  * NOTA: A Codilo processa requisições de forma assíncrona. O resultado pode
  * demorar de segundos a minutos dependendo do tribunal.
@@ -274,36 +338,34 @@ export async function searchProcessByCNJ(
     let autorequest: CodiloAutoRequest | null = null;
 
     if (existente.data && existente.data.total > 0 && existente.data.result.length > 0) {
-      // Usa o autorequest mais recente
       autorequest = existente.data.result[0];
       console.log(`[Codilo] Autorequest existente encontrado: ${autorequest.id}`);
     } else {
-      // Cria novo autorequest
       autorequest = await criarAutoRequest("cnj", cnj);
       if (!autorequest) return null;
       console.log(`[Codilo] Novo autorequest criado: ${autorequest.id}`);
     }
 
-    // Extrai resultado de requests já concluídas
-    const extrairResultado = (ar: CodiloAutoRequest): CodiloProcesso | null => {
-      const done = ar.requests?.find(r => r.status === "done" && r.result);
-      if (done?.result) return done.result;
-      // Tenta montar um objeto básico a partir dos dados disponíveis
-      const warning = ar.requests?.find(r => r.status === "warning");
-      if (warning) {
-        return {
-          cnj: ar.value,
-          status: "warning",
-          situacao: "warning",
-          tribunal: warning.court,
-          uf: warning.uf,
-        } as CodiloProcesso;
+    /**
+     * Tenta extrair resultado de um autorequest.
+     * O resultado NÃO está no campo result do autorequest — está em GET /request/{id}.
+     * Busca a primeira request com status "success" e chama GET /request/{id}.
+     */
+    const extrairResultado = async (ar: CodiloAutoRequest): Promise<CodiloProcesso | null> => {
+      // Buscar request com status success (resultado disponível)
+      const successReq = ar.requests?.find(r => r.status === "success");
+      if (successReq?.id) {
+        console.log(`[Codilo] Request com sucesso encontrada: ${successReq.id} (${successReq.platform})`);
+        return await getRequestResult(successReq.id);
       }
+      // Fallback: request com status done (formato antigo)
+      const doneReq = ar.requests?.find(r => r.status === "done" && r.result);
+      if (doneReq?.result) return doneReq.result;
       return null;
     };
 
-    // Verifica se já há resultado
-    const resultadoImediato = extrairResultado(autorequest);
+    // Verifica se já há resultado imediato
+    const resultadoImediato = await extrairResultado(autorequest);
     if (resultadoImediato) return resultadoImediato;
 
     // Se polling desabilitado, retorna null (modo não-bloqueante)
@@ -321,14 +383,14 @@ export async function searchProcessByCNJ(
       const atualizado = await getAutoRequest(autorequest.id);
       if (!atualizado) break;
 
-      const resultado = extrairResultado(atualizado);
+      const resultado = await extrairResultado(atualizado);
       if (resultado) {
         console.log(`[Codilo] Resultado obtido para CNJ ${cnj} após ${i + 1} tentativas.`);
         return resultado;
       }
 
       const todosFinalizados = atualizado.requests.every(
-        r => r.status === "done" || r.status === "error" || r.status === "warning"
+        r => r.status === "done" || r.status === "success" || r.status === "error" || r.status === "warning"
       );
       if (todosFinalizados) {
         console.log(`[Codilo] Todas as requests finalizadas para CNJ ${cnj} sem resultado útil.`);
@@ -464,17 +526,19 @@ export function normalizarStatusCodilo(statusRaw: string | undefined): StatusRes
     }
   }
 
-  if (lower.includes("ganho") || lower.includes("procedente") || lower.includes("deferido")) return "concluido_ganho";
-  if (lower.includes("perdido") || lower.includes("improcedente") || lower.includes("indeferido")) return "concluido_perdido";
-  if (lower.includes("cumprimento") || lower.includes("execução") || lower.includes("execucao")) return "cumprimento_de_sentenca";
-  if (lower.includes("recurso") || lower.includes("apelação") || lower.includes("apelacao") || lower.includes("agravo")) return "em_recurso";
+  // Valores reais retornados pela Codilo no campo cover["Fase Processual"] e cover["Status"]
+  if (lower === "ativo" || lower === "em andamento" || lower === "tramitando") return "em_andamento";
+  if (lower === "conhecimento") return "em_andamento"; // fase processual
+  if (lower === "execução" || lower === "execucao" || lower.includes("cumprimento")) return "cumprimento_de_sentenca";
+  if (lower === "recurso" || lower.includes("apelação") || lower.includes("apelacao") || lower.includes("agravo")) return "em_recurso";
   if (lower.includes("audiência") || lower.includes("audiencia")) return "aguardando_audiencia";
   if (lower.includes("sentença") || lower.includes("sentenca") || lower.includes("julgamento")) return "aguardando_sentenca";
   if (lower.includes("acordo") || lower.includes("negociação") || lower.includes("negociacao")) return "acordo_negociacao";
   if (lower.includes("documento") || lower.includes("diligência") || lower.includes("diligencia")) return "aguardando_documentos";
-  if (lower.includes("arquivado") || lower.includes("encerrado") || lower.includes("extinto")) return "arquivado_encerrado";
+  if (lower.includes("arquivado") || lower.includes("encerrado") || lower.includes("extinto") || lower === "baixado") return "arquivado_encerrado";
   if (lower.includes("protocolado") || lower.includes("distribuído") || lower.includes("distribuido")) return "protocolado";
-  if (lower.includes("andamento") || lower.includes("tramitando") || lower.includes("ativo")) return "em_andamento";
+  if (lower.includes("ganho") || lower.includes("procedente") || lower.includes("deferido")) return "concluido_ganho";
+  if (lower.includes("perdido") || lower.includes("improcedente") || lower.includes("indeferido")) return "concluido_perdido";
 
   console.warn(`[Codilo] Status não mapeado: "${statusRaw}" → em_analise_inicial`);
   return "em_analise_inicial";
