@@ -111,3 +111,16 @@
 - [x] Frontend: card com total do mês atual e seta de variação (↑ verde / ↓ vermelho)
 - [x] Frontend: mini-cards por categoria (ganhos, em andamento, sem atualização)
 - [x] Frontend: posicionado acima do gráfico de barras empilhadas
+
+## Integração Codilo - OAuth2 client_credentials
+- [x] Credenciais CODILO_API_KEY e CODILO_API_SECRET configuradas via secrets
+- [x] codilo.ts: função getCodiloToken() com cache e renovação automática
+- [x] codilo.ts: função searchProcessByDocument(doc, tipo) — CPF/CNPJ/nome
+- [x] codilo.ts: função updateProcessStatus() — atualiza processos no banco
+- [x] codilo.ts: renovação automática de token em erro 401
+- [x] codilo.ts: logs de erro sem interromper o sistema principal
+- [x] routers.ts: endpoint admin.codiloTestarConexao
+- [x] routers.ts: endpoint admin.codiloConsultarDocumento
+- [x] routers.ts: endpoint admin.codiloAtualizarProcessos (disparo manual)
+- [x] Rotina agendada: atualizar processos a cada 6 horas (servidor)
+- [x] Admin: painel de integração Codilo com status, teste e atualização manual

@@ -4,7 +4,6 @@
  */
 import * as XLSX from "xlsx";
 import { upsertCliente, upsertParceiro, upsertProcesso } from "./db";
-import { cadastrarProcessoMonitoramentoPush } from "./codilo";
 import { updateMonitoramentoAtivo } from "./db";
 
 export interface LinhaImportacao {
@@ -158,13 +157,6 @@ export async function processarPlanilha(
         statusInterno: normalizedRow.status_interno || null,
         statusResumido: "em_analise_inicial",
       });
-
-      // 4. Cadastrar no Monitoramento PUSH da Codilo
-      const callbackUrl = `${callbackBaseUrl}/api/codilo/callback`;
-      const pushResult = await cadastrarProcessoMonitoramentoPush(cnj, callbackUrl);
-      if (pushResult.sucesso) {
-        await updateMonitoramentoAtivo(cnj, true, pushResult.codiloProcessoId);
-      }
 
       resultado.linhasOk++;
       resultado.detalhes.push({ linha: linhaNum, status: "ok", cpf, cnj });

@@ -35,8 +35,8 @@ describe("normalizarStatusCodilo", () => {
     expect(normalizarStatusCodilo("Arquivado")).toBe("arquivado_encerrado");
   });
 
-  it("retorna em_andamento para status desconhecido", () => {
-    expect(normalizarStatusCodilo("status_inexistente_xyz")).toBe("em_andamento");
+  it("retorna em_analise_inicial para status desconhecido", () => {
+    expect(normalizarStatusCodilo("status_inexistente_xyz")).toBe("em_analise_inicial");
   });
 });
 

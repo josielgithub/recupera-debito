@@ -27,6 +27,12 @@ import {
   upsertParceiro,
 } from "./db";
 import { processarPlanilha } from "./importacao";
+import {
+  testarConexaoCodilo,
+  searchProcessByDocument,
+  updateProcessStatus,
+  invalidarTokenCache,
+} from "./codilo";
 import { createHash } from "crypto";
 import * as XLSX from "xlsx";
 
@@ -281,6 +287,57 @@ export const appRouter = router({
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
         return graficoConsultasDiarias(input.dias);
       }),
+
+    // ─── Integração Codilo ─────────────────────────────────────────────────
+
+    // Testa a conexão com a API Codilo (obtém token fresco)
+    codiloTestarConexao: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return testarConexaoCodilo();
+    }),
+
+    // Consulta processos na API Codilo por CPF, CNPJ ou nome
+    codiloConsultarDocumento: protectedProcedure
+      .input(z.object({
+        documento: z.string().min(1),
+        tipo: z.enum(["cpf", "cnpj", "nome"]).default("cpf"),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        try {
+          const resultado = await searchProcessByDocument(input.documento, input.tipo);
+          return { ok: true, resultado };
+        } catch (err) {
+          return { ok: false, erro: String(err), resultado: null };
+        }
+      }),
+
+    // Dispara atualização manual de todos os processos via API Codilo
+    codiloAtualizarProcessos: protectedProcedure.mutation(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+
+      // Busca todos os processos ativos do banco (até 10.000)
+      const { processos } = await listAllProcessos(1, 10000);
+
+      const lista = processos.map((p: { id: number; cnj: string; statusResumido: string }) => ({
+        id: p.id,
+        cnj: p.cnj,
+        statusResumido: p.statusResumido,
+      }));
+
+      const resultado = await updateProcessStatus(
+        lista,
+        async (_id, statusNovo, statusInterno, rawPayload) => {
+          // Encontra o processo pelo id na lista para obter o cnj
+          const proc = lista.find((p) => p.id === _id);
+          if (proc) {
+            await updateProcessoStatus(proc.cnj, statusNovo as StatusResumido, rawPayload);
+          }
+        }
+      );
+
+      return resultado;
+    }),
 
     // Gerar planilha modelo para download (base64)
     gerarPlanilhaModelo: protectedProcedure.query(async ({ ctx }) => {
