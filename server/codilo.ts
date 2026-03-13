@@ -198,16 +198,25 @@ export interface CodiloAutoRequest {
  * Retorna o autorequest com ID para polling posterior.
  * Endpoint: POST https://api.capturaweb.com.br/v1/autorequest
  */
+// Mapeamento de tipos internos para os keys aceitos pela API Codilo
+const CODILO_KEY_MAP: Record<string, string> = {
+  cpf:  "doc",
+  cnpj: "doc",
+  nome: "nomeparte",
+  cnj:  "cnj",
+};
+
 export async function criarAutoRequest(
   key: "cnj" | "cpf" | "cnpj" | "nome",
   value: string
 ): Promise<CodiloAutoRequest | null> {
-  console.log(`[Codilo] Criando autorequest ${key}: ${value}`);
+  const codiloKey = CODILO_KEY_MAP[key] ?? key;
+  console.log(`[Codilo] Criando autorequest ${key} (key Codilo: ${codiloKey}): ${value}`);
   try {
     const result = await codiloRequest<{ success: boolean; data: CodiloAutoRequest }>(
       "post",
       `${CAPTURA_BASE}/autorequest`,
-      { key, value }
+      { key: codiloKey, value }
     );
     return result.data ?? null;
   } catch (err) {
@@ -349,14 +358,15 @@ export async function searchProcessByDocument(
   tipo: "cpf" | "cnpj" | "nome" = "cpf"
 ): Promise<CodiloSearchResult> {
   const docLimpo = tipo !== "nome" ? documento.replace(/\D/g, "") : documento;
-  console.log(`[Codilo] Buscando processos por ${tipo}: ${docLimpo}`);
+  const codiloKey = CODILO_KEY_MAP[tipo] ?? tipo;
+  console.log(`[Codilo] Buscando processos por ${tipo} (key Codilo: ${codiloKey}): ${docLimpo}`);
 
   try {
     const result = await codiloRequest<CodiloApiResponse<CodiloProcesso>>(
       "get",
       `${CAPTURA_BASE}/autorequest`,
       undefined,
-      { key: tipo, value: docLimpo }
+      { key: codiloKey, value: docLimpo }
     );
 
     // Normaliza para CodiloSearchResult

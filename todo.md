@@ -135,3 +135,8 @@
 - [ ] routers.ts: atualizar endpoints Codilo para usar as novas funções
 - [ ] Testar endpoints reais via curl e confirmar resposta
 - [ ] Painel admin Codilo: exibir resultado de listRequests e busca por CNJ
+
+## Correção key API Codilo
+
+- [x] codilo.ts: corrigir mapeamento de key — cpf/cnpj → "doc", nome → "nomeparte"
+- [x] AdminCodilo.tsx: atualizar labels do select para refletir os tipos corretos

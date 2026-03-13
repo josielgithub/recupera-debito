@@ -178,9 +178,9 @@ function PainelConsultaDocumento() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="cpf">CPF</SelectItem>
-                <SelectItem value="cnpj">CNPJ</SelectItem>
-                <SelectItem value="nome">Nome</SelectItem>
+                <SelectItem value="cpf">CPF <span className="text-muted-foreground text-[10px]">(key: doc)</span></SelectItem>
+                <SelectItem value="cnpj">CNPJ <span className="text-muted-foreground text-[10px]">(key: doc)</span></SelectItem>
+                <SelectItem value="nome">Nome <span className="text-muted-foreground text-[10px]">(key: nomeparte)</span></SelectItem>
               </SelectContent>
             </Select>
           </div>
