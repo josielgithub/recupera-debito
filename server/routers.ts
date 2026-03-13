@@ -12,6 +12,7 @@ import {
   getProcessosByCpf,
   getProcessoByCnj,
   graficoConsultasDiarias,
+  graficoStatusProcessos,
   listAllProcessos,
   listLogsConsulta,
   listLogsImportacao,
@@ -256,6 +257,14 @@ export const appRouter = router({
           dataFim: input.dataFim ? new Date(input.dataFim) : undefined,
           telefone: input.telefone,
         });
+      }),
+
+    // Gráfico de distribuição de status de processos por mês
+    graficoStatusProcessos: protectedProcedure
+      .input(z.object({ meses: z.number().min(3).max(24).default(6) }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        return graficoStatusProcessos(input.meses);
       }),
 
     // Gráfico de consultas diárias

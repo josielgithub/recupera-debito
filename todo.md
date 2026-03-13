@@ -97,3 +97,11 @@
 - [x] Frontend: linhas coloridas por resultado com legenda (verde/cinza/vermelho)
 - [x] Frontend: tooltip customizado com detalhes ao passar o mouse
 - [x] Frontend: seletor de período (7, 15, 30 dias)
+
+## Gráfico de Barras Empilhadas - Distribuição de Status
+- [x] Backend: endpoint admin.graficoStatusProcessos (agregar por status e mês)
+- [x] Frontend: gráfico de barras empilhadas com Recharts no Dashboard
+- [x] Frontend: cores distintas para cada um dos 12 status
+- [x] Frontend: tooltip com detalhes por status ao passar o mouse
+- [x] Frontend: seletor de período (3, 6, 12 meses)
+- [x] Frontend: legenda com labels dos 12 status (apenas ativos exibidos)

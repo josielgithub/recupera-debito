@@ -441,6 +441,46 @@ export async function listLogsConsulta(
   return { logs: resultado, total: Number(countRows[0]?.count ?? 0) };
 }
 
+// ─── Gráfico de Status de Processos por Mês ────────────────────────────────────────────
+export async function graficoStatusProcessos(meses = 6) {
+  const db = await getDb();
+  if (!db) return [];
+
+  // Busca todos os processos com updatedAt no período
+  const desde = new Date();
+  desde.setMonth(desde.getMonth() - meses + 1);
+  desde.setDate(1);
+  desde.setHours(0, 0, 0, 0);
+
+  const rows = await db
+    .select({
+      statusResumido: processos.statusResumido,
+      updatedAt: processos.updatedAt,
+    })
+    .from(processos)
+    .where(gte(processos.updatedAt, desde));
+
+  // Monta mapa de meses
+  const mapa = new Map<string, Record<string, number>>();
+  for (let i = 0; i < meses; i++) {
+    const d = new Date(desde);
+    d.setMonth(d.getMonth() + i);
+    const chave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    mapa.set(chave, {});
+  }
+
+  for (const row of rows) {
+    const d = new Date(row.updatedAt);
+    const chave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const entrada = mapa.get(chave);
+    if (!entrada) continue;
+    const s = row.statusResumido;
+    entrada[s] = (entrada[s] ?? 0) + 1;
+  }
+
+  return Array.from(mapa.entries()).map(([mes, counts]) => ({ mes, ...counts }));
+}
+
 // ─── Gráfico de Consultas Diárias ────────────────────────────────────────────
 export async function graficoConsultasDiarias(dias = 30) {
   const db = await getDb();

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
@@ -43,7 +43,17 @@ import AdminProcessos from "./AdminProcessos";
 import AdminParceiros from "./AdminParceiros";
 import AdminConfig from "./AdminConfig";
 import AdminHistorico from "./AdminHistorico";
-import { useRef } from "react";
+
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 
 function formatarData(data: Date | string | null | undefined): string {
   if (!data) return "—";
@@ -85,6 +95,151 @@ const STATUS_ICON_COLORS: Record<string, string> = {
   acordo_negociacao: "text-cyan-600 bg-cyan-50",
   arquivado_encerrado: "text-slate-600 bg-slate-50",
 };
+
+// Paleta de cores para os 12 status
+const STATUS_CORES_GRAFICO: Record<string, string> = {
+  em_analise_inicial:       "#3b82f6",
+  protocolado:              "#6366f1",
+  em_andamento:             "#eab308",
+  aguardando_audiencia:     "#f97316",
+  aguardando_sentenca:      "#f59e0b",
+  em_recurso:               "#a855f7",
+  cumprimento_de_sentenca:  "#14b8a6",
+  concluido_ganho:          "#22c55e",
+  concluido_perdido:        "#ef4444",
+  aguardando_documentos:    "#94a3b8",
+  acordo_negociacao:        "#06b6d4",
+  arquivado_encerrado:      "#64748b",
+};
+
+// Tooltip customizado do gráfico de barras
+function TooltipBarras({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; fill: string }>; label?: string }) {
+  if (!active || !payload?.length) return null;
+  const [y, m] = (label ?? "").split("-");
+  const nomesMeses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  const mesLabel = `${nomesMeses[parseInt(m, 10) - 1]}/${y}`;
+  const total = payload.reduce((acc, p) => acc + (p.value ?? 0), 0);
+  return (
+    <div className="bg-white border border-border rounded-lg shadow-lg p-3 text-xs max-w-[220px]">
+      <p className="font-semibold text-foreground mb-2">{mesLabel} — {total} processos</p>
+      {payload.filter(p => p.value > 0).map((p) => (
+        <div key={p.name} className="flex items-center gap-2 mb-1">
+          <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: p.fill }} />
+          <span className="text-muted-foreground truncate">{STATUS_RESUMIDO_LABELS[p.name] ?? p.name}</span>
+          <span className="font-semibold text-foreground ml-auto pl-2">{p.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Componente do gráfico de barras empilhadas
+function GraficoStatusProcessos() {
+  const [periodo, setPeriodo] = useState<3 | 6 | 12>(6);
+
+  const { data: dadosBrutos, isLoading } = trpc.admin.graficoStatusProcessos.useQuery(
+    { meses: periodo },
+    { refetchOnWindowFocus: false }
+  );
+
+  // Formata o label do eixo X: "2025-03" → "Mar/25"
+  const nomesMeses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  const dados = useMemo(() =>
+    (dadosBrutos ?? []).map((d) => {
+      const [y, m] = d.mes.split("-");
+      return { ...d, mesLabel: `${nomesMeses[parseInt(m, 10) - 1]}/${y.slice(2)}` };
+    }),
+    [dadosBrutos]
+  );
+
+  const totalGeral = useMemo(() =>
+    dados.reduce((acc, d) => {
+      const { mes: _mes, mesLabel: _ml, ...counts } = d as Record<string, number | string>;
+      return acc + Object.values(counts).reduce((s: number, v) => s + (typeof v === "number" ? v : 0), 0);
+    }, 0),
+    [dados]
+  );
+
+  // Descobre quais status têm pelo menos 1 processo no período
+  const statusAtivos = useMemo(() => {
+    const set = new Set<string>();
+    for (const d of dados) {
+      for (const s of STATUS_ORDER) {
+        if ((d as Record<string, unknown>)[s]) set.add(s);
+      }
+    }
+    return STATUS_ORDER.filter((s) => set.has(s));
+  }, [dados]);
+
+  return (
+    <Card className="shadow-sm">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-primary" />
+            Distribuição de status ao longo do tempo
+            {totalGeral > 0 && (
+              <Badge variant="outline" className="ml-1 text-xs">{totalGeral} processos</Badge>
+            )}
+          </CardTitle>
+          <div className="flex items-center gap-1">
+            {([3, 6, 12] as const).map((m) => (
+              <Button
+                key={m}
+                variant={periodo === m ? "default" : "outline"}
+                size="sm"
+                className="h-7 text-xs px-3"
+                onClick={() => setPeriodo(m)}
+              >
+                {m}m
+              </Button>
+            ))}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0 pb-4">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-52">
+            <div className="w-6 h-6 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+          </div>
+        ) : totalGeral === 0 ? (
+          <div className="flex flex-col items-center justify-center h-52 text-muted-foreground">
+            <TrendingUp className="w-10 h-10 mb-2 opacity-20" />
+            <p className="text-sm">Nenhum processo atualizado nos últimos {periodo} meses.</p>
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={dados} margin={{ top: 8, right: 16, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+              <XAxis
+                dataKey="mesLabel"
+                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                tickLine={false}
+                axisLine={false}
+                allowDecimals={false}
+              />
+              <Tooltip content={<TooltipBarras />} cursor={{ fill: "hsl(var(--muted))", opacity: 0.4 }} />
+              <Legend
+                formatter={(value) => STATUS_RESUMIDO_LABELS[value] ?? value}
+                iconType="square"
+                iconSize={8}
+                wrapperStyle={{ fontSize: 10, paddingTop: 8 }}
+              />
+              {statusAtivos.map((s) => (
+                <Bar key={s} dataKey={s} stackId="a" fill={STATUS_CORES_GRAFICO[s]} radius={0} />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 // ─── Dashboard Principal ────────────────────────────────────────────────────
 function DashboardView() {
@@ -173,6 +328,9 @@ function DashboardView() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Gráfico de barras empilhadas */}
+      <GraficoStatusProcessos />
 
       {/* Listas filtradas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
