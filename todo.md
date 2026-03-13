@@ -105,3 +105,9 @@
 - [x] Frontend: tooltip com detalhes por status ao passar o mouse
 - [x] Frontend: seletor de período (3, 6, 12 meses)
 - [x] Frontend: legenda com labels dos 12 status (apenas ativos exibidos)
+
+## Card de Resumo Mensal no Dashboard
+- [x] Backend: endpoint admin.resumoMensal (total mês atual, mês anterior, variação %)
+- [x] Frontend: card com total do mês atual e seta de variação (↑ verde / ↓ vermelho)
+- [x] Frontend: mini-cards por categoria (ganhos, em andamento, sem atualização)
+- [x] Frontend: posicionado acima do gráfico de barras empilhadas

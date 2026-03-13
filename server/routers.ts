@@ -13,6 +13,7 @@ import {
   getProcessoByCnj,
   graficoConsultasDiarias,
   graficoStatusProcessos,
+  resumoMensal,
   listAllProcessos,
   listLogsConsulta,
   listLogsImportacao,
@@ -258,6 +259,12 @@ export const appRouter = router({
           telefone: input.telefone,
         });
       }),
+
+    // Resumo mensal: total do mês atual, mês anterior e variação %
+    resumoMensal: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return resumoMensal();
+    }),
 
     // Gráfico de distribuição de status de processos por mês
     graficoStatusProcessos: protectedProcedure

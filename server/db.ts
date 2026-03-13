@@ -441,6 +441,75 @@ export async function listLogsConsulta(
   return { logs: resultado, total: Number(countRows[0]?.count ?? 0) };
 }
 
+// ─── Resumo Mensal ────────────────────────────────────────────────────────────
+export async function resumoMensal() {
+  const db = await getDb();
+  if (!db) return { mesAtual: 0, mesAnterior: 0, variacao: 0, ganhosMes: 0, emAndamentoMes: 0, semAtualizacaoMes: 0 };
+
+  const agora = new Date();
+
+  // Início e fim do mês atual
+  const inicioMesAtual = new Date(agora.getFullYear(), agora.getMonth(), 1);
+  const fimMesAtual = new Date(agora.getFullYear(), agora.getMonth() + 1, 1);
+
+  // Início e fim do mês anterior
+  const inicioMesAnterior = new Date(agora.getFullYear(), agora.getMonth() - 1, 1);
+  const fimMesAnterior = new Date(agora.getFullYear(), agora.getMonth(), 1);
+
+  // Total de processos atualizados no mês atual
+  const [rowAtual] = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(processos)
+    .where(and(gte(processos.updatedAt, inicioMesAtual), lt(processos.updatedAt, fimMesAtual)));
+
+  // Total de processos atualizados no mês anterior
+  const [rowAnterior] = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(processos)
+    .where(and(gte(processos.updatedAt, inicioMesAnterior), lt(processos.updatedAt, fimMesAnterior)));
+
+  // Ganhos no mês atual
+  const [rowGanhos] = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(processos)
+    .where(and(
+      gte(processos.updatedAt, inicioMesAtual),
+      lt(processos.updatedAt, fimMesAtual),
+      eq(processos.statusResumido, "concluido_ganho")
+    ));
+
+  // Em andamento no mês atual
+  const [rowAndamento] = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(processos)
+    .where(and(
+      gte(processos.updatedAt, inicioMesAtual),
+      lt(processos.updatedAt, fimMesAtual),
+      eq(processos.statusResumido, "em_andamento")
+    ));
+
+  // Sem atualização há 7 dias (marcados)
+  const [rowSemAtu] = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(processos)
+    .where(eq(processos.semAtualizacao7dias, true));
+
+  const mesAtual = Number(rowAtual?.count ?? 0);
+  const mesAnterior = Number(rowAnterior?.count ?? 0);
+  const variacao = mesAnterior === 0
+    ? (mesAtual > 0 ? 100 : 0)
+    : Math.round(((mesAtual - mesAnterior) / mesAnterior) * 100);
+
+  return {
+    mesAtual,
+    mesAnterior,
+    variacao,
+    ganhosMes: Number(rowGanhos?.count ?? 0),
+    emAndamentoMes: Number(rowAndamento?.count ?? 0),
+    semAtualizacaoMes: Number(rowSemAtu?.count ?? 0),
+  };
+}
+
 // ─── Gráfico de Status de Processos por Mês ────────────────────────────────────────────
 export async function graficoStatusProcessos(meses = 6) {
   const db = await getDb();

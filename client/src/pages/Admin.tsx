@@ -133,7 +133,100 @@ function TooltipBarras({ active, payload, label }: { active?: boolean; payload?:
   );
 }
 
-// Componente do gráfico de barras empilhadas
+// ─── Card de Resumo Mensal ────────────────────────────────────────────────────────────
+function CardResumoMensal() {
+  const { data, isLoading } = trpc.admin.resumoMensal.useQuery(
+    undefined,
+    { refetchOnWindowFocus: false }
+  );
+
+  const nomesMeses = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  const agora = new Date();
+  const mesAtualLabel = `${nomesMeses[agora.getMonth()]} ${agora.getFullYear()}`;
+  const mesAnteriorLabel = nomesMeses[agora.getMonth() === 0 ? 11 : agora.getMonth() - 1];
+
+  const variacao = data?.variacao ?? 0;
+  const positivo = variacao >= 0;
+
+  const miniCards = [
+    {
+      label: "Ganhos no mês",
+      value: data?.ganhosMes ?? 0,
+      icon: CheckCircle2,
+      color: "text-green-700 bg-green-50 border-green-100",
+    },
+    {
+      label: "Em andamento",
+      value: data?.emAndamentoMes ?? 0,
+      icon: Activity,
+      color: "text-yellow-700 bg-yellow-50 border-yellow-100",
+    },
+    {
+      label: "Sem atualização 7d",
+      value: data?.semAtualizacaoMes ?? 0,
+      icon: AlertTriangle,
+      color: "text-orange-700 bg-orange-50 border-orange-100",
+    },
+  ];
+
+  return (
+    <Card className="shadow-sm border-primary/20 bg-gradient-to-br from-primary/5 to-background">
+      <CardContent className="p-4">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-20">
+            <div className="w-6 h-6 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            {/* Bloco principal: total do mês */}
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground mb-0.5 font-medium uppercase tracking-wide">Processos atualizados em</p>
+              <p className="text-lg font-semibold text-foreground">{mesAtualLabel}</p>
+              <div className="flex items-end gap-3 mt-1">
+                <span className="text-4xl font-bold text-primary tabular-nums">{data?.mesAtual ?? 0}</span>
+                <div className="flex flex-col pb-1">
+                  <span
+                    className={`inline-flex items-center gap-0.5 text-sm font-semibold ${
+                      positivo ? "text-green-600" : "text-red-600"
+                    }`}
+                  >
+                    {positivo ? (
+                      <TrendingUp className="w-4 h-4" />
+                    ) : (
+                      <TrendingUp className="w-4 h-4 rotate-180" />
+                    )}
+                    {positivo ? "+" : ""}{variacao}%
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    vs {mesAnteriorLabel} ({data?.mesAnterior ?? 0})
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="hidden sm:block w-px h-16 bg-border/60" />
+
+            {/* Mini-cards */}
+            <div className="flex flex-row sm:flex-row gap-3 w-full sm:w-auto">
+              {miniCards.map((c) => (
+                <div
+                  key={c.label}
+                  className={`flex flex-col items-center justify-center rounded-xl border px-4 py-2.5 min-w-[80px] ${c.color}`}
+                >
+                  <c.icon className="w-4 h-4 mb-1 opacity-80" />
+                  <span className="text-xl font-bold tabular-nums">{c.value}</span>
+                  <span className="text-[10px] text-center leading-tight mt-0.5 opacity-80">{c.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function GraficoStatusProcessos() {
   const [periodo, setPeriodo] = useState<3 | 6 | 12>(6);
 
@@ -328,6 +421,9 @@ function DashboardView() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Card de resumo mensal */}
+      <CardResumoMensal />
 
       {/* Gráfico de barras empilhadas */}
       <GraficoStatusProcessos />
