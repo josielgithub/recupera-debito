@@ -32,6 +32,7 @@ import {
   searchProcessByCNJ,
   searchProcessByDocument,
   updateProcessStatus,
+  dispararAtualizacaoBackground,
   listRequests,
   registerMonitoring,
   invalidarTokenCache,
@@ -348,7 +349,7 @@ export const appRouter = router({
         return { ok, cnj: input.cnj };
       }),
 
-    // Dispara atualização manual de todos os processos via API Codilo
+    // Dispara atualização manual de todos os processos via API Codilo (com polling)
     codiloAtualizarProcessos: protectedProcedure.mutation(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
 
@@ -364,7 +365,6 @@ export const appRouter = router({
       const resultado = await updateProcessStatus(
         lista,
         async (_id, statusNovo, statusInterno, rawPayload) => {
-          // Encontra o processo pelo id na lista para obter o cnj
           const proc = lista.find((p) => p.id === _id);
           if (proc) {
             await updateProcessoStatus(proc.cnj, statusNovo as StatusResumido, rawPayload);
@@ -373,6 +373,27 @@ export const appRouter = router({
       );
 
       return resultado;
+    }),
+
+    // Dispara criação de autorequests em background (não-bloqueante)
+    // Ideal para muitos processos: cria as requisições e retorna imediatamente.
+    // Os resultados serão processados pela rotina agendada.
+    codiloDispararBackground: protectedProcedure.mutation(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+
+      const { processos } = await listAllProcessos(1, 10000);
+      const lista = processos.map((p: { id: number; cnj: string }) => ({ id: p.id, cnj: p.cnj }));
+
+      // Dispara em background sem aguardar resultado
+      dispararAtualizacaoBackground(lista).then(async (resultados) => {
+        const criados = resultados.filter(r => r.autorequest_id).length;
+        console.log(`[Codilo] Background: ${criados}/${lista.length} autorequests criados.`);
+      }).catch(err => console.error("[Codilo] Erro no disparo background:", err));
+
+      return {
+        total: lista.length,
+        mensagem: `Disparando atualização para ${lista.length} processos em background. Os status serão atualizados conforme a Codilo processar as requisições (pode levar alguns minutos).`,
+      };
     }),
 
     // Gerar planilha modelo para download (base64)

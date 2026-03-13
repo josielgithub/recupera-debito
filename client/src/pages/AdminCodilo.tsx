@@ -260,13 +260,28 @@ function PainelConsultaDocumento() {
   );
 }
 
-// ─── Atualização Manual de Processos ─────────────────────────────────────────
+// ─── Atualização Manual de Processos ────────────────────────────────────────────────────
 function PainelAtualizacaoProcessos() {
   const atualizar = trpc.admin.codiloAtualizarProcessos.useMutation();
+  const disparar  = trpc.admin.codiloDispararBackground.useMutation();
 
   const handleAtualizar = async () => {
-    toast.info("Iniciando atualização de processos via Codilo...");
-    await atualizar.mutateAsync();
+    toast.info("Iniciando atualização com polling... Aguarde (pode levar minutos).");
+    try {
+      await atualizar.mutateAsync();
+      toast.success("Atualização concluída!");
+    } catch (err) {
+      toast.error("Erro na atualização: " + String(err));
+    }
+  };
+
+  const handleDisparar = async () => {
+    try {
+      const res = await disparar.mutateAsync();
+      toast.success(res.mensagem);
+    } catch (err) {
+      toast.error("Erro ao disparar: " + String(err));
+    }
   };
 
   const res = atualizar.data;
@@ -279,28 +294,62 @@ function PainelAtualizacaoProcessos() {
           Atualização de Processos
         </CardTitle>
         <CardDescription className="text-xs">
-          Consulta todos os processos do banco na API Codilo e atualiza os status divergentes. Processa em lotes de 5 com intervalo de 500ms.
+          A Codilo processa requisições de forma <strong>assíncrona</strong>: ao solicitar uma consulta, a API cria uma requisição pendente e processa em segundo plano. O resultado pode levar de segundos a minutos dependendo do tribunal.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Button
-          onClick={handleAtualizar}
-          disabled={atualizar.isPending}
-          className="gap-2"
-          size="sm"
-        >
-          {atualizar.isPending ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <RefreshCw className="w-4 h-4" />
-          )}
-          {atualizar.isPending ? "Atualizando processos..." : "Atualizar Todos os Processos"}
-        </Button>
+        {/* Alerta explicativo */}
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 flex gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+          <div>
+            <strong>Fluxo assíncrono:</strong> A Codilo não retorna o resultado imediatamente. O sistema cria uma requisição e faz polling até 5 tentativas (25s por processo).
+            Para muitos processos, use <strong>Disparar em Background</strong> que é instantâneo e não bloqueia o sistema.
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={handleAtualizar}
+            disabled={atualizar.isPending || disparar.isPending}
+            className="gap-2"
+            size="sm"
+            variant="default"
+          >
+            {atualizar.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            {atualizar.isPending ? "Aguardando resultados..." : "Atualizar com Polling"}
+          </Button>
+
+          <Button
+            onClick={handleDisparar}
+            disabled={atualizar.isPending || disparar.isPending}
+            className="gap-2"
+            size="sm"
+            variant="outline"
+          >
+            {disparar.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Zap className="w-4 h-4" />
+            )}
+            {disparar.isPending ? "Disparando..." : "Disparar em Background"}
+          </Button>
+        </div>
+
+        {disparar.data && (
+          <div className="flex items-center gap-2 text-xs text-green-700 rounded-lg border border-green-200 bg-green-50 p-3">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{disparar.data.mensagem}</span>
+          </div>
+        )}
 
         {atualizar.isPending && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="w-4 h-4 animate-spin" />
-            Consultando a API Codilo para cada processo. Isso pode levar alguns minutos dependendo do volume.
+            Consultando a API Codilo com polling. Aguarde até 25 segundos por processo...
           </div>
         )}
 

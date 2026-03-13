@@ -173,30 +173,162 @@ export interface CodiloSearchResult {
 
 // ─── Funções de Consulta ──────────────────────────────────────────────────────
 
+// ─── Tipos de autorequest ────────────────────────────────────────────────────
+
+export interface CodiloAutoRequest {
+  id: string;
+  key: string;
+  value: string;
+  createdAt: string;
+  requests: Array<{
+    id: string;
+    status: "pending" | "done" | "error" | "warning";
+    platform: string;
+    query: string;
+    court?: string;
+    uf?: string;
+    respondedAt?: string | null;
+    result?: CodiloProcesso;
+    [key: string]: unknown;
+  }>;
+}
+
 /**
- * Busca um processo pelo número CNJ.
- * Endpoint: GET https://api.capturaweb.com.br/v1/autorequest?key=cnj&value={CNJ}
+ * Cria uma requisição de busca assíncrona na Codilo (POST /autorequest).
+ * Retorna o autorequest com ID para polling posterior.
+ * Endpoint: POST https://api.capturaweb.com.br/v1/autorequest
  */
-export async function searchProcessByCNJ(cnj: string): Promise<CodiloProcesso | null> {
+export async function criarAutoRequest(
+  key: "cnj" | "cpf" | "cnpj" | "nome",
+  value: string
+): Promise<CodiloAutoRequest | null> {
+  console.log(`[Codilo] Criando autorequest ${key}: ${value}`);
+  try {
+    const result = await codiloRequest<{ success: boolean; data: CodiloAutoRequest }>(
+      "post",
+      `${CAPTURA_BASE}/autorequest`,
+      { key, value }
+    );
+    return result.data ?? null;
+  } catch (err) {
+    const msg = err instanceof AxiosError
+      ? `HTTP ${err.response?.status}: ${JSON.stringify(err.response?.data)}`
+      : String(err);
+    console.error(`[Codilo] Erro ao criar autorequest ${key}=${value}: ${msg}`);
+    return null;
+  }
+}
+
+/**
+ * Busca o estado atual de um autorequest pelo ID (polling).
+ * Retorna null se não encontrado.
+ */
+export async function getAutoRequest(id: string): Promise<CodiloAutoRequest | null> {
+  try {
+    const result = await codiloRequest<{ success: boolean; data: CodiloAutoRequest }>(
+      "get",
+      `${CAPTURA_BASE}/autorequest/${id}`
+    );
+    return result.data ?? null;
+  } catch (err) {
+    if (err instanceof AxiosError && err.response?.status === 404) return null;
+    const msg = err instanceof AxiosError
+      ? `HTTP ${err.response?.status}: ${JSON.stringify(err.response?.data)}`
+      : String(err);
+    console.error(`[Codilo] Erro ao buscar autorequest ${id}: ${msg}`);
+    return null;
+  }
+}
+
+/**
+ * Busca um processo pelo número CNJ usando fluxo assíncrono:
+ * 1. POST /autorequest para criar a requisição
+ * 2. Polling em GET /autorequest/{id} até status "done" ou timeout
+ *
+ * NOTA: A Codilo processa requisições de forma assíncrona. O resultado pode
+ * demorar de segundos a minutos dependendo do tribunal.
+ */
+export async function searchProcessByCNJ(
+  cnj: string,
+  opcoes?: { polling?: boolean; maxTentativas?: number; intervaloMs?: number }
+): Promise<CodiloProcesso | null> {
   console.log(`[Codilo] Buscando processo CNJ: ${cnj}`);
   try {
-    const result = await codiloRequest<CodiloApiResponse<CodiloProcesso>>(
+    // Primeiro verifica se já existe um autorequest para este CNJ
+    const existente = await codiloRequest<{ success: boolean; data: { total: number; result: CodiloAutoRequest[] } }>(
       "get",
       `${CAPTURA_BASE}/autorequest`,
       undefined,
       { key: "cnj", value: cnj }
     );
 
-    // Formato: { success: true, data: { total: N, result: [...] } }
-    const data = result.data;
-    if (data && typeof data === "object" && "result" in data) {
-      const arr = (data as { total?: number; result?: CodiloProcesso[] }).result;
-      return arr && arr.length > 0 ? arr[0] : null;
+    let autorequest: CodiloAutoRequest | null = null;
+
+    if (existente.data && existente.data.total > 0 && existente.data.result.length > 0) {
+      // Usa o autorequest mais recente
+      autorequest = existente.data.result[0];
+      console.log(`[Codilo] Autorequest existente encontrado: ${autorequest.id}`);
+    } else {
+      // Cria novo autorequest
+      autorequest = await criarAutoRequest("cnj", cnj);
+      if (!autorequest) return null;
+      console.log(`[Codilo] Novo autorequest criado: ${autorequest.id}`);
     }
-    // Fallback: data é array direto
-    if (Array.isArray(data)) return (data as CodiloProcesso[])[0] ?? null;
-    // Fallback: resultado direto
-    if (data && typeof data === "object" && "cnj" in data) return data as CodiloProcesso;
+
+    // Extrai resultado de requests já concluídas
+    const extrairResultado = (ar: CodiloAutoRequest): CodiloProcesso | null => {
+      const done = ar.requests?.find(r => r.status === "done" && r.result);
+      if (done?.result) return done.result;
+      // Tenta montar um objeto básico a partir dos dados disponíveis
+      const warning = ar.requests?.find(r => r.status === "warning");
+      if (warning) {
+        return {
+          cnj: ar.value,
+          status: "warning",
+          situacao: "warning",
+          tribunal: warning.court,
+          uf: warning.uf,
+        } as CodiloProcesso;
+      }
+      return null;
+    };
+
+    // Verifica se já há resultado
+    const resultadoImediato = extrairResultado(autorequest);
+    if (resultadoImediato) return resultadoImediato;
+
+    // Se polling desabilitado, retorna null (modo não-bloqueante)
+    if (opcoes?.polling === false) {
+      console.log(`[Codilo] Autorequest ${autorequest.id} pendente (polling desabilitado).`);
+      return null;
+    }
+
+    // Polling: aguarda até resultado ou timeout
+    const maxTentativas = opcoes?.maxTentativas ?? 6;
+    const intervaloMs   = opcoes?.intervaloMs ?? 5_000;
+
+    for (let i = 0; i < maxTentativas; i++) {
+      await new Promise(r => setTimeout(r, intervaloMs));
+      const atualizado = await getAutoRequest(autorequest.id);
+      if (!atualizado) break;
+
+      const resultado = extrairResultado(atualizado);
+      if (resultado) {
+        console.log(`[Codilo] Resultado obtido para CNJ ${cnj} após ${i + 1} tentativas.`);
+        return resultado;
+      }
+
+      const todosFinalizados = atualizado.requests.every(
+        r => r.status === "done" || r.status === "error" || r.status === "warning"
+      );
+      if (todosFinalizados) {
+        console.log(`[Codilo] Todas as requests finalizadas para CNJ ${cnj} sem resultado útil.`);
+        break;
+      }
+
+      console.log(`[Codilo] CNJ ${cnj}: aguardando... tentativa ${i + 1}/${maxTentativas}`);
+    }
+
     return null;
   } catch (err) {
     if (err instanceof AxiosError && err.response?.status === 404) return null;
@@ -350,7 +482,13 @@ export interface ResultadoAtualizacao {
 
 /**
  * Atualiza o status de uma lista de processos consultando a API Codilo.
- * Processa em lotes de 5 com delay de 500ms entre lotes.
+ *
+ * FLUXO ASSINCRONO DA CODILO:
+ * 1. POST /autorequest → cria requisição assíncrona (retorna ID)
+ * 2. GET /autorequest/{id} → polling até status "done" ou timeout
+ * 3. Extrai resultado da request concluída e normaliza o status
+ *
+ * Processa em lotes de 3 com polling de até 5 tentativas (25s por processo).
  * Nunca lança exceção — retorna relatório completo de resultados.
  */
 export async function updateProcessStatus(
@@ -365,8 +503,8 @@ export async function updateProcessStatus(
     detalhes: [],
   };
 
-  const LOTE = 5;
-  const DELAY_MS = 500;
+  const LOTE = 3;      // Menos processos em paralelo para não sobrecarregar a API
+  const DELAY_MS = 1_000; // 1s entre lotes
 
   for (let i = 0; i < processosList.length; i += LOTE) {
     const lote = processosList.slice(i, i + LOTE);
@@ -374,7 +512,12 @@ export async function updateProcessStatus(
     await Promise.all(
       lote.map(async (proc) => {
         try {
-          const dados = await searchProcessByCNJ(proc.cnj);
+          // Usa polling com até 5 tentativas de 5s cada (25s total por processo)
+          const dados = await searchProcessByCNJ(proc.cnj, {
+            polling: true,
+            maxTentativas: 5,
+            intervaloMs: 5_000,
+          });
 
           if (!dados) {
             resultado.semAlteracao++;
@@ -382,7 +525,7 @@ export async function updateProcessStatus(
               cnj: proc.cnj,
               statusAnterior: proc.statusResumido,
               statusNovo: proc.statusResumido,
-              erro: "Processo não encontrado na Codilo",
+              erro: "Requisição criada na Codilo, aguardando processamento (pode demorar minutos)",
             });
             return;
           }
@@ -421,6 +564,36 @@ export async function updateProcessStatus(
   );
 
   return resultado;
+}
+
+/**
+ * Cria autorrequests para todos os processos sem aguardar resultado.
+ * Útil para disparar a atualização em background e buscar resultados depois.
+ * Retorna os IDs dos autorequests criados para polling posterior.
+ */
+export async function dispararAtualizacaoBackground(
+  processosList: Array<{ id: number; cnj: string }>
+): Promise<Array<{ cnj: string; autorequest_id: string | null }>> {
+  const resultados: Array<{ cnj: string; autorequest_id: string | null }> = [];
+  const LOTE = 5;
+  const DELAY_MS = 500;
+
+  for (let i = 0; i < processosList.length; i += LOTE) {
+    const lote = processosList.slice(i, i + LOTE);
+    const loteResultados = await Promise.all(
+      lote.map(async (proc) => {
+        const ar = await criarAutoRequest("cnj", proc.cnj);
+        return { cnj: proc.cnj, autorequest_id: ar?.id ?? null };
+      })
+    );
+    resultados.push(...loteResultados);
+    if (i + LOTE < processosList.length) {
+      await new Promise(r => setTimeout(r, DELAY_MS));
+    }
+  }
+
+  console.log(`[Codilo] ${resultados.filter(r => r.autorequest_id).length}/${processosList.length} autorequests criados.`);
+  return resultados;
 }
 
 /**
