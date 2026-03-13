@@ -388,6 +388,7 @@ function PainelConsultaDocumento() {
 function PainelAtualizacaoProcessos() {
   const atualizar = trpc.admin.codiloAtualizarProcessos.useMutation();
   const disparar  = trpc.admin.codiloDispararBackground.useMutation();
+  const coletar   = trpc.admin.codiloColetarResultados.useMutation();
 
   const handleAtualizar = async () => {
     toast.info("Iniciando atualização com polling... Aguarde (pode levar minutos).");
@@ -408,6 +409,15 @@ function PainelAtualizacaoProcessos() {
     }
   };
 
+  const handleColetar = async () => {
+    try {
+      const res = await coletar.mutateAsync();
+      toast.success(res.mensagem);
+    } catch (err) {
+      toast.error("Erro ao coletar: " + String(err));
+    }
+  };
+
   const res = atualizar.data;
 
   return (
@@ -423,45 +433,68 @@ function PainelAtualizacaoProcessos() {
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Alerta explicativo */}
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 flex gap-2">
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 flex gap-2">
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-          <div>
-            <strong>Fluxo assíncrono:</strong> A Codilo não retorna o resultado imediatamente. O sistema cria uma requisição e faz polling até 5 tentativas (25s por processo).
-            Para muitos processos, use <strong>Disparar em Background</strong> que é instantâneo e não bloqueia o sistema.
+          <div className="space-y-1">
+            <p><strong>Fluxo recomendado em 2 etapas:</strong></p>
+            <p><strong>1º</strong> Clique em <strong>Disparar em Background</strong> — cria as requisições na Codilo e retorna imediatamente.</p>
+            <p><strong>2º</strong> Após ~3 minutos, clique em <strong>Coletar Resultados</strong> — busca os resultados já processados e atualiza o banco.</p>
           </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
           <Button
-            onClick={handleAtualizar}
-            disabled={atualizar.isPending || disparar.isPending}
+            onClick={handleDisparar}
+            disabled={atualizar.isPending || disparar.isPending || coletar.isPending}
             className="gap-2"
             size="sm"
             variant="default"
-          >
-            {atualizar.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4" />
-            )}
-            {atualizar.isPending ? "Aguardando resultados..." : "Atualizar com Polling"}
-          </Button>
-
-          <Button
-            onClick={handleDisparar}
-            disabled={atualizar.isPending || disparar.isPending}
-            className="gap-2"
-            size="sm"
-            variant="outline"
           >
             {disparar.isPending ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <Zap className="w-4 h-4" />
             )}
-            {disparar.isPending ? "Disparando..." : "Disparar em Background"}
+            {disparar.isPending ? "Disparando..." : "1º Disparar em Background"}
+          </Button>
+
+          <Button
+            onClick={handleColetar}
+            disabled={atualizar.isPending || disparar.isPending || coletar.isPending}
+            className="gap-2"
+            size="sm"
+            variant="outline"
+          >
+            {coletar.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Database className="w-4 h-4" />
+            )}
+            {coletar.isPending ? "Coletando..." : "2º Coletar Resultados"}
+          </Button>
+
+          <Button
+            onClick={handleAtualizar}
+            disabled={atualizar.isPending || disparar.isPending || coletar.isPending}
+            className="gap-2"
+            size="sm"
+            variant="ghost"
+          >
+            {atualizar.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            {atualizar.isPending ? "Aguardando..." : "Atualizar com Polling (lento)"}
           </Button>
         </div>
+
+        {coletar.data && (
+          <div className="flex items-center gap-2 text-xs text-green-700 rounded-lg border border-green-200 bg-green-50 p-3">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{coletar.data.mensagem}</span>
+          </div>
+        )}
 
         {disparar.data && (
           <div className="flex items-center gap-2 text-xs text-green-700 rounded-lg border border-green-200 bg-green-50 p-3">

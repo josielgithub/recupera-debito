@@ -277,25 +277,38 @@ async function getRequestResult(requestId: string): Promise<CodiloProcesso | nul
     const cover = processo.cover ?? [];
 
     // Extrai campos do cover (array de { description, value })
+    // Busca case-insensitive para cobrir variações entre plataformas
     const getCover = (desc: string): string | undefined =>
       cover.find(c => c.description?.toLowerCase() === desc.toLowerCase())?.value;
 
-    // Status: preferir "Fase Processual" > "Status" > "Situação"
-    const fase = getCover("Fase Processual");
-    const status = getCover("Status") ?? getCover("Situação") ?? getCover("Situacao");
-    const statusFinal = fase ?? status ?? "";
+    // Busca por qualquer campo que contenha a palavra-chave (para cobrir variações)
+    const getCoverContains = (keyword: string): string | undefined =>
+      cover.find(c => c.description?.toLowerCase().includes(keyword.toLowerCase()))?.value;
+
+    // Status: cada plataforma usa nomes diferentes no cover
+    // Prioridade: Situação > Status > Fase Processual > qualquer campo com "situa" ou "status"
+    const statusFinal =
+      getCover("Situação") ??
+      getCover("Situacao") ??
+      getCover("Status") ??
+      getCover("Fase Processual") ??
+      getCover("Fase") ??
+      getCoverContains("situa") ??
+      getCoverContains("status") ??
+      getCoverContains("fase") ??
+      "";
 
     return {
-      cnj: getCover("Número") ?? getCover("Numero"),
+      cnj: getCover("Número") ?? getCover("Numero") ?? getCover("Nº do Processo") ?? getCover("Processo"),
       status: statusFinal,
       situacao: statusFinal,
-      classe: getCover("Classe"),
-      assunto: getCover("Assunto(s)") ?? getCover("Assunto"),
-      tribunal: getCover("Serventia") ?? getCover("Tribunal"),
-      vara: getCover("Serventia"),
-      comarca: getCover("Serventia"),
+      classe: getCover("Classe") ?? getCover("Classe da ação") ?? getCover("Classe da Ação"),
+      assunto: getCover("Assunto(s)") ?? getCover("Assunto") ?? getCover("Assuntos"),
+      tribunal: getCover("Serventia") ?? getCover("Tribunal") ?? getCover("Vara"),
+      vara: getCover("Serventia") ?? getCover("Vara"),
+      comarca: getCover("Serventia") ?? getCover("Comarca"),
       uf: (processo.properties as Record<string, string> | undefined)?.uf,
-      ultimaMovimentacao: getCover("Dt. Distribuição") ?? getCover("Última Movimentação"),
+      ultimaMovimentacao: getCover("Dt. Distribuição") ?? getCover("Última Movimentação") ?? getCover("Data de autuação"),
       cover,
       properties: processo.properties,
       people: processo.people as CodiloProcesso["people"],
@@ -338,8 +351,12 @@ export async function searchProcessByCNJ(
     let autorequest: CodiloAutoRequest | null = null;
 
     if (existente.data && existente.data.total > 0 && existente.data.result.length > 0) {
-      autorequest = existente.data.result[0];
-      console.log(`[Codilo] Autorequest existente encontrado: ${autorequest.id}`);
+      const arId = existente.data.result[0].id;
+      console.log(`[Codilo] Autorequest existente encontrado: ${arId}. Buscando detalhes individuais...`);
+      // IMPORTANTE: a listagem retorna apenas { requestId } sem status.
+      // É obrigatório buscar via GET /autorequest/{id} para obter status completo.
+      autorequest = await getAutoRequest(arId);
+      if (!autorequest) return null;
     } else {
       autorequest = await criarAutoRequest("cnj", cnj);
       if (!autorequest) return null;
@@ -526,9 +543,13 @@ export function normalizarStatusCodilo(statusRaw: string | undefined): StatusRes
     }
   }
 
-  // Valores reais retornados pela Codilo no campo cover["Fase Processual"] e cover["Status"]
+  // Valores reais retornados pela Codilo no campo cover (variam por plataforma)
+  // ESAJ/TJSP: "MOVIMENTO", "BAIXADO", "SUSPENSO"
+  // Projudi/TJGO: "Ativo", "Conhecimento", "Execução"
+  if (lower === "movimento" || lower === "em movimento") return "em_andamento";
   if (lower === "ativo" || lower === "em andamento" || lower === "tramitando") return "em_andamento";
   if (lower === "conhecimento") return "em_andamento"; // fase processual
+  if (lower === "suspenso" || lower === "suspenso por acordo") return "acordo_negociacao";
   if (lower === "execução" || lower === "execucao" || lower.includes("cumprimento")) return "cumprimento_de_sentenca";
   if (lower === "recurso" || lower.includes("apelação") || lower.includes("apelacao") || lower.includes("agravo")) return "em_recurso";
   if (lower.includes("audiência") || lower.includes("audiencia")) return "aguardando_audiencia";
@@ -668,6 +689,116 @@ export async function dispararAtualizacaoBackground(
 
   console.log(`[Codilo] ${resultados.filter(r => r.autorequest_id).length}/${processosList.length} autorequests criados.`);
   return resultados;
+}
+
+/**
+ * Coleta resultados de autorequests já criados (sem criar novos).
+ * Para cada CNJ, busca o autorequest existente via GET /autorequest/{id},
+ * encontra requests com status=success e busca o resultado via GET /request/{id}.
+ *
+ * Ideal para executar após dispararAtualizacaoBackground.
+ */
+export async function coletarResultadosExistentes(
+  processosList: Array<{ id: number; cnj: string; statusResumido: string }>,
+  onUpdate: (id: number, statusNovo: string, statusInterno: string, rawPayload: unknown) => Promise<void>
+): Promise<ResultadoAtualizacao> {
+  const resultado: ResultadoAtualizacao = {
+    total: processosList.length,
+    atualizados: 0,
+    semAlteracao: 0,
+    erros: 0,
+    detalhes: [],
+  };
+
+  const LOTE = 5;
+  const DELAY_MS = 300;
+
+  for (let i = 0; i < processosList.length; i += LOTE) {
+    const lote = processosList.slice(i, i + LOTE);
+
+    await Promise.all(
+      lote.map(async (proc) => {
+        try {
+          // Busca autorequest existente via listagem (apenas para obter o ID)
+          const existente = await codiloRequest<{ success: boolean; data: { total: number; result: Array<{ id: string }> } }>(
+            "get",
+            `${CAPTURA_BASE}/autorequest`,
+            undefined,
+            { key: "cnj", value: proc.cnj }
+          );
+
+          if (!existente.data || existente.data.total === 0) {
+            resultado.semAlteracao++;
+            resultado.detalhes.push({
+              cnj: proc.cnj,
+              statusAnterior: proc.statusResumido,
+              statusNovo: proc.statusResumido,
+              erro: "Nenhum autorequest encontrado",
+            });
+            return;
+          }
+
+          // Busca detalhes individuais (com status completo)
+          const arId = existente.data.result[0].id;
+          const ar = await getAutoRequest(arId);
+          if (!ar) {
+            resultado.semAlteracao++;
+            return;
+          }
+
+          // Procura request com status=success
+          const successReq = ar.requests?.find(r => r.status === "success");
+          if (!successReq?.id) {
+            // Ainda pendente ou só warnings
+            resultado.semAlteracao++;
+            resultado.detalhes.push({
+              cnj: proc.cnj,
+              statusAnterior: proc.statusResumido,
+              statusNovo: proc.statusResumido,
+              erro: `Sem resultado ainda (statuses: ${Array.from(new Set(ar.requests?.map(r => r.status))).join(",")})`,
+            });
+            return;
+          }
+
+          // Busca resultado real via GET /request/{id}
+          const dados = await getRequestResult(successReq.id);
+          if (!dados) {
+            resultado.semAlteracao++;
+            return;
+          }
+
+          const statusBruto = (dados.situacao ?? dados.status ?? "") as string;
+          const statusNovo = normalizarStatusCodilo(statusBruto);
+
+          if (statusNovo !== proc.statusResumido) {
+            await onUpdate(proc.id, statusNovo, statusBruto, dados);
+            resultado.atualizados++;
+            resultado.detalhes.push({ cnj: proc.cnj, statusAnterior: proc.statusResumido, statusNovo });
+          } else {
+            resultado.semAlteracao++;
+          }
+        } catch (err) {
+          resultado.erros++;
+          resultado.detalhes.push({
+            cnj: proc.cnj,
+            statusAnterior: proc.statusResumido,
+            statusNovo: proc.statusResumido,
+            erro: String(err),
+          });
+        }
+      })
+    );
+
+    if (i + LOTE < processosList.length) {
+      await new Promise(r => setTimeout(r, DELAY_MS));
+    }
+  }
+
+  console.log(
+    `[Codilo] Coleta de resultados: ${resultado.atualizados} atualizados, ` +
+    `${resultado.semAlteracao} sem alteração, ${resultado.erros} erros.`
+  );
+  return resultado;
 }
 
 /**

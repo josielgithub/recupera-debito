@@ -33,6 +33,7 @@ import {
   searchProcessByDocument,
   updateProcessStatus,
   dispararAtualizacaoBackground,
+  coletarResultadosExistentes,
   listRequests,
   registerMonitoring,
   invalidarTokenCache,
@@ -445,9 +446,10 @@ export const appRouter = router({
           // Aguarda 3 minutos para a Codilo processar as requisições
           await new Promise(r => setTimeout(r, 3 * 60 * 1000));
 
-          // Fase 2: Busca resultados e atualiza banco
-          console.log("[Codilo] Background fase 2: buscando resultados e atualizando banco...");
-          const resultado = await updateProcessStatus(
+          // Fase 2: Coleta resultados dos autorequests já criados (sem criar novos)
+          // Usa coletarResultadosExistentes que busca via GET /autorequest/{id} (com status)
+          console.log("[Codilo] Background fase 2: coletando resultados dos autorequests...");
+          const resultado = await coletarResultadosExistentes(
             lista,
             async (_id, statusNovo, statusInterno, rawPayload) => {
               const proc = lista.find((p) => p.id === _id);
@@ -465,6 +467,43 @@ export const appRouter = router({
       return {
         total: lista.length,
         mensagem: `Disparando atualização para ${lista.length} processos em background. Os autorequests serão criados agora e os resultados buscados após ~3 minutos. Acompanhe os logs do servidor.`,
+      };
+    }),
+
+    // Coleta resultados de autorequests já criados (sem criar novos)
+    // Ideal para usar após dispararBackground quando a Codilo já processou as requisições
+    codiloColetarResultados: protectedProcedure.mutation(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+
+      const { processos: todosProcessos } = await listAllProcessos(1, 10000);
+      const lista = todosProcessos.map((p: { id: number; cnj: string; statusResumido: string }) => ({
+        id: p.id,
+        cnj: p.cnj,
+        statusResumido: p.statusResumido,
+      }));
+
+      // Executa em background (não-bloqueante)
+      ;(async () => {
+        try {
+          console.log(`[Codilo] Coletando resultados para ${lista.length} processos...`);
+          const resultado = await coletarResultadosExistentes(
+            lista,
+            async (_id, statusNovo, statusInterno, rawPayload) => {
+              const proc = lista.find((p) => p.id === _id);
+              if (proc) {
+                await updateProcessoStatus(proc.cnj, statusNovo as StatusResumido, rawPayload);
+              }
+            }
+          );
+          console.log(`[Codilo] Coleta concluída: ${resultado.atualizados} atualizados, ${resultado.semAlteracao} sem alteração, ${resultado.erros} erros.`);
+        } catch (err) {
+          console.error("[Codilo] Erro na coleta:", err);
+        }
+      })();
+
+      return {
+        total: lista.length,
+        mensagem: `Coletando resultados para ${lista.length} processos. Os status serão atualizados conforme os resultados forem encontrados nos autorequests existentes.`,
       };
     }),
 
