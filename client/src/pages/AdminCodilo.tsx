@@ -141,11 +141,16 @@ function PainelConsultaDocumento() {
       toast.error("Informe o documento para consultar");
       return;
     }
-    await consultar.mutateAsync({ documento: documento.trim(), tipo });
-    if (consultar.data?.ok) {
-      toast.success("Consulta realizada com sucesso");
-    } else {
-      toast.error(`Erro na consulta: ${consultar.data?.erro}`);
+    try {
+      const res = await consultar.mutateAsync({ documento: documento.trim(), tipo });
+      if (res?.ok) {
+        const total = res.resultado?.total ?? 0;
+        toast.success(`Consulta realizada — ${total} processo(s) encontrado(s)`);
+      } else {
+        toast.error(`Erro na consulta: ${res?.erro ?? "Resposta inválida"}`);
+      }
+    } catch (err) {
+      toast.error(`Erro na consulta: ${String(err)}`);
     }
   };
 
@@ -154,9 +159,11 @@ function PainelConsultaDocumento() {
     tribunal?: string; vara?: string; comarca?: string; assunto?: string; classe?: string;
     dataUltimaAtualizacao?: string; ultimaMovimentacao?: string;
   };
-  const processos: ProcessoItem[] = (
-    (consultar.data?.resultado?.processos ?? []) as ProcessoItem[]
-  );
+  // Usa consultar.data que é atualizado após mutateAsync resolver
+  const resultadoConsulta = consultar.data;
+  const processos: ProcessoItem[] = Array.isArray(resultadoConsulta?.resultado?.processos)
+    ? (resultadoConsulta!.resultado!.processos as ProcessoItem[])
+    : [];
 
   return (
     <Card className="shadow-sm">
@@ -213,13 +220,13 @@ function PainelConsultaDocumento() {
           </div>
         </div>
 
-        {consultar.data && (
+        {resultadoConsulta && (
           <div>
             <Separator className="my-3" />
-            {!consultar.data.ok ? (
+            {!resultadoConsulta.ok ? (
               <div className="flex items-center gap-2 text-sm text-red-600">
                 <XCircle className="w-4 h-4" />
-                <span>{consultar.data.erro}</span>
+                <span>{resultadoConsulta.erro ?? "Erro desconhecido"}</span>
               </div>
             ) : processos.length === 0 ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">

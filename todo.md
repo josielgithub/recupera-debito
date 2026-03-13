@@ -140,3 +140,7 @@
 
 - [x] codilo.ts: corrigir mapeamento de key — cpf/cnpj → "doc", nome → "nomeparte"
 - [x] AdminCodilo.tsx: atualizar labels do select para refletir os tipos corretos
+
+## Bug: Erro "undefined" na Consulta
+
+- [x] Diagnosticar e corrigir erro "undefined" na consulta (aba Codilo) — handleConsultar usava consultar.data antes do re-render
