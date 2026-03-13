@@ -29,8 +29,11 @@ import {
 import { processarPlanilha } from "./importacao";
 import {
   testarConexaoCodilo,
+  searchProcessByCNJ,
   searchProcessByDocument,
   updateProcessStatus,
+  listRequests,
+  registerMonitoring,
   invalidarTokenCache,
 } from "./codilo";
 import { createHash } from "crypto";
@@ -290,11 +293,35 @@ export const appRouter = router({
 
     // ─── Integração Codilo ─────────────────────────────────────────────────
 
-    // Testa a conexão com a API Codilo (obtém token fresco)
+    // Testa a conexão com a API Codilo (obtém token fresco + lista requisições)
     codiloTestarConexao: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
       return testarConexaoCodilo();
     }),
+
+    // Lista todas as requisições existentes na conta Codilo
+    codiloListarRequisicoes: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      try {
+        const requests = await listRequests();
+        return { ok: true, requests };
+      } catch (err) {
+        return { ok: false, erro: String(err), requests: [] };
+      }
+    }),
+
+    // Consulta um processo específico pelo número CNJ na API Codilo
+    codiloConsultarCNJ: protectedProcedure
+      .input(z.object({ cnj: z.string().min(1) }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        try {
+          const resultado = await searchProcessByCNJ(input.cnj);
+          return { ok: true, resultado };
+        } catch (err) {
+          return { ok: false, erro: String(err), resultado: null };
+        }
+      }),
 
     // Consulta processos na API Codilo por CPF, CNPJ ou nome
     codiloConsultarDocumento: protectedProcedure
@@ -310,6 +337,15 @@ export const appRouter = router({
         } catch (err) {
           return { ok: false, erro: String(err), resultado: null };
         }
+      }),
+
+    // Registra monitoramento PUSH para um CNJ específico
+    codiloRegistrarMonitoramento: protectedProcedure
+      .input(z.object({ cnj: z.string().min(1) }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const ok = await registerMonitoring(input.cnj);
+        return { ok, cnj: input.cnj };
       }),
 
     // Dispara atualização manual de todos os processos via API Codilo

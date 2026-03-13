@@ -124,3 +124,14 @@
 - [x] routers.ts: endpoint admin.codiloAtualizarProcessos (disparo manual)
 - [x] Rotina agendada: atualizar processos a cada 6 horas (servidor)
 - [x] Admin: painel de integração Codilo com status, teste e atualização manual
+
+## Correção Integração Codilo (Endpoints Corretos)
+
+- [ ] codilo.ts: corrigir URL base para api.capturaweb.com.br e api.push.codilo.com.br
+- [ ] codilo.ts: função searchProcessByCNJ(cnj) — GET /v1/autorequest?key=cnj&value={CNJ}
+- [ ] codilo.ts: função listRequests() — GET /v1/request
+- [ ] codilo.ts: função registerMonitoring(cnj) — POST /v1/processo/novo
+- [ ] codilo.ts: retry automático em erro 401
+- [ ] routers.ts: atualizar endpoints Codilo para usar as novas funções
+- [ ] Testar endpoints reais via curl e confirmar resposta
+- [ ] Painel admin Codilo: exibir resultado de listRequests e busca por CNJ

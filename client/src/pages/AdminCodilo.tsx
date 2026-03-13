@@ -24,7 +24,7 @@ import { toast } from "sonner";
 // ─── Painel de Status da Conexão ──────────────────────────────────────────────
 function PainelStatusConexao() {
   const [testando, setTestando] = useState(false);
-  const [resultado, setResultado] = useState<{ ok: boolean; erro?: string } | null>(null);
+  const [resultado, setResultado] = useState<{ ok: boolean; erro?: string; detalhes?: unknown } | null>(null);
 
   const testar = trpc.admin.codiloTestarConexao.useQuery(undefined, {
     enabled: false,
@@ -68,8 +68,12 @@ function PainelStatusConexao() {
             <p className="text-xs font-mono truncate">auth.codilo.com.br</p>
           </div>
           <div className="rounded-lg border bg-muted/30 p-3">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Endpoint API</p>
-            <p className="text-xs font-mono truncate">api.codilo.com.br</p>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Consulta Processos</p>
+            <p className="text-xs font-mono truncate">api.capturaweb.com.br/v1</p>
+          </div>
+          <div className="rounded-lg border bg-muted/30 p-3">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Monitoramento PUSH</p>
+            <p className="text-xs font-mono truncate">api.push.codilo.com.br/v1</p>
           </div>
           <div className="rounded-lg border bg-muted/30 p-3">
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Fluxo</p>
@@ -100,7 +104,13 @@ function PainelStatusConexao() {
               ) : (
                 <XCircle className="w-4 h-4" />
               )}
-              {resultado.ok ? "Conexão OK — Token obtido com sucesso" : resultado.erro}
+              {resultado.ok
+                ? `Conexão OK — Token obtido com sucesso${
+                    resultado.detalhes && typeof resultado.detalhes === "object" && "totalRequests" in (resultado.detalhes as Record<string, unknown>)
+                      ? ` (${(resultado.detalhes as { totalRequests: number }).totalRequests} requisições na conta)`
+                      : ""
+                  }`
+                : resultado.erro}
             </div>
           )}
         </div>
@@ -140,12 +150,12 @@ function PainelConsultaDocumento() {
   };
 
   type ProcessoItem = {
-    numero?: string; id?: string; status?: string;
-    tribunal?: string; vara?: string; assunto?: string;
-    dataUltimaAtualizacao?: string;
+    numero?: string; cnj?: string; id?: string; status?: string; situacao?: string;
+    tribunal?: string; vara?: string; comarca?: string; assunto?: string; classe?: string;
+    dataUltimaAtualizacao?: string; ultimaMovimentacao?: string;
   };
   const processos: ProcessoItem[] = (
-    (consultar.data?.resultado?.processos ?? consultar.data?.resultado?.data ?? []) as ProcessoItem[]
+    (consultar.data?.resultado?.processos ?? []) as ProcessoItem[]
   );
 
   return (
@@ -225,17 +235,17 @@ function PainelConsultaDocumento() {
                   {processos.map((p, i) => (
                     <div key={i} className="rounded-lg border bg-muted/20 p-3 text-xs space-y-1">
                       <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="font-mono font-semibold">{p.numero ?? p.id ?? "—"}</span>
-                        {p.status && (
-                          <Badge variant="outline" className="text-[10px]">{p.status}</Badge>
+                        <span className="font-mono font-semibold">{p.cnj ?? p.numero ?? p.id ?? "—"}</span>
+                        {(p.situacao ?? p.status) && (
+                          <Badge variant="outline" className="text-[10px]">{p.situacao ?? p.status}</Badge>
                         )}
                       </div>
-                      {p.tribunal && <p className="text-muted-foreground">{p.tribunal}{p.vara ? ` — ${p.vara}` : ""}</p>}
-                      {p.assunto && <p className="text-muted-foreground truncate">{p.assunto}</p>}
-                      {p.dataUltimaAtualizacao && (
+                      {p.tribunal && <p className="text-muted-foreground">{p.tribunal}{p.vara ? ` — ${p.vara}` : ""}{p.comarca ? ` (${p.comarca})` : ""}</p>}
+                      {(p.classe ?? p.assunto) && <p className="text-muted-foreground truncate">{p.classe ?? p.assunto}</p>}
+                      {(p.ultimaMovimentacao ?? p.dataUltimaAtualizacao) && (
                         <p className="text-muted-foreground flex items-center gap-1">
                           <Clock className="w-3 h-3" />
-                          {new Date(p.dataUltimaAtualizacao).toLocaleString("pt-BR")}
+                          {p.ultimaMovimentacao ?? (p.dataUltimaAtualizacao ? new Date(p.dataUltimaAtualizacao).toLocaleString("pt-BR") : "")}
                         </p>
                       )}
                     </div>

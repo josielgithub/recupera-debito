@@ -2,25 +2,27 @@
  * Serviço de integração com a API Codilo
  *
  * Autenticação: OAuth2 client_credentials
- * POST https://auth.codilo.com.br/oauth/token
- * Body JSON: { grant_type: "client_credentials", id: API_KEY, secret: API_SECRET }
+ *   POST https://auth.codilo.com.br/oauth/token
+ *   Body: { grant_type: "client_credentials", id: API_KEY, secret: API_SECRET }
  *
- * Todas as requisições seguintes usam: Authorization: Bearer <access_token>
+ * Consulta de processos: https://api.capturaweb.com.br/v1
+ * Monitoramento PUSH:    https://api.push.codilo.com.br/v1
  *
  * Estratégia de resiliência:
- * - Token armazenado em cache até expirar (com margem de 60s)
- * - Renovação automática em erro 401
- * - Erros logados sem interromper o sistema principal
+ *   - Token armazenado em cache até expirar (com margem de 60s)
+ *   - Renovação automática em erro 401
+ *   - Erros logados sem interromper o sistema principal
  */
 
 import axios, { AxiosError } from "axios";
 import { CODILO_STATUS_MAP } from "../shared/const";
 import { StatusResumido } from "../drizzle/schema";
 
-// ─── Configuração ─────────────────────────────────────────────────────────────
+// ─── URLs da API ──────────────────────────────────────────────────────────────
 
 const CODILO_AUTH_URL = "https://auth.codilo.com.br/oauth/token";
-const CODILO_API_BASE = "https://api.codilo.com.br";
+const CAPTURA_BASE    = "https://api.capturaweb.com.br/v1";
+const PUSH_BASE       = "https://api.push.codilo.com.br/v1";
 
 // ─── Cache de Token ───────────────────────────────────────────────────────────
 
@@ -43,7 +45,7 @@ export async function getCodiloToken(): Promise<string> {
     return _tokenCache.accessToken;
   }
 
-  const apiKey = process.env.CODILO_API_KEY;
+  const apiKey    = process.env.CODILO_API_KEY;
   const apiSecret = process.env.CODILO_API_SECRET;
 
   if (!apiKey || !apiSecret) {
@@ -53,15 +55,8 @@ export async function getCodiloToken(): Promise<string> {
   try {
     const response = await axios.post(
       CODILO_AUTH_URL,
-      {
-        grant_type: "client_credentials",
-        id: apiKey,
-        secret: apiSecret,
-      },
-      {
-        headers: { "Content-Type": "application/json" },
-        timeout: 10_000,
-      }
+      { grant_type: "client_credentials", id: apiKey, secret: apiSecret },
+      { headers: { "Content-Type": "application/json" }, timeout: 15_000 }
     );
 
     const { access_token, expires_in } = response.data;
@@ -70,13 +65,10 @@ export async function getCodiloToken(): Promise<string> {
       throw new Error("[Codilo] Resposta de autenticação inválida: access_token ausente.");
     }
 
-    const expiresInMs = (expires_in ?? 3600) * 1000;
-    _tokenCache = {
-      accessToken: access_token,
-      expiresAt: agora + expiresInMs,
-    };
+    const expiresInMs = (expires_in ?? 21600) * 1000;
+    _tokenCache = { accessToken: access_token, expiresAt: agora + expiresInMs };
 
-    console.log(`[Codilo] Token obtido com sucesso. Expira em ${expires_in ?? 3600}s.`);
+    console.log(`[Codilo] Token obtido com sucesso. Expira em ${expires_in ?? 21600}s.`);
     return access_token;
   } catch (err) {
     _tokenCache = null;
@@ -88,9 +80,7 @@ export async function getCodiloToken(): Promise<string> {
   }
 }
 
-/**
- * Invalida o cache do token (usado após erro 401).
- */
+/** Invalida o cache do token (usado após erro 401). */
 export function invalidarTokenCache(): void {
   _tokenCache = null;
 }
@@ -99,24 +89,23 @@ export function invalidarTokenCache(): void {
 
 async function codiloRequest<T>(
   method: "get" | "post" | "put",
-  path: string,
-  data?: unknown
+  url: string,
+  data?: unknown,
+  params?: Record<string, string>
 ): Promise<T> {
   const fazerRequisicao = async (): Promise<T> => {
     const token = await getCodiloToken();
-    const url = `${CODILO_API_BASE}${path}`;
-
     const response = await axios({
       method,
       url,
       data,
+      params,
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      timeout: 15_000,
+      timeout: 30_000,
     });
-
     return response.data as T;
   };
 
@@ -132,106 +121,207 @@ async function codiloRequest<T>(
   }
 }
 
-// ─── Tipos de Resposta da Codilo ──────────────────────────────────────────────
+// ─── Tipos de Resposta ────────────────────────────────────────────────────────
 
 export interface CodiloProcesso {
   id?: string;
+  cnj?: string;
   numero?: string;
   cpf?: string;
   cnpj?: string;
   nome?: string;
   status?: string;
+  situacao?: string;
   tribunal?: string;
   vara?: string;
   comarca?: string;
+  uf?: string;
   assunto?: string;
+  classe?: string;
   ultimaMovimentacao?: string;
   dataUltimaAtualizacao?: string;
+  partes?: Array<{ nome: string; tipo: string }>;
+  movimentacoes?: Array<{ data: string; descricao: string }>;
+  [key: string]: unknown;
+}
+
+export interface CodiloRequest {
+  id?: string;
+  cnj?: string;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface CodiloApiResponse<T> {
+  success?: boolean;
+  data?: {
+    total?: number;
+    result?: T[];
+  } | T;
   [key: string]: unknown;
 }
 
 export interface CodiloSearchResult {
   processos?: CodiloProcesso[];
-  data?: CodiloProcesso[];
+  data?: CodiloProcesso[] | { total?: number; result?: CodiloProcesso[] };
   total?: number;
-  pagina?: number;
-  totalPaginas?: number;
+  result?: CodiloProcesso[];
   [key: string]: unknown;
 }
 
 // ─── Funções de Consulta ──────────────────────────────────────────────────────
 
 /**
- * Consulta processos por CPF, CNPJ ou nome na API Codilo.
- * @param documento - CPF (somente dígitos), CNPJ (somente dígitos) ou nome completo
- * @param tipo - "cpf" | "cnpj" | "nome"
+ * Busca um processo pelo número CNJ.
+ * Endpoint: GET https://api.capturaweb.com.br/v1/autorequest?key=cnj&value={CNJ}
+ */
+export async function searchProcessByCNJ(cnj: string): Promise<CodiloProcesso | null> {
+  console.log(`[Codilo] Buscando processo CNJ: ${cnj}`);
+  try {
+    const result = await codiloRequest<CodiloApiResponse<CodiloProcesso>>(
+      "get",
+      `${CAPTURA_BASE}/autorequest`,
+      undefined,
+      { key: "cnj", value: cnj }
+    );
+
+    // Formato: { success: true, data: { total: N, result: [...] } }
+    const data = result.data;
+    if (data && typeof data === "object" && "result" in data) {
+      const arr = (data as { total?: number; result?: CodiloProcesso[] }).result;
+      return arr && arr.length > 0 ? arr[0] : null;
+    }
+    // Fallback: data é array direto
+    if (Array.isArray(data)) return (data as CodiloProcesso[])[0] ?? null;
+    // Fallback: resultado direto
+    if (data && typeof data === "object" && "cnj" in data) return data as CodiloProcesso;
+    return null;
+  } catch (err) {
+    if (err instanceof AxiosError && err.response?.status === 404) return null;
+    const msg = err instanceof AxiosError
+      ? `HTTP ${err.response?.status}: ${JSON.stringify(err.response?.data)}`
+      : String(err);
+    console.error(`[Codilo] Erro ao buscar CNJ ${cnj}: ${msg}`);
+    return null;
+  }
+}
+
+/**
+ * Consulta processos por CPF, CNPJ ou nome.
+ * Endpoint: GET https://api.capturaweb.com.br/v1/autorequest?key={tipo}&value={doc}
  */
 export async function searchProcessByDocument(
   documento: string,
   tipo: "cpf" | "cnpj" | "nome" = "cpf"
 ): Promise<CodiloSearchResult> {
   const docLimpo = tipo !== "nome" ? documento.replace(/\D/g, "") : documento;
+  console.log(`[Codilo] Buscando processos por ${tipo}: ${docLimpo}`);
 
   try {
-    const result = await codiloRequest<CodiloSearchResult>(
+    const result = await codiloRequest<CodiloApiResponse<CodiloProcesso>>(
       "get",
-      `/processos?${tipo}=${encodeURIComponent(docLimpo)}`
+      `${CAPTURA_BASE}/autorequest`,
+      undefined,
+      { key: tipo, value: docLimpo }
     );
-    return result;
+
+    // Normaliza para CodiloSearchResult
+    const data = result.data;
+    if (data && typeof data === "object" && "result" in data) {
+      const inner = data as { total?: number; result?: CodiloProcesso[] };
+      return { processos: inner.result ?? [], total: inner.total ?? 0 };
+    }
+    if (Array.isArray(data)) return { processos: data as CodiloProcesso[], total: (data as CodiloProcesso[]).length };
+    return { processos: [], total: 0 };
   } catch (err) {
     const msg = err instanceof AxiosError
       ? `HTTP ${err.response?.status}: ${JSON.stringify(err.response?.data)}`
       : String(err);
-    console.error(`[Codilo] Erro ao consultar processos por ${tipo}: ${msg}`);
+    console.error(`[Codilo] Erro ao consultar por ${tipo}: ${msg}`);
     throw new Error(`[Codilo] Falha na consulta por ${tipo}: ${msg}`);
   }
 }
 
 /**
- * Consulta um processo específico pelo número CNJ.
- * Retorna null se não encontrado (404) ou em caso de erro.
+ * Lista todas as requisições existentes na conta.
+ * Endpoint: GET https://api.capturaweb.com.br/v1/request
  */
-export async function getProcessoByCnjCodilo(cnj: string): Promise<CodiloProcesso | null> {
-  const cnjLimpo = cnj.replace(/\D/g, "");
+export async function listRequests(): Promise<CodiloRequest[]> {
+  console.log("[Codilo] Listando requisições existentes...");
   try {
-    const result = await codiloRequest<CodiloProcesso>("get", `/processos/${cnjLimpo}`);
-    return result;
-  } catch (err) {
-    if (err instanceof AxiosError && err.response?.status === 404) {
-      return null;
+    const result = await codiloRequest<CodiloApiResponse<CodiloRequest>>(
+      "get",
+      `${CAPTURA_BASE}/request`
+    );
+
+    // Formato: { success: true, data: { total: N, result: [...] } }
+    const data = result.data;
+    let list: CodiloRequest[] = [];
+    if (data && typeof data === "object" && "result" in data) {
+      list = (data as { total?: number; result?: CodiloRequest[] }).result ?? [];
+    } else if (Array.isArray(data)) {
+      list = data as CodiloRequest[];
     }
+
+    console.log(`[Codilo] ${list.length} requisições encontradas.`);
+    return list;
+  } catch (err) {
     const msg = err instanceof AxiosError
       ? `HTTP ${err.response?.status}: ${JSON.stringify(err.response?.data)}`
       : String(err);
-    console.error(`[Codilo] Erro ao buscar processo ${cnj}: ${msg}`);
-    return null;
+    console.error(`[Codilo] Erro ao listar requisições: ${msg}`);
+    throw new Error(`[Codilo] Falha ao listar requisições: ${msg}`);
   }
+}
+
+/**
+ * Registra um processo no sistema de Monitoramento PUSH da Codilo.
+ * Endpoint: POST https://api.push.codilo.com.br/v1/processo/novo
+ */
+export async function registerMonitoring(cnj: string): Promise<boolean> {
+  console.log(`[Codilo] Registrando monitoramento PUSH para CNJ: ${cnj}`);
+  try {
+    await codiloRequest(
+      "post",
+      `${PUSH_BASE}/processo/novo`,
+      { cnj, ignore: false, callbacks: [] }
+    );
+    console.log(`[Codilo] Monitoramento registrado para ${cnj}.`);
+    return true;
+  } catch (err) {
+    const msg = err instanceof AxiosError
+      ? `HTTP ${err.response?.status}: ${JSON.stringify(err.response?.data)}`
+      : String(err);
+    console.error(`[Codilo] Erro ao registrar monitoramento ${cnj}: ${msg}`);
+    return false;
+  }
+}
+
+/** @deprecated Use searchProcessByCNJ */
+export async function getProcessoByCnjCodilo(cnj: string): Promise<CodiloProcesso | null> {
+  return searchProcessByCNJ(cnj);
 }
 
 // ─── Normalização de Status ───────────────────────────────────────────────────
 
 /**
  * Normaliza o status retornado pela Codilo para os 12 estados resumidos do sistema.
- * Tenta correspondência exata via CODILO_STATUS_MAP, depois por palavras-chave.
  */
 export function normalizarStatusCodilo(statusRaw: string | undefined): StatusResumido {
   if (!statusRaw) return "em_analise_inicial";
 
   const lower = statusRaw.toLowerCase().trim();
 
-  // Correspondência exata via mapa configurável
-  if (CODILO_STATUS_MAP[lower]) {
-    return CODILO_STATUS_MAP[lower] as StatusResumido;
-  }
+  if (CODILO_STATUS_MAP[lower]) return CODILO_STATUS_MAP[lower] as StatusResumido;
 
-  // Correspondência parcial via mapa
   for (const [chave, valor] of Object.entries(CODILO_STATUS_MAP)) {
     if (lower.includes(chave) || chave.includes(lower)) {
       return valor as StatusResumido;
     }
   }
 
-  // Fallback por palavras-chave
   if (lower.includes("ganho") || lower.includes("procedente") || lower.includes("deferido")) return "concluido_ganho";
   if (lower.includes("perdido") || lower.includes("improcedente") || lower.includes("indeferido")) return "concluido_perdido";
   if (lower.includes("cumprimento") || lower.includes("execução") || lower.includes("execucao")) return "cumprimento_de_sentenca";
@@ -260,11 +350,8 @@ export interface ResultadoAtualizacao {
 
 /**
  * Atualiza o status de uma lista de processos consultando a API Codilo.
- * Processa em lotes de 5 com delay de 500ms entre lotes para não sobrecarregar a API.
+ * Processa em lotes de 5 com delay de 500ms entre lotes.
  * Nunca lança exceção — retorna relatório completo de resultados.
- *
- * @param processosList - Lista de processos com id, cnj e statusResumido atual
- * @param onUpdate - Callback chamado quando um processo tem status alterado
  */
 export async function updateProcessStatus(
   processosList: Array<{ id: number; cnj: string; statusResumido: string }>,
@@ -287,7 +374,7 @@ export async function updateProcessStatus(
     await Promise.all(
       lote.map(async (proc) => {
         try {
-          const dados = await getProcessoByCnjCodilo(proc.cnj);
+          const dados = await searchProcessByCNJ(proc.cnj);
 
           if (!dados) {
             resultado.semAlteracao++;
@@ -300,17 +387,13 @@ export async function updateProcessStatus(
             return;
           }
 
-          const statusNovo = normalizarStatusCodilo(dados.status);
-          const statusInterno = dados.status ?? "";
+          const statusBruto = (dados.situacao ?? dados.status ?? "") as string;
+          const statusNovo   = normalizarStatusCodilo(statusBruto);
 
           if (statusNovo !== proc.statusResumido) {
-            await onUpdate(proc.id, statusNovo, statusInterno, dados);
+            await onUpdate(proc.id, statusNovo, statusBruto, dados);
             resultado.atualizados++;
-            resultado.detalhes.push({
-              cnj: proc.cnj,
-              statusAnterior: proc.statusResumido,
-              statusNovo,
-            });
+            resultado.detalhes.push({ cnj: proc.cnj, statusAnterior: proc.statusResumido, statusNovo });
           } else {
             resultado.semAlteracao++;
           }
@@ -341,22 +424,28 @@ export async function updateProcessStatus(
 }
 
 /**
- * Testa a conexão com a API Codilo obtendo um token fresco.
- * Retorna { ok: true } ou { ok: false, erro: string }
+ * Testa a conexão com a API Codilo obtendo um token fresco e listando requisições.
  */
-export async function testarConexaoCodilo(): Promise<{ ok: boolean; erro?: string }> {
+export async function testarConexaoCodilo(): Promise<{ ok: boolean; erro?: string; detalhes?: unknown }> {
   try {
     invalidarTokenCache(); // força renovação para testar de verdade
     await getCodiloToken();
-    return { ok: true };
+
+    let detalhes: unknown = null;
+    try {
+      const requests = await listRequests();
+      detalhes = { totalRequests: requests.length };
+    } catch (e) {
+      detalhes = { aviso: "Token OK, mas listagem de requisições falhou", erro: String(e) };
+    }
+
+    return { ok: true, detalhes };
   } catch (err) {
     return { ok: false, erro: String(err) };
   }
 }
 
-// ─── Compatibilidade com código legado ───────────────────────────────────────
-
-/** @deprecated Use testarConexaoCodilo() */
+/** Valida o secret do callback Codilo via header. */
 export function validarCallbackCodilo(headers: Record<string, string | string[] | undefined>): boolean {
   const secret = process.env.CODILO_CALLBACK_SECRET;
   if (!secret) return true;
