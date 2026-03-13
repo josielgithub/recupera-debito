@@ -1,4 +1,14 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,9 +71,33 @@ function BadgeResultado({ resultado }: { resultado: string }) {
   return <Badge className={`text-xs border-0 ${cls}`}>{label}</Badge>;
 }
 
+// ─── Tooltip customizado do gráfico ────────────────────────────────────────────────────
+function TooltipGrafico({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) {
+  if (!active || !payload?.length) return null;
+  const [y, m, d] = (label ?? "").split("-");
+  const dataFormatada = `${d}/${m}/${y}`;
+  return (
+    <div className="bg-white border border-border rounded-lg shadow-lg p-3 text-xs">
+      <p className="font-semibold text-foreground mb-2">{dataFormatada}</p>
+      {payload.map((p) => (
+        <div key={p.name} className="flex items-center gap-2 mb-1">
+          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: p.color }} />
+          <span className="text-muted-foreground">
+            {p.name === "encontrado" ? "Encontrado" :
+             p.name === "nao_encontrado" ? "Não encontrado" :
+             p.name === "bloqueado" ? "Bloqueado" : "Total"}
+          </span>
+          <span className="font-semibold text-foreground ml-auto pl-3">{p.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Componente Principal ────────────────────────────────────────────────────
 export default function AdminHistorico() {
   const [pagina, setPagina] = useState(1);
+  const [periodoGrafico, setPeriodoGrafico] = useState<7 | 15 | 30>(30);
   const [resultado, setResultado] = useState<string>("");
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
@@ -74,6 +108,25 @@ export default function AdminHistorico() {
     dataFim: "",
     telefone: "",
   });
+
+  const { data: dadosGrafico, isLoading: loadingGrafico } = trpc.admin.graficoConsultasDiarias.useQuery(
+    { dias: periodoGrafico },
+    { refetchOnWindowFocus: false }
+  );
+
+  // Formata datas para exibição no eixo X (dd/mm)
+  const dadosGraficoFormatados = useMemo(() =>
+    (dadosGrafico ?? []).map((d) => ({
+      ...d,
+      dataLabel: d.data.slice(5).replace("-", "/"),
+    })),
+    [dadosGrafico]
+  );
+
+  const totalGrafico = useMemo(() =>
+    (dadosGrafico ?? []).reduce((acc, d) => acc + d.total, 0),
+    [dadosGrafico]
+  );
 
   const { data, isLoading } = trpc.admin.historicoConsultas.useQuery({
     page: pagina,
@@ -137,6 +190,106 @@ export default function AdminHistorico() {
 
   return (
     <div className="space-y-4">
+
+      {/* ─── Card do Gráfico ─── */}
+      <Card className="shadow-sm">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Activity className="w-4 h-4 text-primary" />
+              Volume de consultas diárias
+              {totalGrafico > 0 && (
+                <Badge variant="outline" className="ml-1 text-xs">{totalGrafico} total</Badge>
+              )}
+            </CardTitle>
+            {/* Seletor de período */}
+            <div className="flex items-center gap-1">
+              {([7, 15, 30] as const).map((d) => (
+                <Button
+                  key={d}
+                  variant={periodoGrafico === d ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 text-xs px-3"
+                  onClick={() => setPeriodoGrafico(d)}
+                >
+                  {d}d
+                </Button>
+              ))}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0 pb-4">
+          {loadingGrafico ? (
+            <div className="flex items-center justify-center h-48">
+              <div className="w-6 h-6 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+            </div>
+          ) : totalGrafico === 0 ? (
+            <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
+              <Activity className="w-10 h-10 mb-2 opacity-20" />
+              <p className="text-sm">Nenhuma consulta nos últimos {periodoGrafico} dias.</p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart
+                data={dadosGraficoFormatados}
+                margin={{ top: 8, right: 16, left: -20, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis
+                  dataKey="dataLabel"
+                  tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                  tickLine={false}
+                  axisLine={false}
+                  interval={periodoGrafico === 7 ? 0 : periodoGrafico === 15 ? 1 : 4}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                  tickLine={false}
+                  axisLine={false}
+                  allowDecimals={false}
+                />
+                <Tooltip content={<TooltipGrafico />} />
+                <Legend
+                  formatter={(value) =>
+                    value === "encontrado" ? "Encontrado" :
+                    value === "nao_encontrado" ? "Não encontrado" :
+                    value === "bloqueado" ? "Bloqueado" : value
+                  }
+                  iconType="circle"
+                  iconSize={8}
+                  wrapperStyle={{ fontSize: 11 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="encontrado"
+                  stroke="#22c55e"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4, strokeWidth: 0 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="nao_encontrado"
+                  stroke="#94a3b8"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4, strokeWidth: 0 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="bloqueado"
+                  stroke="#ef4444"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4, strokeWidth: 0 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ─── Card de Filtros e Tabela ─── */}
       <Card className="shadow-sm">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">

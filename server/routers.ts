@@ -11,6 +11,7 @@ import {
   getClienteByCpf,
   getProcessosByCpf,
   getProcessoByCnj,
+  graficoConsultasDiarias,
   listAllProcessos,
   listLogsConsulta,
   listLogsImportacao,
@@ -255,6 +256,14 @@ export const appRouter = router({
           dataFim: input.dataFim ? new Date(input.dataFim) : undefined,
           telefone: input.telefone,
         });
+      }),
+
+    // Gráfico de consultas diárias
+    graficoConsultasDiarias: protectedProcedure
+      .input(z.object({ dias: z.number().min(7).max(90).default(30) }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        return graficoConsultasDiarias(input.dias);
       }),
 
     // Gerar planilha modelo para download (base64)

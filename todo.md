@@ -89,3 +89,11 @@
 - [x] Admin: aba "Histórico" com tabela paginada (CPF mascarado, telefone, IP, data, resultado)
 - [x] Admin: exportar histórico em CSV (com filtros aplicados)
 - [x] Testes: 27 testes passando (TypeScript sem erros)
+
+## Gráfico de Consultas Diárias
+- [x] Backend: endpoint admin.graficoConsultasDiarias (agregar por dia, últimos 30 dias)
+- [x] Backend: retornar contagem por resultado (encontrado, nao_encontrado, bloqueado) por dia
+- [x] Frontend: gráfico de linhas com Recharts acima da tabela na aba Histórico
+- [x] Frontend: linhas coloridas por resultado com legenda (verde/cinza/vermelho)
+- [x] Frontend: tooltip customizado com detalhes ao passar o mouse
+- [x] Frontend: seletor de período (7, 15, 30 dias)

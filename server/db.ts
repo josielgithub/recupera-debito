@@ -441,6 +441,49 @@ export async function listLogsConsulta(
   return { logs: resultado, total: Number(countRows[0]?.count ?? 0) };
 }
 
+// ─── Gráfico de Consultas Diárias ────────────────────────────────────────────
+export async function graficoConsultasDiarias(dias = 30) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const desde = new Date();
+  desde.setDate(desde.getDate() - dias + 1);
+  desde.setHours(0, 0, 0, 0);
+
+  // Busca todos os logs no período
+  const rows = await db
+    .select({
+      createdAt: logsConsulta.createdAt,
+      resultado: logsConsulta.resultado,
+    })
+    .from(logsConsulta)
+    .where(gte(logsConsulta.createdAt, desde))
+    .orderBy(asc(logsConsulta.createdAt));
+
+  // Agrupa por data e resultado em memória
+  const mapa = new Map<string, { encontrado: number; nao_encontrado: number; bloqueado: number; total: number }>();
+
+  // Pré-preenche todos os dias do período com zeros
+  for (let i = 0; i < dias; i++) {
+    const d = new Date(desde);
+    d.setDate(d.getDate() + i);
+    const chave = d.toISOString().slice(0, 10);
+    mapa.set(chave, { encontrado: 0, nao_encontrado: 0, bloqueado: 0, total: 0 });
+  }
+
+  for (const row of rows) {
+    const chave = new Date(row.createdAt).toISOString().slice(0, 10);
+    const entrada = mapa.get(chave);
+    if (!entrada) continue;
+    entrada.total++;
+    if (row.resultado === "encontrado") entrada.encontrado++;
+    else if (row.resultado === "nao_encontrado") entrada.nao_encontrado++;
+    else if (row.resultado === "bloqueado") entrada.bloqueado++;
+  }
+
+  return Array.from(mapa.entries()).map(([data, counts]) => ({ data, ...counts }));
+}
+
 // ─── Logs de Importação ────────────────────────────────────────────────────
 export async function registrarLogImportacao(data: InsertLogImportacao): Promise<number> {
   const db = await getDb();
