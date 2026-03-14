@@ -85,13 +85,14 @@ export function invalidarTokenCache(): void {
   _tokenCache = null;
 }
 
-// ─── Helper de requisição com retry em 401 ────────────────────────────────────
+// ─── Helper de requisição com retry em 401 e 503 ─────────────────────────────
 
 async function codiloRequest<T>(
   method: "get" | "post" | "put",
   url: string,
   data?: unknown,
-  params?: Record<string, string>
+  params?: Record<string, string>,
+  maxRetries503 = 2
 ): Promise<T> {
   const fazerRequisicao = async (): Promise<T> => {
     const token = await getCodiloToken();
@@ -109,15 +110,30 @@ async function codiloRequest<T>(
     return response.data as T;
   };
 
-  try {
-    return await fazerRequisicao();
-  } catch (err) {
-    if (err instanceof AxiosError && err.response?.status === 401) {
-      console.warn("[Codilo] Token expirado (401). Renovando e tentando novamente...");
-      invalidarTokenCache();
+  let tentativa503 = 0;
+  while (true) {
+    try {
       return await fazerRequisicao();
+    } catch (err) {
+      if (err instanceof AxiosError && err.response?.status === 401) {
+        console.warn("[Codilo] Token expirado (401). Renovando e tentando novamente...");
+        invalidarTokenCache();
+        return await fazerRequisicao();
+      }
+      // 503 = API indisponível/sobrecarga: aguarda e tenta novamente
+      if (err instanceof AxiosError && err.response?.status === 503 && tentativa503 < maxRetries503) {
+        tentativa503++;
+        const espera = tentativa503 * 5_000; // 5s, 10s
+        console.warn(`[Codilo] API indisponível (503). Aguardando ${espera/1000}s antes de tentar novamente (tentativa ${tentativa503}/${maxRetries503})...`);
+        await new Promise(r => setTimeout(r, espera));
+        continue;
+      }
+      // 503 esgotado: lança erro claro
+      if (err instanceof AxiosError && err.response?.status === 503) {
+        throw new Error("API Codilo indisponível (503). Tente novamente em alguns minutos.");
+      }
+      throw err;
     }
-    throw err;
   }
 }
 

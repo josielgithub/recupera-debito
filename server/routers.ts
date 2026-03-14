@@ -495,7 +495,10 @@ export const appRouter = router({
               }
             }
           );
-          console.log(`[Codilo] Coleta concluída: ${resultado.atualizados} atualizados, ${resultado.semAlteracao} sem alteração, ${resultado.erros} erros.`);
+          const msg503 = resultado.erros > 0 && resultado.atualizados === 0 && resultado.semAlteracao === 0
+            ? ` (possível indisponibilidade da API Codilo — tente novamente em alguns minutos)`
+            : "";
+          console.log(`[Codilo] Coleta concluída: ${resultado.atualizados} atualizados, ${resultado.semAlteracao} sem alteração, ${resultado.erros} erros${msg503}.`);
         } catch (err) {
           console.error("[Codilo] Erro na coleta:", err);
         }
@@ -503,7 +506,7 @@ export const appRouter = router({
 
       return {
         total: lista.length,
-        mensagem: `Coletando resultados para ${lista.length} processos. Os status serão atualizados conforme os resultados forem encontrados nos autorequests existentes.`,
+        mensagem: `Coletando resultados para ${lista.length} processos em background. Se a API Codilo estiver disponível, os status serão atualizados em breve. Acompanhe os logs do servidor.`,
       };
     }),
 

@@ -1,0 +1,61 @@
+{
+  "query": "SHOW TABLES; SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE();",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute SHOW TABLES; SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE();",
+  "rows": [
+    {
+      "Tables_in_FUtgBwVe3SdFnru4LzrCjK": "__drizzle_migrations"
+    },
+    {
+      "Tables_in_FUtgBwVe3SdFnru4LzrCjK": "clientes"
+    },
+    {
+      "Tables_in_FUtgBwVe3SdFnru4LzrCjK": "logs_consulta"
+    },
+    {
+      "Tables_in_FUtgBwVe3SdFnru4LzrCjK": "logs_importacao"
+    },
+    {
+      "Tables_in_FUtgBwVe3SdFnru4LzrCjK": "parceiros"
+    },
+    {
+      "Tables_in_FUtgBwVe3SdFnru4LzrCjK": "processos"
+    },
+    {
+      "Tables_in_FUtgBwVe3SdFnru4LzrCjK": "rate_limits"
+    },
+    {
+      "Tables_in_FUtgBwVe3SdFnru4LzrCjK": "users"
+    },
+    {
+      "Tables_in_FUtgBwVe3SdFnru4LzrCjK": "table_name"
+    },
+    {
+      "Tables_in_FUtgBwVe3SdFnru4LzrCjK": "logs_importacao"
+    },
+    {
+      "Tables_in_FUtgBwVe3SdFnru4LzrCjK": "parceiros"
+    },
+    {
+      "Tables_in_FUtgBwVe3SdFnru4LzrCjK": "processos"
+    },
+    {
+      "Tables_in_FUtgBwVe3SdFnru4LzrCjK": "rate_limits"
+    },
+    {
+      "Tables_in_FUtgBwVe3SdFnru4LzrCjK": "__drizzle_migrations"
+    },
+    {
+      "Tables_in_FUtgBwVe3SdFnru4LzrCjK": "users"
+    },
+    {
+      "Tables_in_FUtgBwVe3SdFnru4LzrCjK": "clientes"
+    },
+    {
+      "Tables_in_FUtgBwVe3SdFnru4LzrCjK": "logs_consulta"
+    }
+  ],
+  "messages": [],
+  "stdout": "Tables_in_FUtgBwVe3SdFnru4LzrCjK\n__drizzle_migrations\nclientes\nlogs_consulta\nlogs_importacao\nparceiros\nprocessos\nrate_limits\nusers\ntable_name\nlogs_importacao\nparceiros\nprocessos\nrate_limits\n__drizzle_migrations\nusers\nclientes\nlogs_consulta\n",
+  "stderr": "",
+  "execution_time_ms": 57
+}
