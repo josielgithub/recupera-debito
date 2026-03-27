@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +49,7 @@ import {
   ArrowDown,
   ArrowUpDown,
   Eye,
+  ExternalLink,
   Building2,
   MapPin,
   Scale,
@@ -235,6 +237,7 @@ function SortableHead({
 
 // ─── Componente Principal ────────────────────────────────────────────────────
 export default function AdminProcessos() {
+  const [, setLocation] = useLocation();
   const [pagina, setPagina] = useState(1);
   const [filtros, setFiltros] = useState<Filtros>(FILTROS_VAZIOS);
   const [filtrosAplicados, setFiltrosAplicados] = useState<Filtros>(FILTROS_VAZIOS);
@@ -315,6 +318,10 @@ export default function AdminProcessos() {
 
   function abrirDetalhes(cnj: string) {
     setDetalheCnj(cnj);
+  }
+
+  function irParaDetalhe(cnj: string) {
+    setLocation(`/admin/processo/${encodeURIComponent(cnj)}`);
   }
 
   function salvarStatus() {
@@ -556,9 +563,18 @@ export default function AdminProcessos() {
                             size="sm"
                             className="h-7 w-7 p-0"
                             onClick={() => abrirDetalhes(p.cnj)}
-                            title="Ver detalhes Judit"
+                            title="Ver detalhes rápidos"
                           >
                             <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0"
+                            onClick={() => irParaDetalhe(p.cnj)}
+                            title="Abrir página completa de detalhes"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
                           </Button>
                           <Button
                             variant="ghost"

@@ -27,6 +27,7 @@ import {
   registrarLogImportacao,
   updateProcessoStatus,
   upsertParceiro,
+  listAllJuditRequestsByCnj,
 } from "./db";
 import { processarPlanilha } from "./importacao";
 import {
@@ -437,7 +438,8 @@ export const appRouter = router({
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
         const processo = await getProcessoByCnj(input.cnj);
         if (!processo) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
-        return processo;
+        const requisicoes = await listAllJuditRequestsByCnj(input.cnj);
+        return { ...processo, requisicoes };
       }),
 
     // Gerar planilha modelo para download (base64)

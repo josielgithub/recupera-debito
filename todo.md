@@ -178,3 +178,10 @@
 
 - [x] Corrigir mapearStatusJudit: combinação status=Finalizado + phase=Arquivado agora mapeada para arquivado_encerrado
 - [x] Reprocessar processos com status incorreto via SQL (42 processos arquivados, 76 sem resposta da Judit ainda)
+
+## Página de Detalhes do Processo (Payload Judit Completo)
+
+- [ ] Endpoint tRPC admin.processoDetalhe retornando payload completo + judit_requests
+- [ ] Página /admin/processo/:cnj com seções: dados gerais, partes, assuntos, movimentações, histórico de requisições
+- [ ] Link "Ver detalhes" na tabela de processos apontando para a nova página
+- [ ] Rota registrada no App.tsx dentro do layout admin

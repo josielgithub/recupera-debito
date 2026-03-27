@@ -611,6 +611,12 @@ export async function getJuditRequestByCnj(cnj: string): Promise<JuditRequest | 
   return result[0];
 }
 
+export async function listAllJuditRequestsByCnj(cnj: string): Promise<JuditRequest[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(juditRequests).where(eq(juditRequests.cnj, cnj)).orderBy(desc(juditRequests.createdAt));
+}
+
 export async function listJuditRequestsByStatus(status: "processing" | "completed" | "error"): Promise<JuditRequest[]> {
   const db = await getDb();
   if (!db) return [];
