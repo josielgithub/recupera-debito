@@ -151,11 +151,28 @@ export async function getProcessosByCpf(cpf: string): Promise<(Processo & { parc
   return result;
 }
 
-export async function getProcessoByCnj(cnj: string): Promise<Processo | undefined> {
+export async function getProcessoByCnj(cnj: string): Promise<(Processo & { clienteNome: string | null; clienteCpf: string | null; parceiroNome: string | null }) | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(processos).where(eq(processos.cnj, cnj)).limit(1);
-  return result[0];
+  // Buscar processo base
+  const base = await db.select().from(processos).where(eq(processos.cnj, cnj)).limit(1);
+  if (!base[0]) return undefined;
+  const p = base[0];
+  // Buscar cliente
+  let clienteNome: string | null = null;
+  let clienteCpf: string | null = null;
+  if (p.clienteId) {
+    const cli = await db.select({ nome: clientes.nome, cpf: clientes.cpf }).from(clientes).where(eq(clientes.id, p.clienteId)).limit(1);
+    clienteNome = cli[0]?.nome ?? null;
+    clienteCpf = cli[0]?.cpf ?? null;
+  }
+  // Buscar parceiro
+  let parceiroNome: string | null = null;
+  if (p.parceiroId) {
+    const par = await db.select({ nome: parceiros.nomeEscritorio }).from(parceiros).where(eq(parceiros.id, p.parceiroId)).limit(1);
+    parceiroNome = par[0]?.nome ?? null;
+  }
+  return { ...p, clienteNome, clienteCpf, parceiroNome };
 }
 
 export async function upsertProcesso(data: InsertProcesso): Promise<number> {

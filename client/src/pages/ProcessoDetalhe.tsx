@@ -675,14 +675,39 @@ export default function ProcessoDetalhe() {
       {/* ─── Histórico Completo de Movimentações ─── */}
       <MovimentacoesTimeline cnj={cnj} />
 
-      {/* Dados do escritório / advogado no sistema */}
+      {/* Dados do cliente e do sistema */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Building2 className="w-4 h-4 text-primary" /> Dados no Sistema
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Cliente */}
+          {((data as any).clienteNome || (data as any).clienteCpf) && (
+            <>
+              <div className="flex items-center gap-2 mb-1">
+                <User className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Cliente</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4 pl-1">
+                <InfoRow label="Nome" value={(data as any).clienteNome} />
+                <InfoRow
+                  label="CPF"
+                  value={
+                    (data as any).clienteCpf
+                      ? (data as any).clienteCpf.replace(
+                          /^(\d{3})(\d{3})(\d{3})(\d{2})$/,
+                          "$1.$2.$3-$4"
+                        )
+                      : undefined
+                  }
+                />
+              </div>
+              <Separator />
+            </>
+          )}
+          {/* Sistema */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-5">
             <InfoRow label="Advogado" value={data.advogado} />
             <InfoRow label="Fonte de atualização" value={data.fonteAtualizacao} />

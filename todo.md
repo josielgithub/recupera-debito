@@ -195,3 +195,8 @@
 - [x] Cards de distribuição por status no Dashboard tornam-se clicáveis e navegam para a tabela de processos filtrada pelo status selecionado
 - [x] Tabela de processos recebe parâmetro de status via URL/query para pré-filtrar automaticamente
 - [x] Indicador visual (highlight/seleção ativa) no card do status selecionado
+
+## Nome e CPF do Cliente na Página de Detalhes do Processo
+
+- [x] Endpoint admin.processoDetalhe retorna clienteNome e clienteCpf
+- [x] Página ProcessoDetalhe exibe nome e CPF do cliente na seção "Dados no Sistema"
