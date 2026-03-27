@@ -151,3 +151,13 @@
 - [x] Reformular endpoint codiloConsultarDocumento: busca por CPF no banco local, CNPJ/nome na API Codilo
 - [x] Frontend: painel reformulado com aviso explicativo, opção de disparar atualização via Codilo, exibição de nome/CPF do cliente e detalhes completos dos processos
 - [x] 27 testes passando, TypeScript sem erros
+
+## Refatoração: Codilo → Judit
+
+- [ ] Migrar schema do banco: remover codiloProcessoId, monitoramentoAtivo; renomear statusInterno→statusOriginal; adicionar juditProcessId, fonteAtualizacao; criar tabela judit_requests
+- [ ] Remover server/codilo.ts e todas as referências Codilo no projeto
+- [ ] Criar server/judit.ts com fluxo assíncrono, retry exponencial, mapeamento de status
+- [ ] Criar endpoints tRPC para Judit (disparar, coletar, status)
+- [ ] Substituir aba AdminCodilo por AdminJudit no painel admin
+- [ ] Configurar cron job a cada 6h para atualização automática
+- [ ] Adicionar JUDIT_API_KEY e JUDIT_BASE_URL como secrets

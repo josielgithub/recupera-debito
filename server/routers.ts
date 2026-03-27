@@ -7,6 +7,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
   checkRateLimit,
+  countJuditRequests,
   countProcessosPorStatus,
   getClienteByCpf,
   getProcessosByCpf,
@@ -28,16 +29,11 @@ import {
 } from "./db";
 import { processarPlanilha } from "./importacao";
 import {
-  testarConexaoCodilo,
-  searchProcessByCNJ,
-  searchProcessByDocument,
-  updateProcessStatus,
+  atualizarProcesso,
+  coletarResultadosPendentes,
+  criarRequisicaoJudit,
   dispararAtualizacaoBackground,
-  coletarResultadosExistentes,
-  listRequests,
-  registerMonitoring,
-  invalidarTokenCache,
-} from "./codilo";
+} from "./judit";
 import { createHash } from "crypto";
 import * as XLSX from "xlsx";
 
@@ -225,7 +221,12 @@ export const appRouter = router({
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
         const processo = await getProcessoByCnj(input.cnj);
         if (!processo) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
-        await updateProcessoStatus(input.cnj, input.status as StatusResumido, processo.rawPayload);
+        await updateProcessoStatus(
+          input.cnj,
+          input.status as StatusResumido,
+          processo.statusOriginal ?? "",
+          processo.rawPayload
+        );
         return { ok: true };
       }),
 
@@ -271,7 +272,7 @@ export const appRouter = router({
         });
       }),
 
-    // Resumo mensal: total do mês atual, mês anterior e variação %
+    // Resumo mensal
     resumoMensal: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
       return resumoMensal();
@@ -293,220 +294,121 @@ export const appRouter = router({
         return graficoConsultasDiarias(input.dias);
       }),
 
-    // ─── Integração Codilo ─────────────────────────────────────────────────
+    // ─── Integração Judit ──────────────────────────────────────────────────
 
-    // Testa a conexão com a API Codilo (obtém token fresco + lista requisições)
-    codiloTestarConexao: protectedProcedure.query(async ({ ctx }) => {
+    // Status geral das requisições Judit
+    juditStatus: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
-      return testarConexaoCodilo();
+      const counts = await countJuditRequests();
+      return { ok: true, counts };
     }),
 
-    // Lista todas as requisições existentes na conta Codilo
-    codiloListarRequisicoes: protectedProcedure.query(async ({ ctx }) => {
-      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
-      try {
-        const requests = await listRequests();
-        return { ok: true, requests };
-      } catch (err) {
-        return { ok: false, erro: String(err), requests: [] };
-      }
-    }),
-
-    // Consulta um processo específico pelo número CNJ na API Codilo
-    codiloConsultarCNJ: protectedProcedure
-      .input(z.object({ cnj: z.string().min(1) }))
-      .mutation(async ({ input, ctx }) => {
-        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
-        try {
-          const resultado = await searchProcessByCNJ(input.cnj);
-          return { ok: true, resultado };
-        } catch (err) {
-          return { ok: false, erro: String(err), resultado: null };
-        }
-      }),
-
-    // Busca processos no banco local por CPF e opcionalmente dispara atualização via Codilo
-    codiloConsultarDocumento: protectedProcedure
+    // Busca processos no banco local por CPF e opcionalmente dispara atualização via Judit
+    juditConsultarCpf: protectedProcedure
       .input(z.object({
-        documento: z.string().min(1),
-        tipo: z.enum(["cpf", "cnpj", "nome"]).default("cpf"),
-        atualizarViaCodilo: z.boolean().default(false),
+        cpf: z.string().min(1),
+        atualizarViaJudit: z.boolean().default(false),
       }))
       .mutation(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
         try {
-          const docLimpo = input.tipo !== "nome" ? input.documento.replace(/\D/g, "") : input.documento;
+          const docLimpo = input.cpf.replace(/\D/g, "");
+          const cpfFormatado = docLimpo.length === 11
+            ? `${docLimpo.slice(0,3)}.${docLimpo.slice(3,6)}.${docLimpo.slice(6,9)}-${docLimpo.slice(9)}`
+            : docLimpo;
 
-          if (input.tipo === "cpf") {
-            // Formata CPF para busca no banco
-            const cpfFormatado = docLimpo.length === 11
-              ? `${docLimpo.slice(0,3)}.${docLimpo.slice(3,6)}.${docLimpo.slice(6,9)}-${docLimpo.slice(9)}`
-              : docLimpo;
-            const cliente = await getClienteByCpf(cpfFormatado);
-            if (!cliente) {
-              return { ok: true, resultado: { processos: [], total: 0, cliente: null, fonte: "banco_local" as const } };
-            }
-            const processosCliente = await getProcessosByCpf(cpfFormatado);
-
-            // Se solicitado, dispara atualização via Codilo para cada processo
-            let atualizacaoInfo: string | null = null;
-            if (input.atualizarViaCodilo && processosCliente.length > 0) {
-              const lista = processosCliente.map(p => ({ id: p.id, cnj: p.cnj }));
-              dispararAtualizacaoBackground(lista).catch(err =>
-                console.error("[Codilo] Erro ao disparar atualização por CPF:", err)
-              );
-              atualizacaoInfo = `Disparando atualização para ${lista.length} processo(s) via Codilo em background.`;
-            }
-
-            return {
-              ok: true,
-              resultado: {
-                processos: processosCliente.map(p => ({
-                  cnj: p.cnj,
-                  statusResumido: p.statusResumido,
-                  statusInterno: p.statusInterno,
-                  advogado: p.advogado,
-                  monitoramentoAtivo: p.monitoramentoAtivo,
-                  ultimaAtualizacaoApi: p.ultimaAtualizacaoApi,
-                  semAtualizacao7dias: p.semAtualizacao7dias,
-                  parceiro: p.parceiro ? { nome: p.parceiro.nomeEscritorio, whatsapp: p.parceiro.whatsapp, email: p.parceiro.email } : null,
-                })),
-                total: processosCliente.length,
-                cliente: { nome: cliente.nome, cpf: cliente.cpf },
-                fonte: "banco_local" as const,
-                atualizacaoInfo,
-              },
-            };
+          const cliente = await getClienteByCpf(cpfFormatado);
+          if (!cliente) {
+            return { ok: true, resultado: { processos: [], total: 0, cliente: null } };
           }
 
-          // Para CNPJ ou nome: busca diretamente na API Codilo (GET /autorequest)
-          const resultado = await searchProcessByDocument(input.documento, input.tipo);
-          return { ok: true, resultado: { ...resultado, fonte: "codilo_api" as const, cliente: null, atualizacaoInfo: null } };
+          const processosCliente = await getProcessosByCpf(cpfFormatado);
+
+          // Se solicitado, dispara atualização via Judit para cada processo
+          let atualizacaoInfo: string | null = null;
+          if (input.atualizarViaJudit && processosCliente.length > 0) {
+            const ids = processosCliente.map(p => p.id);
+            dispararAtualizacaoBackground(ids).catch(err =>
+              console.error("[Judit] Erro ao disparar atualização por CPF:", err)
+            );
+            atualizacaoInfo = `Disparando atualização para ${ids.length} processo(s) via Judit em background.`;
+          }
+
+          return {
+            ok: true,
+            resultado: {
+              processos: processosCliente.map(p => ({
+                cnj: p.cnj,
+                statusResumido: p.statusResumido,
+                statusOriginal: p.statusOriginal,
+                advogado: p.advogado,
+                ultimaAtualizacaoApi: p.ultimaAtualizacaoApi,
+                semAtualizacao7dias: p.semAtualizacao7dias,
+                parceiro: p.parceiro ? { nome: p.parceiro.nomeEscritorio, whatsapp: p.parceiro.whatsapp, email: p.parceiro.email } : null,
+              })),
+              total: processosCliente.length,
+              cliente: { nome: cliente.nome, cpf: cliente.cpf },
+              atualizacaoInfo,
+            },
+          };
         } catch (err) {
           return { ok: false, erro: String(err), resultado: null };
         }
       }),
 
-    // Registra monitoramento PUSH para um CNJ específico
-    codiloRegistrarMonitoramento: protectedProcedure
+    // Consulta e atualiza um processo específico pelo CNJ via Judit (síncrono com polling)
+    juditConsultarCnj: protectedProcedure
       .input(z.object({ cnj: z.string().min(1) }))
       .mutation(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
-        const ok = await registerMonitoring(input.cnj);
-        return { ok, cnj: input.cnj };
+        try {
+          const atualizado = await atualizarProcesso(input.cnj);
+          const processo = await getProcessoByCnj(input.cnj);
+          return { ok: true, atualizado, processo };
+        } catch (err) {
+          return { ok: false, erro: String(err), atualizado: false, processo: null };
+        }
       }),
 
-    // Dispara atualização manual de todos os processos via API Codilo (com polling)
-    codiloAtualizarProcessos: protectedProcedure.mutation(async ({ ctx }) => {
-      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
-
-      // Busca todos os processos ativos do banco (até 10.000)
-      const { processos } = await listAllProcessos(1, 10000);
-
-      const lista = processos.map((p: { id: number; cnj: string; statusResumido: string }) => ({
-        id: p.id,
-        cnj: p.cnj,
-        statusResumido: p.statusResumido,
-      }));
-
-      const resultado = await updateProcessStatus(
-        lista,
-        async (_id, statusNovo, statusInterno, rawPayload) => {
-          const proc = lista.find((p) => p.id === _id);
-          if (proc) {
-            await updateProcessoStatus(proc.cnj, statusNovo as StatusResumido, rawPayload);
-          }
-        }
-      );
-
-      return resultado;
-    }),
-
-    // Dispara criação de autorequests em background (não-bloqueante)
-    // Ideal para muitos processos: cria as requisições e retorna imediatamente.
-    // Após criar os autorequests, aguarda 3 minutos e busca os resultados disponíveis.
-    codiloDispararBackground: protectedProcedure.mutation(async ({ ctx }) => {
+    // Cria requisições Judit para todos os processos desatualizados (background)
+    juditDispararBackground: protectedProcedure.mutation(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
 
       const { processos: todosProcessos } = await listAllProcessos(1, 10000);
-      const lista = todosProcessos.map((p: { id: number; cnj: string; statusResumido: string }) => ({
-        id: p.id,
-        cnj: p.cnj,
-        statusResumido: p.statusResumido,
-      }));
+      const ids = todosProcessos.map((p: { id: number }) => p.id);
 
-      // Fase 1: Dispara autorequests em background
-      // Fase 2: Após 3 minutos, busca resultados e atualiza banco
+      // Executa em background
       ;(async () => {
         try {
-          const resultados = await dispararAtualizacaoBackground(lista);
-          const criados = resultados.filter(r => r.autorequest_id).length;
-          console.log(`[Codilo] Background fase 1: ${criados}/${lista.length} autorequests criados. Aguardando 3 minutos para buscar resultados...`);
-
-          // Aguarda 3 minutos para a Codilo processar as requisições
-          await new Promise(r => setTimeout(r, 3 * 60 * 1000));
-
-          // Fase 2: Coleta resultados dos autorequests já criados (sem criar novos)
-          // Usa coletarResultadosExistentes que busca via GET /autorequest/{id} (com status)
-          console.log("[Codilo] Background fase 2: coletando resultados dos autorequests...");
-          const resultado = await coletarResultadosExistentes(
-            lista,
-            async (_id, statusNovo, statusInterno, rawPayload) => {
-              const proc = lista.find((p) => p.id === _id);
-              if (proc) {
-                await updateProcessoStatus(proc.cnj, statusNovo as StatusResumido, rawPayload);
-              }
-            }
-          );
-          console.log(`[Codilo] Background fase 2 concluída: ${resultado.atualizados} atualizados, ${resultado.semAlteracao} sem alteração, ${resultado.erros} erros.`);
+          const { criadas, erros } = await dispararAtualizacaoBackground(ids);
+          console.log(`[Judit] Background: ${criadas} requisições criadas, ${erros} erros.`);
         } catch (err) {
-          console.error("[Codilo] Erro no background:", err);
+          console.error("[Judit] Erro no background:", err);
         }
       })();
 
       return {
-        total: lista.length,
-        mensagem: `Disparando atualização para ${lista.length} processos em background. Os autorequests serão criados agora e os resultados buscados após ~3 minutos. Acompanhe os logs do servidor.`,
+        total: ids.length,
+        mensagem: `Criando requisições Judit para ${ids.length} processos em background. Acompanhe os logs do servidor.`,
       };
     }),
 
-    // Coleta resultados de autorequests já criados (sem criar novos)
-    // Ideal para usar após dispararBackground quando a Codilo já processou as requisições
-    codiloColetarResultados: protectedProcedure.mutation(async ({ ctx }) => {
+    // Coleta resultados de requisições Judit pendentes
+    juditColetarResultados: protectedProcedure.mutation(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
 
-      const { processos: todosProcessos } = await listAllProcessos(1, 10000);
-      const lista = todosProcessos.map((p: { id: number; cnj: string; statusResumido: string }) => ({
-        id: p.id,
-        cnj: p.cnj,
-        statusResumido: p.statusResumido,
-      }));
-
-      // Executa em background (não-bloqueante)
+      // Executa em background
       ;(async () => {
         try {
-          console.log(`[Codilo] Coletando resultados para ${lista.length} processos...`);
-          const resultado = await coletarResultadosExistentes(
-            lista,
-            async (_id, statusNovo, statusInterno, rawPayload) => {
-              const proc = lista.find((p) => p.id === _id);
-              if (proc) {
-                await updateProcessoStatus(proc.cnj, statusNovo as StatusResumido, rawPayload);
-              }
-            }
-          );
-          const msg503 = resultado.erros > 0 && resultado.atualizados === 0 && resultado.semAlteracao === 0
-            ? ` (possível indisponibilidade da API Codilo — tente novamente em alguns minutos)`
-            : "";
-          console.log(`[Codilo] Coleta concluída: ${resultado.atualizados} atualizados, ${resultado.semAlteracao} sem alteração, ${resultado.erros} erros${msg503}.`);
+          const resultado = await coletarResultadosPendentes();
+          console.log(`[Judit] Coleta: ${resultado.atualizados} atualizados, ${resultado.semAlteracao} sem alteração, ${resultado.erros} erros.`);
         } catch (err) {
-          console.error("[Codilo] Erro na coleta:", err);
+          console.error("[Judit] Erro na coleta:", err);
         }
       })();
 
       return {
-        total: lista.length,
-        mensagem: `Coletando resultados para ${lista.length} processos em background. Se a API Codilo estiver disponível, os status serão atualizados em breve. Acompanhe os logs do servidor.`,
+        mensagem: "Coletando resultados Judit em background. Os status serão atualizados em breve.",
       };
     }),
 
@@ -532,7 +434,6 @@ export const appRouter = router({
         ],
       ];
       const ws = XLSX.utils.aoa_to_sheet(dados);
-      // Largura das colunas
       ws["!cols"] = [
         { wch: 18 }, { wch: 25 }, { wch: 28 }, { wch: 20 }, { wch: 20 },
         { wch: 25 }, { wch: 20 }, { wch: 28 },

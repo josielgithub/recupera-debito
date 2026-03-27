@@ -1,0 +1,18 @@
+{
+  "query": "\nSELECT \n  (SELECT COUNT(*) FROM processos) AS total_processos,\n  (SELECT COUNT(*) FROM clientes) AS total_clientes,\n  (SELECT COUNT(*) FROM parceiros) AS total_parceiros,\n  (SELECT COUNT(*) FROM logs_consulta) AS total_consultas,\n  (SELECT COUNT(*) FROM processos WHERE monitoramento_ativo = 1) AS processos_monitorados,\n  (SELECT COUNT(*) FROM processos WHERE ultima_atualizacao_api IS NOT NULL) AS processos_atualizados_codilo;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute \nSELECT \n  (SELECT COUNT(*) FROM processos) AS total_processos,\n  (SELECT COUNT(*) FROM clientes) AS total_clientes,\n  (SELECT COUNT(*) FROM parceiros) AS total_parceiros,\n  (SELECT COUNT(*) FROM logs_consulta) AS total_consultas,\n  (SELECT COUNT(*) FROM processos WHERE monitoramento_ativo = 1) AS processos_monitorados,\n  (SELECT COUNT(*) FROM processos WHERE ultima_atualizacao_api IS NOT NULL) AS processos_atualizados_codilo;\n",
+  "rows": [
+    {
+      "total_processos": "437",
+      "total_clientes": "399",
+      "total_parceiros": "437",
+      "total_consultas": "2",
+      "processos_monitorados": "0",
+      "processos_atualizados_codilo": "154"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_processos\ttotal_clientes\ttotal_parceiros\ttotal_consultas\tprocessos_monitorados\tprocessos_atualizados_codilo\n437\t399\t437\t2\t0\t154\n",
+  "stderr": "",
+  "execution_time_ms": 119
+}

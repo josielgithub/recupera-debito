@@ -1,0 +1,35 @@
+{
+  "query": "SELECT id, cnj, status_resumido FROM processos WHERE cnj IS NOT NULL AND cnj != '' LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute SELECT id, cnj, status_resumido FROM processos WHERE cnj IS NOT NULL AND cnj != '' LIMIT 5;",
+  "rows": [
+    {
+      "id": "1",
+      "cnj": "0700663-06.2025.8.01.0008",
+      "status_resumido": "em_analise_inicial"
+    },
+    {
+      "id": "2",
+      "cnj": "0704072-08.2025.8.01.0002",
+      "status_resumido": "em_analise_inicial"
+    },
+    {
+      "id": "3",
+      "cnj": "0704073-90.2025.8.01.0002",
+      "status_resumido": "em_analise_inicial"
+    },
+    {
+      "id": "4",
+      "cnj": "0704074-75.2025.8.01.0002",
+      "status_resumido": "em_analise_inicial"
+    },
+    {
+      "id": "5",
+      "cnj": "0600431-38.2025.8.04.3100",
+      "status_resumido": "em_analise_inicial"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tcnj\tstatus_resumido\n1\t0700663-06.2025.8.01.0008\tem_analise_inicial\n2\t0704072-08.2025.8.01.0002\tem_analise_inicial\n3\t0704073-90.2025.8.01.0002\tem_analise_inicial\n4\t0704074-75.2025.8.01.0002\tem_analise_inicial\n5\t0600431-38.2025.8.04.3100\tem_analise_inicial\n",
+  "stderr": "",
+  "execution_time_ms": 79
+}

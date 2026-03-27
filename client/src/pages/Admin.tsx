@@ -44,7 +44,7 @@ import AdminProcessos from "./AdminProcessos";
 import AdminParceiros from "./AdminParceiros";
 import AdminConfig from "./AdminConfig";
 import AdminHistorico from "./AdminHistorico";
-import AdminCodilo from "./AdminCodilo";
+import AdminJudit from "./AdminJudit";
 
 import {
   BarChart,
@@ -923,7 +923,7 @@ export default function Admin() {
             </TabsTrigger>
             <TabsTrigger value="codilo" className="flex items-center gap-1.5 text-xs">
               <Zap className="w-3.5 h-3.5" />
-              Codilo
+              Judit
             </TabsTrigger>
             <TabsTrigger value="config" className="flex items-center gap-1.5 text-xs">
               <Settings className="w-3.5 h-3.5" />
@@ -936,7 +936,7 @@ export default function Admin() {
           <TabsContent value="parceiros"><AdminParceiros /></TabsContent>
           <TabsContent value="importacao"><ImportacaoView /></TabsContent>
           <TabsContent value="logs"><AdminHistorico /></TabsContent>
-          <TabsContent value="codilo"><AdminCodilo /></TabsContent>
+          <TabsContent value="codilo"><AdminJudit /></TabsContent>
           <TabsContent value="config"><AdminConfig /></TabsContent>
         </Tabs>
       </div>

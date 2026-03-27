@@ -1,0 +1,26 @@
+{
+  "query": "SELECT status_resumido, COUNT(*) as total FROM processos GROUP BY status_resumido ORDER BY total DESC;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute SELECT status_resumido, COUNT(*) as total FROM processos GROUP BY status_resumido ORDER BY total DESC;",
+  "rows": [
+    {
+      "status_resumido": "em_analise_inicial",
+      "total": "283"
+    },
+    {
+      "status_resumido": "em_andamento",
+      "total": "105"
+    },
+    {
+      "status_resumido": "arquivado_encerrado",
+      "total": "29"
+    },
+    {
+      "status_resumido": "aguardando_sentenca",
+      "total": "20"
+    }
+  ],
+  "messages": [],
+  "stdout": "status_resumido\ttotal\nem_analise_inicial\t283\nem_andamento\t105\narquivado_encerrado\t29\naguardando_sentenca\t20\n",
+  "stderr": "",
+  "execution_time_ms": 58
+}

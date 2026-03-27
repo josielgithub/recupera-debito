@@ -55,7 +55,7 @@ import { toast } from "sonner";
 interface ProcessoRow {
   cnj: string;
   statusResumido: string;
-  statusInterno: string | null;
+  statusOriginal: string | null;
   advogado: string | null;
   updatedAt: Date | string;
   clienteNome: string | null;

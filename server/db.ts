@@ -3,15 +3,18 @@ import { drizzle } from "drizzle-orm/mysql2";
 import {
   Cliente,
   InsertCliente,
+  InsertJuditRequest,
   InsertLogConsulta,
   InsertLogImportacao,
   InsertParceiro,
   InsertProcesso,
   InsertUser,
+  JuditRequest,
   Parceiro,
   Processo,
   StatusResumido,
   clientes,
+  juditRequests,
   logsConsulta,
   logsImportacao,
   parceiros,
@@ -166,7 +169,7 @@ export async function upsertProcesso(data: InsertProcesso): Promise<number> {
         clienteId: data.clienteId,
         parceiroId: data.parceiroId,
         advogado: data.advogado,
-        statusInterno: data.statusInterno,
+        statusOriginal: data.statusOriginal,
       },
     });
   const result = await db.select({ id: processos.id }).from(processos).where(eq(processos.cnj, data.cnj!)).limit(1);
@@ -176,7 +179,9 @@ export async function upsertProcesso(data: InsertProcesso): Promise<number> {
 export async function updateProcessoStatus(
   cnj: string,
   statusResumido: StatusResumido,
-  payload: unknown
+  statusOriginal: string,
+  payload: unknown,
+  juditProcessId?: string
 ): Promise<void> {
   const db = await getDb();
   if (!db) return;
@@ -184,19 +189,12 @@ export async function updateProcessoStatus(
     .update(processos)
     .set({
       statusResumido,
+      statusOriginal,
       ultimaAtualizacaoApi: new Date(),
       rawPayload: payload as Record<string, unknown>,
       semAtualizacao7dias: false,
+      ...(juditProcessId ? { juditProcessId } : {}),
     })
-    .where(eq(processos.cnj, cnj));
-}
-
-export async function updateMonitoramentoAtivo(cnj: string, ativo: boolean, codiloId?: string): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  await db
-    .update(processos)
-    .set({ monitoramentoAtivo: ativo, codiloProcessoId: codiloId })
     .where(eq(processos.cnj, cnj));
 }
 
@@ -230,7 +228,6 @@ export async function marcarProcessosSemAtualizacao(): Promise<number> {
     .set({ semAtualizacao7dias: true })
     .where(
       and(
-        eq(processos.monitoramentoAtivo, true),
         lt(processos.ultimaAtualizacaoApi, sete)
       )
     );
@@ -303,10 +300,9 @@ export async function listAllProcessos(page = 1, pageSize = 50, filtros?: Filtro
       id: processos.id,
       cnj: processos.cnj,
       statusResumido: processos.statusResumido,
-      statusInterno: processos.statusInterno,
+      statusOriginal: processos.statusOriginal,
       advogado: processos.advogado,
       updatedAt: processos.updatedAt,
-      monitoramentoAtivo: processos.monitoramentoAtivo,
       semAtualizacao7dias: processos.semAtualizacao7dias,
       clienteNome: clientes.nome,
       clienteCpf: clientes.cpf,
@@ -591,6 +587,73 @@ export async function graficoConsultasDiarias(dias = 30) {
   }
 
   return Array.from(mapa.entries()).map(([data, counts]) => ({ data, ...counts }));
+}
+
+// ─── Judit Requests ───────────────────────────────────────────────────────
+export async function upsertJuditRequest(data: InsertJuditRequest): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .insert(juditRequests)
+    .values(data)
+    .onDuplicateKeyUpdate({ set: { status: data.status, updatedAt: new Date() } });
+}
+
+export async function getJuditRequestByCnj(cnj: string): Promise<JuditRequest | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select()
+    .from(juditRequests)
+    .where(eq(juditRequests.cnj, cnj))
+    .orderBy(desc(juditRequests.createdAt))
+    .limit(1);
+  return result[0];
+}
+
+export async function listJuditRequestsByStatus(status: "processing" | "completed" | "error"): Promise<JuditRequest[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(juditRequests).where(eq(juditRequests.status, status)).orderBy(desc(juditRequests.createdAt));
+}
+
+export async function updateJuditRequestStatus(requestId: string, status: "processing" | "completed" | "error"): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(juditRequests).set({ status, updatedAt: new Date() }).where(eq(juditRequests.requestId, requestId));
+}
+
+export async function listProcessosSemAtualizacaoJudit(diasMinimos = 7): Promise<Processo[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const limite = new Date(Date.now() - diasMinimos * 24 * 60 * 60 * 1000);
+  return db
+    .select()
+    .from(processos)
+    .where(
+      and(
+        lt(processos.ultimaAtualizacaoApi, limite)
+      )
+    )
+    .orderBy(asc(processos.ultimaAtualizacaoApi))
+    .limit(100);
+}
+
+export async function countJuditRequests(): Promise<{ total: number; processing: number; completed: number; error: number }> {
+  const db = await getDb();
+  if (!db) return { total: 0, processing: 0, completed: 0, error: 0 };
+  const rows = await db
+    .select({ status: juditRequests.status, count: sql<number>`count(*)` })
+    .from(juditRequests)
+    .groupBy(juditRequests.status);
+  const map: Record<string, number> = {};
+  for (const r of rows) map[r.status] = Number(r.count);
+  return {
+    total: Object.values(map).reduce((a, b) => a + b, 0),
+    processing: map.processing ?? 0,
+    completed: map.completed ?? 0,
+    error: map.error ?? 0,
+  };
 }
 
 // ─── Logs de Importação ────────────────────────────────────────────────────

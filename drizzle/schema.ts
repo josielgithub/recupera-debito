@@ -91,9 +91,9 @@ export const processos = mysqlTable("processos", {
   parceiroId: int("parceiro_id"),
   advogado: varchar("advogado", { length: 255 }),
   statusResumido: mysqlEnum("status_resumido", STATUS_RESUMIDO).default("em_analise_inicial").notNull(),
-  statusInterno: varchar("status_interno", { length: 255 }),
-  monitoramentoAtivo: boolean("monitoramento_ativo").default(false).notNull(),
-  codiloProcessoId: varchar("codilo_processo_id", { length: 128 }),
+  statusOriginal: varchar("status_original", { length: 255 }),
+  juditProcessId: varchar("judit_process_id", { length: 128 }),
+  fonteAtualizacao: mysqlEnum("fonte_atualizacao", ["judit"]).default("judit").notNull(),
   ultimaAtualizacaoApi: timestamp("ultima_atualizacao_api"),
   rawPayload: json("raw_payload"),
   semAtualizacao7dias: boolean("sem_atualizacao_7dias").default(false).notNull(),
@@ -143,3 +143,17 @@ export const logsImportacao = mysqlTable("logs_importacao", {
 
 export type LogImportacao = typeof logsImportacao.$inferSelect;
 export type InsertLogImportacao = typeof logsImportacao.$inferInsert;
+
+// ─── Judit Requests ────────────────────────────────────────────────────────
+export const juditRequests = mysqlTable("judit_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  cnj: varchar("cnj", { length: 30 }).notNull(),
+  requestId: varchar("request_id", { length: 128 }).notNull().unique(),
+  status: mysqlEnum("status", ["processing", "completed", "error"]).default("processing").notNull(),
+  processoId: int("processo_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export type JuditRequest = typeof juditRequests.$inferSelect;
+export type InsertJuditRequest = typeof juditRequests.$inferInsert;

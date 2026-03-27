@@ -1,0 +1,106 @@
+{
+  "query": "DESCRIBE processos;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute DESCRIBE processos;",
+  "rows": [
+    {
+      "Field": "id",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "PRI",
+      "Default": "NULL",
+      "Extra": "auto_increment"
+    },
+    {
+      "Field": "cnj",
+      "Type": "varchar(30)",
+      "Null": "NO",
+      "Key": "UNI",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "cliente_id",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "parceiro_id",
+      "Type": "int",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "advogado",
+      "Type": "varchar(255)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "status_resumido",
+      "Type": "enum('em_analise_inicial','protocolado','em_andamento','aguardando_audiencia','aguardando_sentenca','em_recurso','cumprimento_de_sentenca','concluido_ganho','concluido_perdido','aguardando_documentos','acordo_negociacao','arquivado_encerrado')",
+      "Null": "NO",
+      "Key": "",
+      "Default": "em_analise_inicial",
+      "Extra": ""
+    },
+    {
+      "Field": "status_original",
+      "Type": "varchar(255)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "ultima_atualizacao_api",
+      "Type": "timestamp",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "raw_payload",
+      "Type": "json",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "sem_atualizacao_7dias",
+      "Type": "tinyint(1)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "created_at",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": ""
+    },
+    {
+      "Field": "updated_at",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+    }
+  ],
+  "messages": [],
+  "stdout": "Field\tType\tNull\tKey\tDefault\tExtra\nid\tint\tNO\tPRI\tNULL\tauto_increment\ncnj\tvarchar(30)\tNO\tUNI\tNULL\t\ncliente_id\tint\tNO\t\tNULL\t\nparceiro_id\tint\tYES\t\tNULL\t\nadvogado\tvarchar(255)\tYES\t\tNULL\t\nstatus_resumido\tenum('em_analise_inicial','protocolado','em_andamento','aguardando_audiencia','aguardando_sentenca','em_recurso','cumprimento_de_sentenca','concluido_ganho','concluido_perdido','aguardando_documentos','acordo_negociacao','arquivado_encerrado')\tNO\t\tem_analise_inicial\t\nstatus_original\tvarchar(255)\tYES\t\tNULL\t\nultima_atualizacao_api\ttimestamp\tYES\t\tNULL\t\nraw_payload\tjson\tYES\t\tNULL\t\nsem_atualizacao_7dias\ttinyint(1)\tNO\t\t0\t\ncreated_at\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\t\nupdated_at\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\tDEFAULT_GENERATED on update CURRENT_TIMESTAMP\n",
+  "stderr": "",
+  "execution_time_ms": 58
+}

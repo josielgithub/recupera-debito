@@ -4,7 +4,6 @@
  */
 import * as XLSX from "xlsx";
 import { upsertCliente, upsertParceiro, upsertProcesso } from "./db";
-import { updateMonitoramentoAtivo } from "./db";
 
 export interface LinhaImportacao {
   cpf?: string;
@@ -154,7 +153,7 @@ export async function processarPlanilha(
         clienteId,
         parceiroId: parceiroId ?? null,
         advogado: normalizedRow.advogado || null,
-        statusInterno: normalizedRow.status_interno || null,
+        statusOriginal: normalizedRow.status_interno || null,
         statusResumido: "em_analise_inicial",
       });
 

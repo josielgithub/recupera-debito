@@ -1,71 +1,45 @@
 import { describe, expect, it } from "vitest";
-import { normalizarStatusCodilo, validarCallbackCodilo } from "./codilo";
+import { mapearStatusJudit } from "./judit";
 import { appRouter } from "./routers";
 import { COOKIE_NAME } from "../shared/const";
 import type { TrpcContext } from "./_core/context";
 
-// ─── Testes: Normalização de Status Codilo ─────────────────────────────────
-describe("normalizarStatusCodilo", () => {
-  it("mapeia 'ganho' para concluido_ganho", () => {
-    expect(normalizarStatusCodilo("ganho")).toBe("concluido_ganho");
+// ─── Testes: Mapeamento de Status Judit ───────────────────────────────────────────────
+describe("mapearStatusJudit", () => {
+  it("mapeia 'Em Andamento' para em_andamento", () => {
+    const r = mapearStatusJudit({ status: "Em Andamento" });
+    expect(r.statusResumido).toBe("em_andamento");
   });
 
-  it("mapeia 'procedente' para concluido_ganho", () => {
-    expect(normalizarStatusCodilo("procedente")).toBe("concluido_ganho");
+  it("mapeia 'MOVIMENTO' para em_andamento", () => {
+    const r = mapearStatusJudit({ status: "MOVIMENTO" });
+    expect(r.statusResumido).toBe("em_andamento");
   });
 
-  it("mapeia 'improcedente' para concluido_perdido", () => {
-    expect(normalizarStatusCodilo("improcedente")).toBe("concluido_perdido");
+  it("mapeia 'Arquivado' para arquivado_encerrado", () => {
+    const r = mapearStatusJudit({ status: "Arquivado" });
+    expect(r.statusResumido).toBe("arquivado_encerrado");
   });
 
-  it("mapeia 'arquivado' para arquivado_encerrado", () => {
-    expect(normalizarStatusCodilo("arquivado")).toBe("arquivado_encerrado");
-  });
-
-  it("mapeia 'cumprimento' para cumprimento_de_sentenca", () => {
-    expect(normalizarStatusCodilo("cumprimento")).toBe("cumprimento_de_sentenca");
-  });
-
-  it("mapeia 'em andamento' para em_andamento", () => {
-    expect(normalizarStatusCodilo("em andamento")).toBe("em_andamento");
+  it("mapeia 'Concluso' para aguardando_sentenca", () => {
+    const r = mapearStatusJudit({ status: "Concluso" });
+    expect(r.statusResumido).toBe("aguardando_sentenca");
   });
 
   it("é case-insensitive", () => {
-    expect(normalizarStatusCodilo("GANHO")).toBe("concluido_ganho");
-    expect(normalizarStatusCodilo("Arquivado")).toBe("arquivado_encerrado");
+    const r = mapearStatusJudit({ status: "EM ANDAMENTO" });
+    expect(r.statusResumido).toBe("em_andamento");
   });
 
   it("retorna em_analise_inicial para status desconhecido", () => {
-    expect(normalizarStatusCodilo("status_inexistente_xyz")).toBe("em_analise_inicial");
-  });
-});
-
-// ─── Testes: Validação de Callback Codilo ──────────────────────────────────
-describe("validarCallbackCodilo", () => {
-  const originalEnv = process.env.CODILO_CALLBACK_SECRET;
-
-  it("aceita tudo quando CODILO_CALLBACK_SECRET não está configurado", () => {
-    delete process.env.CODILO_CALLBACK_SECRET;
-    expect(validarCallbackCodilo({})).toBe(true);
-    expect(validarCallbackCodilo({ "x-codilo-secret": "qualquer" })).toBe(true);
+    const r = mapearStatusJudit({ status: "status_inexistente_xyz" });
+    expect(r.statusResumido).toBe("em_analise_inicial");
   });
 
-  it("rejeita quando segredo está configurado mas header ausente", () => {
-    process.env.CODILO_CALLBACK_SECRET = "meu-segredo";
-    expect(validarCallbackCodilo({})).toBe(false);
-    process.env.CODILO_CALLBACK_SECRET = originalEnv;
-  });
-
-  it("aceita quando segredo bate com o header", () => {
-    process.env.CODILO_CALLBACK_SECRET = "meu-segredo";
-    expect(validarCallbackCodilo({ "x-codilo-secret": "meu-segredo" })).toBe(true);
-    process.env.CODILO_CALLBACK_SECRET = originalEnv;
-  });
-
-  it("rejeita quando segredo não bate", () => {
-    process.env.CODILO_CALLBACK_SECRET = "meu-segredo";
-    expect(validarCallbackCodilo({ "x-codilo-secret": "segredo-errado" })).toBe(false);
-    process.env.CODILO_CALLBACK_SECRET = originalEnv;
+  it("extrai statusOriginal do payload", () => {
+    const r = mapearStatusJudit({ status: "Em Andamento", lawsuit: { status: "Em Andamento" } });
+    expect(typeof r.statusOriginal).toBe("string");
+    expect(r.statusOriginal).toBe("Em Andamento");
   });
 });
 

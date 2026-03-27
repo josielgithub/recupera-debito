@@ -7,7 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { normalizarStatusCodilo, validarCallbackCodilo } from "../codilo";
+import { mapearStatusJudit, iniciarRotinaCron } from "../judit";
 import { getProcessoByCnj, updateProcessoStatus } from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -36,43 +36,33 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // OAuth callback under /api/oauth/callback
-  registerOAuthRoutes(app);
-  // ─── Endpoint de Callback da Codilo ─────────────────────────────────
-  app.post("/api/codilo/callback", async (req, res) => {
+  registerOAuthRoutes(app)  // ─── Endpoint de Callback da Judit (webhook) ──────────────────────────────────────────────────
+  app.post("/api/judit/callback", async (req, res) => {
     try {
-      // Validar assinatura/segredo
-      if (!validarCallbackCodilo(req.headers as Record<string, string | string[] | undefined>)) {
-        console.warn("[Codilo Callback] Assinatura inválida");
-        return res.status(401).json({ erro: "Não autorizado" });
-      }
-
       const payload = req.body;
-      const cnj = payload?.cnj ?? payload?.numero_processo ?? payload?.processo?.cnj;
-      const statusRaw = payload?.status ?? payload?.situacao ?? payload?.processo?.status;
+      const cnj = payload?.cnj ?? payload?.numero_processo ?? payload?.lawsuit?.cnj;
 
       if (!cnj) {
-        console.warn("[Codilo Callback] CNJ ausente no payload:", payload);
+        console.warn("[Judit Callback] CNJ ausente no payload:", payload);
         return res.status(400).json({ erro: "CNJ ausente" });
       }
 
       const processo = await getProcessoByCnj(cnj);
       if (!processo) {
-        console.warn(`[Codilo Callback] Processo não encontrado: ${cnj}`);
+        console.warn(`[Judit Callback] Processo não encontrado: ${cnj}`);
         return res.status(404).json({ erro: "Processo não encontrado" });
       }
 
-      const statusNormalizado = statusRaw ? normalizarStatusCodilo(statusRaw) : processo.statusResumido;
-      await updateProcessoStatus(cnj, statusNormalizado, payload);
+      const { statusResumido, statusOriginal } = mapearStatusJudit(payload);
+      await updateProcessoStatus(cnj, statusResumido, statusOriginal, payload);
 
-      console.log(`[Codilo Callback] Processo ${cnj} atualizado → ${statusNormalizado}`);
+      console.log(`[Judit Callback] Processo ${cnj} atualizado → ${statusResumido} (${statusOriginal})`);
       return res.status(200).json({ ok: true });
     } catch (err) {
-      console.error("[Codilo Callback] Erro:", err);
+      console.error("[Judit Callback] Erro:", err);
       return res.status(500).json({ erro: "Erro interno" });
     }
   });
-
-  // tRPC API
   app.use(
     "/api/trpc",
     createExpressMiddleware({
@@ -100,6 +90,9 @@ async function startServer() {
 }
 
 startServer().catch(console.error);
+
+// Iniciar rotina automática Judit (a cada 6h: cria requisições + coleta resultados)
+iniciarRotinaCron();
 
 // Rotina de monitoramento: verificar processos sem atualização a cada 6 horas
 setInterval(async () => {
