@@ -1,0 +1,25 @@
+{
+  "query": "SELECT COUNT(*) as total FROM processos;\nSELECT COUNT(*) as total FROM clientes;\nSELECT COUNT(*) as total FROM judit_requests;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute SELECT COUNT(*) as total FROM processos;\nSELECT COUNT(*) as total FROM clientes;\nSELECT COUNT(*) as total FROM judit_requests;",
+  "rows": [
+    {
+      "total": "633"
+    },
+    {
+      "total": "total"
+    },
+    {
+      "total": "407"
+    },
+    {
+      "total": "total"
+    },
+    {
+      "total": "633"
+    }
+  ],
+  "messages": [],
+  "stdout": "total\n633\ntotal\n407\ntotal\n633\n",
+  "stderr": "",
+  "execution_time_ms": 196
+}

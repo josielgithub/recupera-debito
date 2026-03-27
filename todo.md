@@ -161,3 +161,8 @@
 - [ ] Substituir aba AdminCodilo por AdminJudit no painel admin
 - [ ] Configurar cron job a cada 6h para atualização automática
 - [ ] Adicionar JUDIT_API_KEY e JUDIT_BASE_URL como secrets
+
+## Painel de Processos com Filtro por Status Judit
+
+- [ ] Backend: endpoint admin.juditListarProcessos com filtros (statusRequisicao, statusResumido, paginação)
+- [ ] Frontend: painel na aba Judit com tabela paginada de processos e filtros por status de atualização

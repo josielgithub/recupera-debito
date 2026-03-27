@@ -95,7 +95,7 @@ export async function criarRequisicaoJudit(cnj: string, processoId?: number): Pr
         method: "POST",
         body: JSON.stringify({
           search: {
-            search_type: "cnj",
+            search_type: "lawsuit_cnj",
             search_key: cnj,
           },
           cache_ttl_in_days: CACHE_TTL_DAYS,

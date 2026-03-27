@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE processos MODIFY COLUMN cliente_id INT NULL;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute ALTER TABLE processos MODIFY COLUMN cliente_id INT NULL;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 131
+}

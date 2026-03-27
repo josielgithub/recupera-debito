@@ -656,6 +656,105 @@ export async function countJuditRequests(): Promise<{ total: number; processing:
   };
 }
 
+// ─── Judit: listar processos com status de requisição ───────────────────────
+export async function listJuditProcessos(opts: {
+  page?: number;
+  pageSize?: number;
+  statusRequisicao?: "processing" | "completed" | "error" | "sem_requisicao";
+  statusResumido?: string;
+  busca?: string;
+}) {
+  const db = await getDb();
+  if (!db) return { processos: [], total: 0 };
+
+  const page = opts.page ?? 1;
+  const pageSize = opts.pageSize ?? 20;
+
+  // Subquery: última requisição Judit por CNJ
+  const ultimaReq = db
+    .select({
+      cnj: juditRequests.cnj,
+      status: sql<string>`MAX(${juditRequests.status})`.as("req_status"),
+      updatedAt: sql<Date>`MAX(${juditRequests.updatedAt})`.as("req_updated"),
+    })
+    .from(juditRequests)
+    .groupBy(juditRequests.cnj)
+    .as("ultima_req");
+
+  const condicoes: ReturnType<typeof and>[] = [];
+
+  if (opts.statusResumido) {
+    condicoes.push(eq(processos.statusResumido, opts.statusResumido as StatusResumido));
+  }
+
+  const whereClause = condicoes.length > 0 ? and(...condicoes) : undefined;
+
+  const baseSelect = {
+    id: processos.id,
+    cnj: processos.cnj,
+    statusResumido: processos.statusResumido,
+    statusOriginal: processos.statusOriginal,
+    advogado: processos.advogado,
+    ultimaAtualizacaoApi: processos.ultimaAtualizacaoApi,
+    updatedAt: processos.updatedAt,
+    semAtualizacao7dias: processos.semAtualizacao7dias,
+    clienteNome: clientes.nome,
+    clienteCpf: clientes.cpf,
+    parceiroNome: parceiros.nomeEscritorio,
+    reqStatus: ultimaReq.status,
+    reqUpdatedAt: ultimaReq.updatedAt,
+  };
+
+  let baseQuery = db
+    .select(baseSelect)
+    .from(processos)
+    .leftJoin(clientes, eq(processos.clienteId, clientes.id))
+    .leftJoin(parceiros, eq(processos.parceiroId, parceiros.id))
+    .leftJoin(ultimaReq, eq(processos.cnj, ultimaReq.cnj));
+
+  let countBase = db
+    .select({ count: sql<number>`count(*)` })
+    .from(processos)
+    .leftJoin(clientes, eq(processos.clienteId, clientes.id))
+    .leftJoin(parceiros, eq(processos.parceiroId, parceiros.id))
+    .leftJoin(ultimaReq, eq(processos.cnj, ultimaReq.cnj));
+
+  const [rows, countRows] = await Promise.all([
+    (whereClause ? baseQuery.where(whereClause) : baseQuery)
+      .orderBy(desc(processos.updatedAt))
+      .limit(pageSize * 5) // busca mais para filtrar em memória
+      .offset(0),
+    (whereClause ? countBase.where(whereClause) : countBase),
+  ]);
+
+  // Filtros em memória (statusRequisicao e busca)
+  let resultado = rows;
+
+  if (opts.statusRequisicao) {
+    if (opts.statusRequisicao === "sem_requisicao") {
+      resultado = resultado.filter(r => !r.reqStatus);
+    } else {
+      resultado = resultado.filter(r => r.reqStatus === opts.statusRequisicao);
+    }
+  }
+
+  if (opts.busca && opts.busca.trim()) {
+    const termo = opts.busca.trim().toLowerCase();
+    resultado = resultado.filter(
+      (p) =>
+        p.cnj.toLowerCase().includes(termo) ||
+        (p.clienteNome ?? "").toLowerCase().includes(termo) ||
+        (p.clienteCpf ?? "").includes(termo) ||
+        (p.parceiroNome ?? "").toLowerCase().includes(termo)
+    );
+  }
+
+  const total = resultado.length;
+  const paginado = resultado.slice((page - 1) * pageSize, page * pageSize);
+
+  return { processos: paginado, total };
+}
+
 // ─── Logs de Importação ────────────────────────────────────────────────────
 export async function registrarLogImportacao(data: InsertLogImportacao): Promise<number> {
   const db = await getDb();

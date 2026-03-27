@@ -8,6 +8,7 @@ import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
   checkRateLimit,
   countJuditRequests,
+  listJuditProcessos,
   countProcessosPorStatus,
   getClienteByCpf,
   getProcessosByCpf,
@@ -411,6 +412,23 @@ export const appRouter = router({
         mensagem: "Coletando resultados Judit em background. Os status serão atualizados em breve.",
       };
     }),
+
+    // Listar processos com status de requisição Judit (para painel de filtros)
+    juditListarProcessos: protectedProcedure
+      .input(z.object({
+        page: z.number().int().min(1).default(1),
+        pageSize: z.number().int().min(1).max(100).default(20),
+        statusRequisicao: z.enum(["processing", "completed", "error", "sem_requisicao", "todos"]).optional(),
+        statusResumido: z.string().optional(),
+        busca: z.string().optional(),
+      }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { statusRequisicao, ...rest } = input;
+        const filtroReq = statusRequisicao === "todos" ? undefined : statusRequisicao;
+        const resultado = await listJuditProcessos({ ...rest, statusRequisicao: filtroReq });
+        return resultado;
+      }),
 
     // Gerar planilha modelo para download (base64)
     gerarPlanilhaModelo: protectedProcedure.query(async ({ ctx }) => {

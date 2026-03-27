@@ -921,7 +921,7 @@ export default function Admin() {
               <Activity className="w-3.5 h-3.5" />
               Histórico
             </TabsTrigger>
-            <TabsTrigger value="codilo" className="flex items-center gap-1.5 text-xs">
+            <TabsTrigger value="judit" className="flex items-center gap-1.5 text-xs">
               <Zap className="w-3.5 h-3.5" />
               Judit
             </TabsTrigger>
@@ -936,7 +936,7 @@ export default function Admin() {
           <TabsContent value="parceiros"><AdminParceiros /></TabsContent>
           <TabsContent value="importacao"><ImportacaoView /></TabsContent>
           <TabsContent value="logs"><AdminHistorico /></TabsContent>
-          <TabsContent value="codilo"><AdminJudit /></TabsContent>
+          <TabsContent value="judit"><AdminJudit /></TabsContent>
           <TabsContent value="config"><AdminConfig /></TabsContent>
         </Tabs>
       </div>
