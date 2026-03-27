@@ -9,6 +9,7 @@
 import {
   getJuditRequestByCnj,
   getProcessoByCnj,
+  listAllJuditRequestsByCnj,
   listJuditRequestsByStatus,
   listProcessosSemAtualizacaoJudit,
   updateJuditRequestStatus,
@@ -147,15 +148,19 @@ export async function obterResultadoJudit(requestId: string): Promise<unknown | 
     items?: unknown[];
   };
 
-  // Formato principal da Judit: { page_data: [{ response_data, parties, steps, attachments }] }
+  // Formato principal da Judit: { page_data: [{ response_data }] }
+  // response_data já contém parties, steps, attachments dentro dele
   if (data.page_data && Array.isArray(data.page_data) && data.page_data.length > 0) {
     const entry = data.page_data[0];
-    // Montar payload completo com todos os blocos
+    const rd = entry.response_data as Record<string, unknown> ?? {};
+    // steps, parties e attachments estão DENTRO do response_data
+    // entry.parties/steps/attachments são campos do envelope, não do processo
     return {
-      ...(entry.response_data as Record<string, unknown> ?? {}),
-      parties: entry.parties ?? [],
-      steps: entry.steps ?? [],
-      attachments: entry.attachments ?? [],
+      ...rd,
+      // Garantir que steps do response_data seja preservado (não sobrescrever com [])
+      steps: (rd.steps as unknown[]) ?? (entry.steps as unknown[]) ?? [],
+      parties: (rd.parties as unknown[]) ?? (entry.parties as unknown[]) ?? [],
+      attachments: (rd.attachments as unknown[]) ?? (entry.attachments as unknown[]) ?? [],
     };
   }
 
@@ -413,4 +418,89 @@ export function pararRotinaCron(): void {
     cronHandle = null;
     console.log("[Judit] Rotina automática parada.");
   }
+}
+
+// ─── Buscar movimentações completas de um processo ────────────────────────
+export interface JuditStep {
+  step_id?: string;
+  step_date?: string;
+  content?: string;
+  step_type?: string;
+  private?: boolean;
+  steps_count?: number;
+  lawsuit_cnj?: string;
+  lawsuit_instance?: number;
+}
+
+export async function buscarMovimentacoesJudit(cnj: string): Promise<{
+  steps: JuditStep[];
+  fromCache: boolean;
+  requestId?: string;
+}> {
+  // 1. Verificar se já temos o payload com steps no banco
+  const processo = await getProcessoByCnj(cnj);
+  if (processo?.rawPayload) {
+    let payload: Record<string, unknown>;
+    try {
+      payload = typeof processo.rawPayload === "string"
+        ? JSON.parse(processo.rawPayload)
+        : (processo.rawPayload as Record<string, unknown>);
+    } catch {
+      payload = {};
+    }
+    const steps = payload.steps as JuditStep[] | undefined;
+    if (steps && steps.length > 0) {
+      console.log(`[Judit] Movimentações do CNJ ${cnj} retornadas do cache (${steps.length} steps).`);
+      return { steps, fromCache: true };
+    }
+  }
+
+  // 2. Buscar via API Judit usando o requestId mais recente
+  const requisicoes = await listAllJuditRequestsByCnj(cnj);
+  const completada = requisicoes.find((r) => r.status === "completed");
+
+  if (!completada) {
+    // Criar nova requisição e aguardar
+    console.log(`[Judit] Nenhuma requisição completada para ${cnj}. Criando nova...`);
+    const requestId = await criarRequisicaoJudit(cnj, processo?.id);
+
+    // Polling curto (máx 30s)
+    for (let i = 0; i < 6; i++) {
+      await sleep(5_000);
+      const status = await verificarStatusRequisicao(requestId);
+      if (status === "completed") {
+        const resultado = await obterResultadoJudit(requestId);
+        if (resultado) {
+          const payload = resultado as Record<string, unknown>;
+          const steps = (payload.steps as JuditStep[]) ?? [];
+          // Salvar no banco
+          if (processo) {
+            const { statusResumido, statusOriginal } = mapearStatusJudit(resultado);
+            await updateProcessoStatus(cnj, statusResumido, statusOriginal, resultado, requestId);
+            await updateJuditRequestStatus(requestId, "completed");
+          }
+          return { steps, fromCache: false, requestId };
+        }
+      }
+      if (status === "error") break;
+    }
+    return { steps: [], fromCache: false, requestId };
+  }
+
+  // 3. Usar requestId existente para buscar resultado
+  const resultado = await obterResultadoJudit(completada.requestId);
+  if (resultado) {
+    const payload = resultado as Record<string, unknown>;
+    const steps = (payload.steps as JuditStep[]) ?? [];
+
+    // Se encontrou steps, atualizar o banco
+    if (steps.length > 0 && processo) {
+      const { statusResumido, statusOriginal } = mapearStatusJudit(resultado);
+      await updateProcessoStatus(cnj, statusResumido, statusOriginal, resultado, completada.requestId);
+    }
+
+    return { steps, fromCache: false, requestId: completada.requestId };
+  }
+
+  return { steps: [], fromCache: false, requestId: completada.requestId };
 }

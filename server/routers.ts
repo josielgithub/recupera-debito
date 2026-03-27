@@ -32,6 +32,7 @@ import {
 import { processarPlanilha } from "./importacao";
 import {
   atualizarProcesso,
+  buscarMovimentacoesJudit,
   coletarResultadosPendentes,
   criarRequisicaoJudit,
   dispararAtualizacaoBackground,
@@ -440,6 +441,15 @@ export const appRouter = router({
         if (!processo) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
         const requisicoes = await listAllJuditRequestsByCnj(input.cnj);
         return { ...processo, requisicoes };
+      }),
+
+    // Buscar movimentações completas de um processo (steps[] da Judit)
+    processoMovimentacoes: protectedProcedure
+      .input(z.object({ cnj: z.string() }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { steps, fromCache, requestId } = await buscarMovimentacoesJudit(input.cnj);
+        return { steps, fromCache, requestId, total: steps.length };
       }),
 
     // Gerar planilha modelo para download (base64)

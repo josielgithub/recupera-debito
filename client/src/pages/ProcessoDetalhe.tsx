@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useParams, Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
@@ -5,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 import {
   ArrowLeft,
   Scale,
@@ -16,7 +18,6 @@ import {
   CheckCircle2,
   Loader2,
   ExternalLink,
-  MapPin,
   Calendar,
   DollarSign,
   Gavel,
@@ -24,10 +25,26 @@ import {
   Users,
   Activity,
   RefreshCw,
+  Search,
+  ChevronDown,
+  ChevronUp,
+  History,
+  Info,
 } from "lucide-react";
 import { STATUS_RESUMIDO_LABELS, STATUS_CORES } from "@shared/const";
 
 // ─── Tipos do payload Judit ──────────────────────────────────────────────────
+interface JuditStep {
+  step_id?: string;
+  step_date?: string;
+  content?: string;
+  step_type?: string;
+  private?: boolean;
+  steps_count?: number;
+  lawsuit_cnj?: string;
+  lawsuit_instance?: number;
+}
+
 interface JuditPayload {
   code?: string;
   name?: string;
@@ -57,19 +74,8 @@ interface JuditPayload {
     doc?: string;
     lawyers?: { name?: string; doc?: string; oab?: string }[];
   }[];
-  last_step?: {
-    content?: string;
-    step_date?: string;
-    step_type?: string;
-    steps_count?: number;
-    private?: boolean;
-  };
-  steps?: {
-    content?: string;
-    step_date?: string;
-    step_type?: string;
-    private?: boolean;
-  }[];
+  last_step?: JuditStep & { steps_count?: number };
+  steps?: JuditStep[];
   courts?: { code: string; name: string }[];
   crawler?: { source_name?: string; updated_at?: string };
 }
@@ -147,6 +153,278 @@ function InfoRow({ label, value }: { label: string; value?: React.ReactNode }) {
       <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">{label}</span>
       <span className="text-sm font-medium text-foreground">{value ?? "—"}</span>
     </div>
+  );
+}
+
+// ─── Componente de Timeline de Movimentações ─────────────────────────────────
+function MovimentacoesTimeline({ cnj }: { cnj: string }) {
+  const [busca, setBusca] = useState("");
+  const [expandido, setExpandido] = useState(true);
+  const [mostrarTodos, setMostrarTodos] = useState(false);
+
+  const { data, isLoading, error, refetch, isFetching } = trpc.admin.processoMovimentacoes.useQuery(
+    { cnj },
+    { enabled: !!cnj, staleTime: 5 * 60 * 1000 }
+  );
+
+  const steps = data?.steps ?? [];
+  const stepsFiltrados = busca.trim()
+    ? steps.filter((s) =>
+        s.content?.toLowerCase().includes(busca.toLowerCase()) ||
+        s.step_type?.toLowerCase().includes(busca.toLowerCase()) ||
+        formatDate(s.step_date).includes(busca)
+      )
+    : steps;
+
+  const LIMITE_INICIAL = 10;
+  const stepsExibidos = mostrarTodos ? stepsFiltrados : stepsFiltrados.slice(0, LIMITE_INICIAL);
+  const temMais = stepsFiltrados.length > LIMITE_INICIAL && !mostrarTodos;
+
+  // Agrupar por mês/ano
+  function getGrupo(dateStr?: string): string {
+    if (!dateStr) return "Data não informada";
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+    } catch {
+      return "Data não informada";
+    }
+  }
+
+  // Cor do ponto da timeline baseada no tipo de movimentação
+  function getStepColor(step: JuditStep): string {
+    const content = (step.content ?? "").toLowerCase();
+    if (/distribu|protocol|inicial/.test(content)) return "bg-blue-500";
+    if (/cita|intima|notif/.test(content)) return "bg-amber-500";
+    if (/senten|decis|despacho|julgad/.test(content)) return "bg-purple-500";
+    if (/recurso|apela|agravo|embarg/.test(content)) return "bg-orange-500";
+    if (/arquiv|extint|encerr|baixa/.test(content)) return "bg-red-500";
+    if (/acordo|concilia|negocia/.test(content)) return "bg-green-500";
+    if (/cumprimento|execu/.test(content)) return "bg-teal-500";
+    if (/audiencia|pauta/.test(content)) return "bg-indigo-500";
+    return "bg-slate-400";
+  }
+
+  if (isLoading || isFetching) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <History className="w-4 h-4 text-primary" /> Histórico de Movimentações
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Buscando movimentações na Judit...
+          </div>
+          <div className="space-y-3 mt-2">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="flex gap-3">
+                <Skeleton className="w-2 h-2 rounded-full mt-2 shrink-0" />
+                <div className="flex-1 space-y-1">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/3" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <History className="w-4 h-4 text-primary" /> Histórico de Movimentações
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col items-center gap-3 py-6 text-center">
+            <AlertCircle className="w-8 h-8 text-destructive" />
+            <p className="text-sm text-muted-foreground">Erro ao buscar movimentações.</p>
+            <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2">
+              <RefreshCw className="w-3.5 h-3.5" /> Tentar novamente
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <History className="w-4 h-4 text-primary" /> Histórico de Movimentações
+            {steps.length > 0 && (
+              <Badge variant="secondary" className="ml-1 text-xs">
+                {steps.length} {steps.length === 1 ? "movimentação" : "movimentações"}
+              </Badge>
+            )}
+            {data?.fromCache === false && (
+              <Badge variant="outline" className="text-xs text-blue-600 border-blue-200 bg-blue-50">
+                <RefreshCw className="w-2.5 h-2.5 mr-1" /> Atualizado agora
+              </Badge>
+            )}
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => refetch()}
+              disabled={isFetching}
+              className="gap-1.5 text-xs h-7"
+            >
+              <RefreshCw className={`w-3 h-3 ${isFetching ? "animate-spin" : ""}`} />
+              Atualizar
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setExpandido((v) => !v)}
+              className="h-7 w-7 p-0"
+            >
+              {expandido ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+
+      {expandido && (
+        <CardContent>
+          {steps.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-8 text-center">
+              <Info className="w-8 h-8 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                Nenhuma movimentação encontrada para este processo.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                O processo pode ainda não ter sido atualizado pela Judit.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Barra de busca */}
+              {steps.length > 5 && (
+                <div className="relative mb-4">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Filtrar movimentações..."
+                    value={busca}
+                    onChange={(e) => {
+                      setBusca(e.target.value);
+                      setMostrarTodos(true);
+                    }}
+                    className="pl-8 h-8 text-sm"
+                  />
+                </div>
+              )}
+
+              {/* Resultado da busca */}
+              {busca && (
+                <p className="text-xs text-muted-foreground mb-3">
+                  {stepsFiltrados.length === 0
+                    ? "Nenhuma movimentação encontrada para este filtro."
+                    : `${stepsFiltrados.length} movimentação(ões) encontrada(s)`}
+                </p>
+              )}
+
+              {/* Timeline */}
+              <div className="relative">
+                {/* Linha vertical da timeline */}
+                <div className="absolute left-[5px] top-2 bottom-2 w-px bg-border" />
+
+                <div className="space-y-0">
+                  {stepsExibidos.map((step, i) => {
+                    const isFirst = i === 0;
+                    const grupoAtual = getGrupo(step.step_date);
+                    const grupoPrevio = i > 0 ? getGrupo(stepsExibidos[i - 1].step_date) : null;
+                    const mostrarGrupo = isFirst || grupoAtual !== grupoPrevio;
+
+                    return (
+                      <div key={step.step_id ?? i}>
+                        {/* Separador de mês */}
+                        {mostrarGrupo && !busca && (
+                          <div className="flex items-center gap-2 mb-2 mt-4 first:mt-0 pl-6">
+                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                              {grupoAtual}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Item da timeline */}
+                        <div className="flex gap-3 pb-4 relative">
+                          {/* Ponto da timeline */}
+                          <div className={`mt-1.5 w-2.5 h-2.5 rounded-full shrink-0 z-10 ${getStepColor(step)}`} />
+
+                          {/* Conteúdo */}
+                          <div className="flex-1 min-w-0 pb-1">
+                            <p className="text-sm text-foreground leading-snug">
+                              {step.content ?? "Sem descrição"}
+                              {step.private && (
+                                <Badge variant="outline" className="ml-2 text-xs py-0 px-1">Sigiloso</Badge>
+                              )}
+                            </p>
+                            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                              {step.step_date && (
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  {formatDateTime(step.step_date)}
+                                </span>
+                              )}
+                              {step.step_type && (
+                                <span className="text-xs text-muted-foreground font-mono">
+                                  Tipo: {step.step_type}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Botão "Ver mais" */}
+                {temMais && (
+                  <div className="pl-6 mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setMostrarTodos(true)}
+                      className="gap-2 text-xs h-8"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                      Ver mais {stepsFiltrados.length - LIMITE_INICIAL} movimentações
+                    </Button>
+                  </div>
+                )}
+
+                {/* Botão "Ver menos" */}
+                {mostrarTodos && stepsFiltrados.length > LIMITE_INICIAL && !busca && (
+                  <div className="pl-6 mt-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setMostrarTodos(false)}
+                      className="gap-2 text-xs h-8 text-muted-foreground"
+                    >
+                      <ChevronUp className="w-3.5 h-3.5" />
+                      Ver menos
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </CardContent>
+      )}
+    </Card>
   );
 }
 
@@ -356,7 +634,7 @@ export default function ProcessoDetalhe() {
         </Card>
       )}
 
-      {/* Última Movimentação */}
+      {/* Última Movimentação (resumo rápido) */}
       {payload.last_step && (
         <Card>
           <CardHeader className="pb-3">
@@ -393,6 +671,9 @@ export default function ProcessoDetalhe() {
           </CardContent>
         </Card>
       )}
+
+      {/* ─── Histórico Completo de Movimentações ─── */}
+      <MovimentacoesTimeline cnj={cnj} />
 
       {/* Dados do escritório / advogado no sistema */}
       <Card>

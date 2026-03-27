@@ -185,3 +185,7 @@
 - [ ] Página /admin/processo/:cnj com seções: dados gerais, partes, assuntos, movimentações, histórico de requisições
 - [ ] Link "Ver detalhes" na tabela de processos apontando para a nova página
 - [ ] Rota registrada no App.tsx dentro do layout admin
+
+## Histórico Completo de Movimentações na Página de Detalhes
+
+- [x] Exibir array steps[] completo da Judit na página /admin/processo/:cnj com timeline visual

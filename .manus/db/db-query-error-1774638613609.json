@@ -1,0 +1,8 @@
+{
+  "query": "SELECT cnj, JSON_KEYS(raw_payload) as keys, JSON_EXTRACT(raw_payload, '$.last_step') as last_step FROM processos WHERE raw_payload IS NOT NULL LIMIT 2;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute SELECT cnj, JSON_KEYS(raw_payload) as keys, JSON_EXTRACT(raw_payload, '$.last_step') as last_step FROM processos WHERE raw_payload IS NOT NULL LIMIT 2;",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1064 (42000) at line 1: You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 1 column 42 near \"keys, JSON_EXTRACT(raw_payload, '$.last_step') as last_step FROM processos WHERE raw_payload IS NOT NULL LIMIT 2\""
+  ]
+}
