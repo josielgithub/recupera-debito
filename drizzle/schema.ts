@@ -41,7 +41,7 @@ export type InsertParceiro = typeof parceiros.$inferInsert;
 // ─── Clientes ─────────────────────────────────────────────────────────────
 export const clientes = mysqlTable("clientes", {
   id: int("id").autoincrement().primaryKey(),
-  cpf: varchar("cpf", { length: 14 }).notNull().unique(), // formato: 000.000.000-00
+  cpf: varchar("cpf", { length: 14 }).unique(), // formato: 000.000.000-00 (opcional: pode ser null quando vem da Judit)
   nome: varchar("nome", { length: 255 }).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),

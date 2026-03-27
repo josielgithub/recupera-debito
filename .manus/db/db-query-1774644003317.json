@@ -1,0 +1,50 @@
+{
+  "query": "SELECT cnj, raw_payload->>'$.name' AS nome_processo FROM processos WHERE raw_payload IS NOT NULL LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute SELECT cnj, raw_payload->>'$.name' AS nome_processo FROM processos WHERE raw_payload IS NOT NULL LIMIT 10;",
+  "rows": [
+    {
+      "cnj": "0714284-08.2025.8.07.0007",
+      "nome_processo": "MARIA PEREIRA GUEDES DE CARVALHO X BINCLUB SERVICOS DE ADMINISTRACAO E DE PROGRAMAS DE FIDELIDADE LTDA"
+    },
+    {
+      "cnj": "0756123-83.2025.8.07.0016",
+      "nome_processo": "LAECYO BRANDAO ARRUDA X BANCO BRADESCO S.A."
+    },
+    {
+      "cnj": "5000472-08.2025.8.08.0044",
+      "nome_processo": "CLEIDIANE SOUZA SANTOS X BANCO BRADESCO SA"
+    },
+    {
+      "cnj": "5000384-75.2025.8.08.0009",
+      "nome_processo": "NULL"
+    },
+    {
+      "cnj": "5000385-60.2025.8.08.0009",
+      "nome_processo": "NULL"
+    },
+    {
+      "cnj": "0800278-84.2025.8.10.0018",
+      "nome_processo": "ANATALIA ROCHA DA COSTA X BANCO BRADESCO S.A."
+    },
+    {
+      "cnj": "0800314-29.2025.8.10.0018",
+      "nome_processo": "ANATALIA ROCHA DA COSTA X BANCO BRADESCO S.A."
+    },
+    {
+      "cnj": "0800238-58.2025.8.10.0065",
+      "nome_processo": "NULL"
+    },
+    {
+      "cnj": "0801147-20.2025.8.10.0027",
+      "nome_processo": "NULL"
+    },
+    {
+      "cnj": "0800911-38.2025.8.10.0037",
+      "nome_processo": "ANUAR SADAT DE PAULA FREITAS X BANCO BRADESCO S.A."
+    }
+  ],
+  "messages": [],
+  "stdout": "cnj\tnome_processo\n0714284-08.2025.8.07.0007\tMARIA PEREIRA GUEDES DE CARVALHO X BINCLUB SERVICOS DE ADMINISTRACAO E DE PROGRAMAS DE FIDELIDADE LTDA\n0756123-83.2025.8.07.0016\tLAECYO BRANDAO ARRUDA X BANCO BRADESCO S.A.\n5000472-08.2025.8.08.0044\tCLEIDIANE SOUZA SANTOS X BANCO BRADESCO SA\n5000384-75.2025.8.08.0009\tNULL\n5000385-60.2025.8.08.0009\tNULL\n0800278-84.2025.8.10.0018\tANATALIA ROCHA DA COSTA X BANCO BRADESCO S.A.\n0800314-29.2025.8.10.0018\tANATALIA ROCHA DA COSTA X BANCO BRADESCO S.A.\n0800238-58.2025.8.10.0065\tNULL\n0801147-20.2025.8.10.0027\tNULL\n0800911-38.2025.8.10.0037\tANUAR SADAT DE PAULA FREITAS X BANCO BRADESCO S.A.\n",
+  "stderr": "",
+  "execution_time_ms": 53
+}

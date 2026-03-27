@@ -194,7 +194,7 @@ function PainelConsultaCpf() {
       parceiro: { nome: string; whatsapp: string | null; email: string | null } | null;
     }>;
     total: number;
-    cliente: { nome: string; cpf: string } | null;
+    cliente: { nome: string; cpf: string | null } | null;
     atualizacaoInfo: string | null;
   } | null>(null);
 

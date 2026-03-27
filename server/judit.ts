@@ -7,6 +7,7 @@
  */
 
 import {
+  extrairNomeClienteDoPayload,
   getJuditRequestByCnj,
   getProcessoByCnj,
   listAllJuditRequestsByCnj,
@@ -14,7 +15,9 @@ import {
   listProcessosSemAtualizacaoJudit,
   updateJuditRequestStatus,
   updateProcessoStatus,
+  upsertCliente,
   upsertJuditRequest,
+  vincularClienteAoProcesso,
 } from "./db";
 import { StatusResumido } from "../drizzle/schema";
 
@@ -276,6 +279,8 @@ export async function atualizarProcesso(cnj: string): Promise<boolean> {
         const { statusResumido, statusOriginal } = mapearStatusJudit(resultado);
         await updateProcessoStatus(cnj, statusResumido, statusOriginal, resultado, requestId);
         await updateJuditRequestStatus(requestId, "completed");
+        // Extrair e vincular cliente pelo nome do payload
+        await vincularClienteDoPayload(cnj, resultado);
         console.log(`[Judit] Processo ${cnj} atualizado: ${statusOriginal} → ${statusResumido}`);
         return true;
       }
@@ -318,6 +323,7 @@ export async function coletarResultadosPendentes(): Promise<{
           const { statusResumido, statusOriginal } = mapearStatusJudit(resultado);
           await updateProcessoStatus(req.cnj, statusResumido, statusOriginal, resultado, req.requestId);
           await updateJuditRequestStatus(req.requestId, "completed");
+          await vincularClienteDoPayload(req.cnj, resultado);
           atualizados++;
         } else {
           await updateJuditRequestStatus(req.requestId, "completed");
@@ -503,4 +509,18 @@ export async function buscarMovimentacoesJudit(cnj: string): Promise<{
   }
 
   return { steps: [], fromCache: false, requestId: completada.requestId };
+}
+
+// ─── Helper: extrair e vincular cliente do payload Judit ──────────────────
+async function vincularClienteDoPayload(cnj: string, payload: unknown): Promise<void> {
+  try {
+    const p = payload as Record<string, unknown>;
+    const nomeProcesso = p.name as string | undefined;
+    const nomeCliente = extrairNomeClienteDoPayload(nomeProcesso);
+    if (!nomeCliente) return;
+    const clienteId = await upsertCliente({ nome: nomeCliente });
+    await vincularClienteAoProcesso(cnj, clienteId);
+  } catch (err) {
+    console.error(`[Judit] Erro ao vincular cliente para ${cnj}:`, err);
+  }
 }

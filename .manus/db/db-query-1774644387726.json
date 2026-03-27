@@ -1,0 +1,19 @@
+{
+  "query": "SELECT COUNT(*) AS total_clientes FROM clientes;\nSELECT COUNT(*) AS processos_com_cliente FROM processos WHERE cliente_id IS NOT NULL;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute SELECT COUNT(*) AS total_clientes FROM clientes;\nSELECT COUNT(*) AS processos_com_cliente FROM processos WHERE cliente_id IS NOT NULL;",
+  "rows": [
+    {
+      "total_clientes": "75"
+    },
+    {
+      "total_clientes": "processos_com_cliente"
+    },
+    {
+      "total_clientes": "84"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_clientes\n75\nprocessos_com_cliente\n84\n",
+  "stderr": "",
+  "execution_time_ms": 62
+}

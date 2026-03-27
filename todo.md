@@ -200,3 +200,9 @@
 
 - [x] Endpoint admin.processoDetalhe retorna clienteNome e clienteCpf
 - [x] Página ProcessoDetalhe exibe nome e CPF do cliente na seção "Dados no Sistema"
+
+## Extração de Nome/CPF do Cliente a partir do Payload Judit
+
+- [x] Identificar campos de nome e CPF do cliente no payload Judit (parties[])
+- [x] Adaptar upsertProcesso para criar/vincular cliente automaticamente com dados da Judit
+- [x] Retroativamente popular tabela clientes a partir dos raw_payload existentes nos processos

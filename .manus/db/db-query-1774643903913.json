@@ -1,0 +1,45 @@
+{
+  "query": "\nSELECT p.cnj, p.cliente_id, c.nome AS clienteNome, c.cpf AS clienteCpf, par.nome_escritorio AS parceiroNome\nFROM processos p\nLEFT JOIN clientes c ON p.cliente_id = c.id\nLEFT JOIN parceiros par ON p.parceiro_id = par.id\nLIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute \nSELECT p.cnj, p.cliente_id, c.nome AS clienteNome, c.cpf AS clienteCpf, par.nome_escritorio AS parceiroNome\nFROM processos p\nLEFT JOIN clientes c ON p.cliente_id = c.id\nLEFT JOIN parceiros par ON p.parceiro_id = par.id\nLIMIT 5;\n",
+  "rows": [
+    {
+      "cnj": "5000385-60.2025.8.08.0009",
+      "cliente_id": "NULL",
+      "clienteNome": "NULL",
+      "clienteCpf": "NULL",
+      "parceiroNome": "Recupera Debito"
+    },
+    {
+      "cnj": "5000384-75.2025.8.08.0009",
+      "cliente_id": "NULL",
+      "clienteNome": "NULL",
+      "clienteCpf": "NULL",
+      "parceiroNome": "Recupera Debito"
+    },
+    {
+      "cnj": "5000472-08.2025.8.08.0044",
+      "cliente_id": "NULL",
+      "clienteNome": "NULL",
+      "clienteCpf": "NULL",
+      "parceiroNome": "Recupera Debito"
+    },
+    {
+      "cnj": "0756123-83.2025.8.07.0016",
+      "cliente_id": "NULL",
+      "clienteNome": "NULL",
+      "clienteCpf": "NULL",
+      "parceiroNome": "Recupera Debito"
+    },
+    {
+      "cnj": "0714284-08.2025.8.07.0007",
+      "cliente_id": "NULL",
+      "clienteNome": "NULL",
+      "clienteCpf": "NULL",
+      "parceiroNome": "Recupera Debito"
+    }
+  ],
+  "messages": [],
+  "stdout": "cnj\tcliente_id\tclienteNome\tclienteCpf\tparceiroNome\n5000385-60.2025.8.08.0009\tNULL\tNULL\tNULL\tRecupera Debito\n5000384-75.2025.8.08.0009\tNULL\tNULL\tNULL\tRecupera Debito\n5000472-08.2025.8.08.0044\tNULL\tNULL\tNULL\tRecupera Debito\n0756123-83.2025.8.07.0016\tNULL\tNULL\tNULL\tRecupera Debito\n0714284-08.2025.8.07.0007\tNULL\tNULL\tNULL\tRecupera Debito\n",
+  "stderr": "",
+  "execution_time_ms": 55
+}

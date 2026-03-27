@@ -92,12 +92,33 @@ export async function getClienteByCpf(cpf: string): Promise<Cliente | undefined>
 export async function upsertCliente(data: InsertCliente): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db
-    .insert(clientes)
-    .values(data)
-    .onDuplicateKeyUpdate({ set: { nome: data.nome } });
-  const result = await db.select({ id: clientes.id }).from(clientes).where(eq(clientes.cpf, data.cpf)).limit(1);
-  return result[0]!.id;
+  if (data.cpf) {
+    // Com CPF: upsert por CPF
+    await db
+      .insert(clientes)
+      .values(data)
+      .onDuplicateKeyUpdate({ set: { nome: data.nome } });
+    const result = await db.select({ id: clientes.id }).from(clientes).where(eq(clientes.cpf, data.cpf)).limit(1);
+    return result[0]!.id;
+  } else {
+    // Sem CPF: inserir ou buscar por nome exato
+    const existing = await db.select({ id: clientes.id }).from(clientes).where(eq(clientes.nome, data.nome)).limit(1);
+    if (existing[0]) return existing[0].id;
+    await db.insert(clientes).values(data);
+    const result = await db.select({ id: clientes.id }).from(clientes).where(eq(clientes.nome, data.nome)).limit(1);
+    return result[0]!.id;
+  }
+}
+
+/**
+ * Extrai o nome do cliente do campo `name` do payload Judit.
+ * Padrão: "NOME DO CLIENTE X NOME DO RÉU" — retorna a parte antes do " X ".
+ */
+export function extrairNomeClienteDoPayload(payloadName: string | null | undefined): string | null {
+  if (!payloadName) return null;
+  const partes = payloadName.split(/ X /i);
+  const nome = partes[0]?.trim() ?? null;
+  return nome && nome.length > 1 ? nome : null;
 }
 
 // ─── Parceiros ─────────────────────────────────────────────────────────────
@@ -795,4 +816,15 @@ export async function listLogsImportacao(limit = 20) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(logsImportacao).orderBy(desc(logsImportacao.createdAt)).limit(limit);
+}
+
+// ─── Vincular cliente ao processo ─────────────────────────────────────────────
+/**
+ * Atualiza o cliente_id de um processo pelo CNJ.
+ * Usado para vincular retroativamente clientes extraídos do payload Judit.
+ */
+export async function vincularClienteAoProcesso(cnj: string, clienteId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(processos).set({ clienteId }).where(eq(processos.cnj, cnj));
 }
