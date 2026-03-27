@@ -1,0 +1,9 @@
+{
+  "query": "SELECT cnj, status_original, raw_payload FROM processos WHERE ultima_atualizacao_api IS NOT NULL AND raw_payload IS NOT NULL LIMIT 1;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute SELECT cnj, status_original, raw_payload FROM processos WHERE ultima_atualizacao_api IS NOT NULL AND raw_payload IS NOT NULL LIMIT 1;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 59
+}

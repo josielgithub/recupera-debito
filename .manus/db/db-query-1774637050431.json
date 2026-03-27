@@ -1,0 +1,40 @@
+{
+  "query": "SELECT cnj,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.tribunal')) AS tribunal,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.tribunal_acronym')) AS tribunal_sigla,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.justice_description')) AS justica,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.instance')) AS instancia,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.area')) AS area,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.phase')) AS fase,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.status')) AS status_jud,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.amount')) AS valor,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.city')) AS cidade,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.state')) AS estado,\n  JSON_EXTRACT(raw_payload, '$.subjects') AS assuntos,\n  JSON_EXTRACT(raw_payload, '$.last_step') AS ultima_mov\nFROM processos \nWHERE raw_payload IS NOT NULL \nLIMIT 2;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute SELECT cnj,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.tribunal')) AS tribunal,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.tribunal_acronym')) AS tribunal_sigla,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.justice_description')) AS justica,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.instance')) AS instancia,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.area')) AS area,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.phase')) AS fase,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.status')) AS status_jud,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.amount')) AS valor,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.city')) AS cidade,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.state')) AS estado,\n  JSON_EXTRACT(raw_payload, '$.subjects') AS assuntos,\n  JSON_EXTRACT(raw_payload, '$.last_step') AS ultima_mov\nFROM processos \nWHERE raw_payload IS NOT NULL \nLIMIT 2;",
+  "rows": [
+    {
+      "cnj": "0714284-08.2025.8.07.0007",
+      "tribunal": "07",
+      "tribunal_sigla": "TJDF",
+      "justica": "JUSTIÇA ESTADUAL",
+      "instancia": "1",
+      "area": "DIREITO DO CONSUMIDOR",
+      "fase": "Sentença",
+      "status_jud": "Ativo",
+      "valor": "10799.92",
+      "cidade": "TAGUATINGA",
+      "estado": "DF",
+      "assuntos": "[{\"code\": \"11811\", \"name\": \"PRÁTICAS ABUSIVAS\"}, {\"code\": \"7779\", \"name\": \"INDENIZAÇÃO POR DANO MORAL\"}, {\"code\": \"7780\", \"name\": \"INDENIZAÇÃO POR DANO MATERIAL\"}]",
+      "ultima_mov": "{\"content\": \"Recebidos os autos\", \"lawsuit_cnj\": \"0714284-08.2025.8.07.0007\", \"lawsuit_instance\": 1, \"private\": false, \"step_date\": \"2026-03-27T13:25:12.470Z\", \"step_id\": \"1b95d38e\", \"step_type\": \"132\", \"steps_count\": 45, \"tags\": {\"crawl_id\": \"097bfeb5-6d6d-4331-b2d9-b2b8f3fbf4c2\"}}"
+    },
+    {
+      "cnj": "0756123-83.2025.8.07.0016",
+      "tribunal": "07",
+      "tribunal_sigla": "TJDF",
+      "justica": "JUSTIÇA ESTADUAL",
+      "instancia": "1",
+      "area": "DIREITO DO CONSUMIDOR",
+      "fase": "Arquivado",
+      "status_jud": "Finalizado",
+      "valor": "11157.4",
+      "cidade": "BRASÍLIA",
+      "estado": "DF",
+      "assuntos": "[{\"code\": \"11807\", \"name\": \"TARIFAS\"}]",
+      "ultima_mov": "{\"content\": \"Arquivado Definitivamente\", \"lawsuit_cnj\": \"0756123-83.2025.8.07.0016\", \"lawsuit_instance\": 1, \"private\": false, \"step_date\": \"2025-08-26T12:46:54.592Z\", \"step_id\": \"94b244f7\", \"step_type\": \"246\", \"steps_count\": 46, \"tags\": {\"crawl_id\": \"755f08c7-4abb-4807-9dd1-d776a5ab3730\"}}"
+    }
+  ],
+  "messages": [],
+  "stdout": "cnj\ttribunal\ttribunal_sigla\tjustica\tinstancia\tarea\tfase\tstatus_jud\tvalor\tcidade\testado\tassuntos\tultima_mov\n0714284-08.2025.8.07.0007\t07\tTJDF\tJUSTIÇA ESTADUAL\t1\tDIREITO DO CONSUMIDOR\tSentença\tAtivo\t10799.92\tTAGUATINGA\tDF\t[{\"code\": \"11811\", \"name\": \"PRÁTICAS ABUSIVAS\"}, {\"code\": \"7779\", \"name\": \"INDENIZAÇÃO POR DANO MORAL\"}, {\"code\": \"7780\", \"name\": \"INDENIZAÇÃO POR DANO MATERIAL\"}]\t{\"content\": \"Recebidos os autos\", \"lawsuit_cnj\": \"0714284-08.2025.8.07.0007\", \"lawsuit_instance\": 1, \"private\": false, \"step_date\": \"2026-03-27T13:25:12.470Z\", \"step_id\": \"1b95d38e\", \"step_type\": \"132\", \"steps_count\": 45, \"tags\": {\"crawl_id\": \"097bfeb5-6d6d-4331-b2d9-b2b8f3fbf4c2\"}}\n0756123-83.2025.8.07.0016\t07\tTJDF\tJUSTIÇA ESTADUAL\t1\tDIREITO DO CONSUMIDOR\tArquivado\tFinalizado\t11157.4\tBRASÍLIA\tDF\t[{\"code\": \"11807\", \"name\": \"TARIFAS\"}]\t{\"content\": \"Arquivado Definitivamente\", \"lawsuit_cnj\": \"0756123-83.2025.8.07.0016\", \"lawsuit_instance\": 1, \"private\": false, \"step_date\": \"2025-08-26T12:46:54.592Z\", \"step_id\": \"94b244f7\", \"step_type\": \"246\", \"steps_count\": 46, \"tags\": {\"crawl_id\": \"755f08c7-4abb-4807-9dd1-d776a5ab3730\"}}\n",
+  "stderr": "",
+  "execution_time_ms": 53
+}

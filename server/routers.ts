@@ -430,6 +430,16 @@ export const appRouter = router({
         return resultado;
       }),
 
+    // Detalhes completos de um processo (incluindo raw_payload da Judit)
+    processoDetalhe: protectedProcedure
+      .input(z.object({ cnj: z.string() }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const processo = await getProcessoByCnj(input.cnj);
+        if (!processo) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+        return processo;
+      }),
+
     // Gerar planilha modelo para download (base64)
     gerarPlanilhaModelo: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });

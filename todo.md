@@ -166,3 +166,10 @@
 
 - [ ] Backend: endpoint admin.juditListarProcessos com filtros (statusRequisicao, statusResumido, paginação)
 - [ ] Frontend: painel na aba Judit com tabela paginada de processos e filtros por status de atualização
+
+## Payload Completo Judit + Detalhes no Admin
+
+- [x] Corrigir script/judit.ts para salvar raw_payload completo (tribunal, vara, partes, assuntos, movimentações)
+- [x] Reprocessar os 162 processos para salvar o payload completo
+- [x] Criar endpoint admin.processoDetalhe que retorna raw_payload + dados do processo
+- [x] Criar painel de detalhes do processo no AdminProcessos (modal com dados ricos da Judit)

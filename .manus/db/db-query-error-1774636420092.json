@@ -1,0 +1,8 @@
+{
+  "query": "\nSELECT \n  p.cnj,\n  p.status_resumido,\n  p.status_original,\n  p.ultima_atualizacao_api,\n  p.advogado,\n  p.parceiro,\n  p.fonte_atualizacao,\n  jr.status AS judit_status,\n  jr.request_id,\n  jr.created_at AS requisicao_criada\nFROM processos p\nLEFT JOIN judit_requests jr ON jr.cnj = p.cnj\nWHERE p.ultima_atualizacao_api IS NOT NULL\nORDER BY p.ultima_atualizacao_api DESC\nLIMIT 20;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute \nSELECT \n  p.cnj,\n  p.status_resumido,\n  p.status_original,\n  p.ultima_atualizacao_api,\n  p.advogado,\n  p.parceiro,\n  p.fonte_atualizacao,\n  jr.status AS judit_status,\n  jr.request_id,\n  jr.created_at AS requisicao_criada\nFROM processos p\nLEFT JOIN judit_requests jr ON jr.cnj = p.cnj\nWHERE p.ultima_atualizacao_api IS NOT NULL\nORDER BY p.ultima_atualizacao_api DESC\nLIMIT 20;\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 2: Unknown column 'p.parceiro' in 'field list'"
+  ]
+}

@@ -47,6 +47,15 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  Eye,
+  Building2,
+  MapPin,
+  Scale,
+  Calendar,
+  DollarSign,
+  Users,
+  Activity,
+  Gavel,
 } from "lucide-react";
 import { STATUS_RESUMIDO_LABELS, STATUS_CORES } from "@shared/const";
 import { toast } from "sonner";
@@ -232,6 +241,7 @@ export default function AdminProcessos() {
   const [filtroAberto, setFiltroAberto] = useState(false);
   const [editando, setEditando] = useState<ProcessoRow | null>(null);
   const [novoStatus, setNovoStatus] = useState("");
+  const [detalheCnj, setDetalheCnj] = useState<string | null>(null);
   const [ordenacao, setOrdenacao] = useState<{ col: OrderByColuna; dir: OrderDir }>({
     col: "updatedAt",
     dir: "desc",
@@ -301,6 +311,10 @@ export default function AdminProcessos() {
   function abrirEdicao(p: ProcessoRow) {
     setEditando(p);
     setNovoStatus(p.statusResumido);
+  }
+
+  function abrirDetalhes(cnj: string) {
+    setDetalheCnj(cnj);
   }
 
   function salvarStatus() {
@@ -536,15 +550,26 @@ export default function AdminProcessos() {
                         {formatarData(p.updatedAt)}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0"
-                          onClick={() => abrirEdicao(p)}
-                          title="Alterar status"
-                        >
-                          <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />
-                        </Button>
+                        <div className="flex gap-0.5">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0"
+                            onClick={() => abrirDetalhes(p.cnj)}
+                            title="Ver detalhes Judit"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0"
+                            onClick={() => abrirEdicao(p)}
+                            title="Alterar status"
+                          >
+                            <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -665,6 +690,216 @@ export default function AdminProcessos() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog de detalhes Judit */}
+      <DialogDetalhesJudit cnj={detalheCnj} onClose={() => setDetalheCnj(null)} />
     </div>
+  );
+}
+
+// ─── Dialog de Detalhes Judit ─────────────────────────────────────────────────
+interface JuditPayload {
+  status?: string;
+  situation?: string;
+  phase?: string;
+  tribunal?: string;
+  tribunal_acronym?: string;
+  justice_description?: string;
+  instance?: string | number;
+  area?: string;
+  amount?: string | number;
+  city?: string;
+  state?: string;
+  distribution_date?: string;
+  last_step?: { content?: string; step_date?: string };
+  subjects?: Array<{ name?: string; code?: string }>;
+  parties?: Array<{ name?: string; type?: string; doc?: string; lawyers?: Array<{ name?: string; oab?: string }> }>;
+  steps?: Array<{ content?: string; step_date?: string; step_type?: string }>;
+  judge?: string;
+  free_justice?: boolean;
+}
+
+function DialogDetalhesJudit({ cnj, onClose }: { cnj: string | null; onClose: () => void }) {
+  const { data: processo, isLoading } = trpc.admin.processoDetalhe.useQuery(
+    { cnj: cnj! },
+    { enabled: !!cnj }
+  );
+
+  const payload = processo?.rawPayload as JuditPayload | null | undefined;
+
+  function fmt(val: string | null | undefined) {
+    return val && val !== "null" ? val : "—";
+  }
+
+  function fmtData(iso: string | null | undefined) {
+    if (!iso || iso === "null") return "—";
+    return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  }
+
+  function fmtValor(v: string | number | null | undefined) {
+    if (!v || v === "null") return "—";
+    const n = typeof v === "string" ? parseFloat(v) : v;
+    if (isNaN(n)) return String(v);
+    return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  }
+
+  return (
+    <Dialog open={!!cnj} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-sm flex items-center gap-2">
+            <Scale className="w-4 h-4 text-primary" />
+            Detalhes do Processo — Judit
+          </DialogTitle>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center h-32">
+            <div className="w-6 h-6 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+          </div>
+        ) : !payload ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <Activity className="w-8 h-8 mx-auto mb-2 opacity-30" />
+            <p className="text-sm">Nenhum dado Judit disponível para este processo.</p>
+            <p className="text-xs mt-1">Use a aba Judit para disparar a atualização.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* CNJ e Status */}
+            <div className="p-3 bg-muted/40 rounded-lg">
+              <p className="text-xs font-mono text-muted-foreground mb-1">{cnj}</p>
+              <div className="flex flex-wrap gap-2 items-center">
+                <StatusBadge status={processo?.statusResumido ?? "em_analise_inicial"} />
+                {payload.phase && (
+                  <Badge variant="outline" className="text-xs">{payload.phase}</Badge>
+                )}
+              </div>
+            </div>
+
+            {/* Informações do Tribunal */}
+            <div>
+              <h4 className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-primary" />
+                Tribunal
+              </h4>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="bg-muted/30 rounded p-2">
+                  <p className="text-muted-foreground">Tribunal</p>
+                  <p className="font-medium">{fmt(payload.tribunal_acronym)}</p>
+                </div>
+                <div className="bg-muted/30 rounded p-2">
+                  <p className="text-muted-foreground">Justiça</p>
+                  <p className="font-medium">{fmt(payload.justice_description)}</p>
+                </div>
+                <div className="bg-muted/30 rounded p-2">
+                  <p className="text-muted-foreground">Instância</p>
+                  <p className="font-medium">{payload.instance ? `${payload.instance}ª Instância` : "—"}</p>
+                </div>
+                <div className="bg-muted/30 rounded p-2">
+                  <p className="text-muted-foreground">Área</p>
+                  <p className="font-medium">{fmt(payload.area)}</p>
+                </div>
+                <div className="bg-muted/30 rounded p-2">
+                  <p className="text-muted-foreground">Localidade</p>
+                  <p className="font-medium">
+                    {payload.city && payload.state ? `${payload.city} / ${payload.state}` : "—"}
+                  </p>
+                </div>
+                <div className="bg-muted/30 rounded p-2">
+                  <p className="text-muted-foreground">Distribuição</p>
+                  <p className="font-medium">{fmtData(payload.distribution_date)}</p>
+                </div>
+                <div className="bg-muted/30 rounded p-2">
+                  <p className="text-muted-foreground">Valor da Causa</p>
+                  <p className="font-medium text-emerald-600">{fmtValor(payload.amount)}</p>
+                </div>
+                {payload.judge && (
+                  <div className="bg-muted/30 rounded p-2">
+                    <p className="text-muted-foreground">Juiz</p>
+                    <p className="font-medium">{payload.judge}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Assuntos */}
+            {payload.subjects && payload.subjects.length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
+                  <Gavel className="w-3.5 h-3.5 text-primary" />
+                  Assuntos
+                </h4>
+                <div className="flex flex-wrap gap-1.5">
+                  {payload.subjects.map((s, i) => (
+                    <Badge key={i} variant="secondary" className="text-xs">{s.name}</Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Partes */}
+            {payload.parties && payload.parties.length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-primary" />
+                  Partes ({payload.parties.length})
+                </h4>
+                <div className="space-y-1.5">
+                  {payload.parties.map((p, i) => (
+                    <div key={i} className="bg-muted/30 rounded p-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{p.name ?? "—"}</span>
+                        <Badge variant="outline" className="text-[10px] h-4">{p.type ?? "—"}</Badge>
+                      </div>
+                      {p.doc && <p className="text-muted-foreground font-mono mt-0.5">{p.doc}</p>}
+                      {p.lawyers && p.lawyers.length > 0 && (
+                        <p className="text-muted-foreground mt-0.5">
+                          Adv: {p.lawyers.map(l => `${l.name}${l.oab ? ` (OAB ${l.oab})` : ""}`).join(", ")}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Última Movimentação */}
+            {payload.last_step && (
+              <div>
+                <h4 className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-primary" />
+                  Última Movimentação
+                </h4>
+                <div className="bg-muted/30 rounded p-2 text-xs">
+                  <p className="text-muted-foreground mb-0.5">{fmtData(payload.last_step.step_date)}</p>
+                  <p className="font-medium">{payload.last_step.content ?? "—"}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Movimentações recentes */}
+            {payload.steps && payload.steps.length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-primary" />
+                  Movimentações ({payload.steps.length})
+                </h4>
+                <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                  {[...payload.steps]
+                    .sort((a, b) => new Date(b.step_date ?? 0).getTime() - new Date(a.step_date ?? 0).getTime())
+                    .slice(0, 20)
+                    .map((s, i) => (
+                      <div key={i} className="flex gap-2 text-xs border-l-2 border-primary/20 pl-2 py-0.5">
+                        <span className="text-muted-foreground whitespace-nowrap shrink-0">{fmtData(s.step_date)}</span>
+                        <span className="text-foreground">{s.content ?? "—"}</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

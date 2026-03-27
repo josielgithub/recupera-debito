@@ -137,25 +137,39 @@ export async function verificarStatusRequisicao(requestId: string): Promise<"pro
 // ─── Etapa 3: Obter resultado ──────────────────────────────────────────────
 export async function obterResultadoJudit(requestId: string): Promise<unknown | null> {
   const data = await retryWithBackoff(
-    () => juditFetch(`/responses?page=1`),
+    () => juditFetch(`/responses?request_id=${requestId}`),
     3,
-    `GET /responses requestId=${requestId}`
-  ) as { data?: unknown[]; results?: unknown[]; items?: unknown[] };
+    `GET /responses?request_id=${requestId}`
+  ) as {
+    page_data?: Array<{ response_data?: unknown; parties?: unknown[]; steps?: unknown[]; attachments?: unknown[] }>;
+    data?: unknown[];
+    results?: unknown[];
+    items?: unknown[];
+  };
 
+  // Formato principal da Judit: { page_data: [{ response_data, parties, steps, attachments }] }
+  if (data.page_data && Array.isArray(data.page_data) && data.page_data.length > 0) {
+    const entry = data.page_data[0];
+    // Montar payload completo com todos os blocos
+    return {
+      ...(entry.response_data as Record<string, unknown> ?? {}),
+      parties: entry.parties ?? [],
+      steps: entry.steps ?? [],
+      attachments: entry.attachments ?? [],
+    };
+  }
+
+  // Fallback: formatos alternativos
   const items = data.data ?? data.results ?? data.items ?? [];
   if (!Array.isArray(items)) return null;
-
-  // Filtrar pelo requestId
   const match = items.find(
     (item: unknown) =>
-      typeof item === "object" &&
-      item !== null &&
+      typeof item === "object" && item !== null &&
       (
         (item as Record<string, unknown>).request_id === requestId ||
         (item as Record<string, unknown>).requestId === requestId
       )
   );
-
   return match ?? null;
 }
 
@@ -163,21 +177,25 @@ export async function obterResultadoJudit(requestId: string): Promise<unknown | 
 export function mapearStatusJudit(data: unknown): { statusResumido: StatusResumido; statusOriginal: string } {
   const payload = data as Record<string, unknown>;
 
-  // Extrair texto de status de campos comuns
+  // Campos do objeto Lawsuit da Judit — prioridade: situation > status > phase > state
   const candidatos: string[] = [];
-  const campos = ["status", "situation", "situacao", "fase", "phase", "state", "movimento"];
+  const camposPrioridade = ["situation", "status", "phase", "state", "situacao", "fase", "movimento"];
 
-  for (const campo of campos) {
+  for (const campo of camposPrioridade) {
     const val = payload[campo];
-    if (typeof val === "string" && val.trim()) candidatos.push(val.trim());
+    if (typeof val === "string" && val.trim() && val.trim().toLowerCase() !== "null") {
+      candidatos.push(val.trim());
+    }
   }
 
-  // Tentar extrair de objetos aninhados
-  const nested = payload.process ?? payload.processo ?? payload.lawsuit ?? payload.data;
+  // Tentar extrair de objetos aninhados (response_data, process, lawsuit)
+  const nested = payload.response_data ?? payload.process ?? payload.processo ?? payload.lawsuit ?? payload.data;
   if (nested && typeof nested === "object") {
-    for (const campo of campos) {
+    for (const campo of camposPrioridade) {
       const val = (nested as Record<string, unknown>)[campo];
-      if (typeof val === "string" && val.trim()) candidatos.push(val.trim());
+      if (typeof val === "string" && val.trim() && val.trim().toLowerCase() !== "null") {
+        candidatos.push(val.trim());
+      }
     }
   }
 
@@ -186,23 +204,24 @@ export function mapearStatusJudit(data: unknown): { statusResumido: StatusResumi
 
   let statusResumido: StatusResumido = "em_analise_inicial";
 
-  if (/movimento|andamento|ativo|tramit|em curso/.test(texto)) {
+  // Mapeamento baseado nos valores reais retornados pela Judit
+  if (/^ativo$|^ativa$|movimento|andamento|tramit|em curso|em andamento/.test(texto)) {
     statusResumido = "em_andamento";
-  } else if (/senten[çc]a|concluso|julgado/.test(texto)) {
+  } else if (/^finalizado$|^baixado$|arquivado|extinto|encerrado|baixa definitiva/.test(texto)) {
+    statusResumido = "arquivado_encerrado";
+  } else if (/senten[çc]a|concluso|julgado|aguarda.*despacho|aguarda.*senten/.test(texto)) {
     statusResumido = "aguardando_sentenca";
-  } else if (/audi[eê]ncia/.test(texto)) {
+  } else if (/audi[eê]ncia|pauta/.test(texto)) {
     statusResumido = "aguardando_audiencia";
-  } else if (/recurso|apela[çc][aã]o|agravo|embargos/.test(texto)) {
+  } else if (/recurso|apela[çc][aã]o|agravo|embargos|2[ªa].*inst|segunda.*inst/.test(texto)) {
     statusResumido = "em_recurso";
   } else if (/execu[çc][aã]o|cumprimento/.test(texto)) {
     statusResumido = "cumprimento_de_sentenca";
-  } else if (/arquivado|baixado|extinto|encerrado/.test(texto)) {
-    statusResumido = "arquivado_encerrado";
   } else if (/acordo|negocia[çc][aã]o|concilia[çc][aã]o/.test(texto)) {
     statusResumido = "acordo_negociacao";
-  } else if (/ganho|procedente|favorav/.test(texto)) {
+  } else if (/procedente|ganho|favorav|provido/.test(texto)) {
     statusResumido = "concluido_ganho";
-  } else if (/improcedente|perdido|desfavorav/.test(texto)) {
+  } else if (/improcedente|perdido|desfavorav|n[aã]o provido/.test(texto)) {
     statusResumido = "concluido_perdido";
   } else if (/documento|pend[eê]ncia/.test(texto)) {
     statusResumido = "aguardando_documentos";

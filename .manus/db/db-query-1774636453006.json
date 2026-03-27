@@ -1,0 +1,45 @@
+{
+  "query": "SELECT cnj, status_original, status_resumido, ultima_atualizacao_api, raw_payload IS NOT NULL AS tem_payload FROM processos WHERE ultima_atualizacao_api IS NOT NULL LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute SELECT cnj, status_original, status_resumido, ultima_atualizacao_api, raw_payload IS NOT NULL AS tem_payload FROM processos WHERE ultima_atualizacao_api IS NOT NULL LIMIT 5;",
+  "rows": [
+    {
+      "cnj": "0714284-08.2025.8.07.0007",
+      "status_original": "Ativo",
+      "status_resumido": "em_andamento",
+      "ultima_atualizacao_api": "2026-03-27 18:29:19",
+      "tem_payload": "0"
+    },
+    {
+      "cnj": "0756123-83.2025.8.07.0016",
+      "status_original": "Finalizado",
+      "status_resumido": "em_analise_inicial",
+      "ultima_atualizacao_api": "2026-03-27 18:29:19",
+      "tem_payload": "0"
+    },
+    {
+      "cnj": "5000472-08.2025.8.08.0044",
+      "status_original": "Ativo",
+      "status_resumido": "em_andamento",
+      "ultima_atualizacao_api": "2026-03-27 18:29:19",
+      "tem_payload": "0"
+    },
+    {
+      "cnj": "5000384-75.2025.8.08.0009",
+      "status_original": "Não Informado",
+      "status_resumido": "em_analise_inicial",
+      "ultima_atualizacao_api": "2026-03-27 18:29:19",
+      "tem_payload": "0"
+    },
+    {
+      "cnj": "5000385-60.2025.8.08.0009",
+      "status_original": "Não Informado",
+      "status_resumido": "em_analise_inicial",
+      "ultima_atualizacao_api": "2026-03-27 18:29:19",
+      "tem_payload": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "cnj\tstatus_original\tstatus_resumido\tultima_atualizacao_api\ttem_payload\n0714284-08.2025.8.07.0007\tAtivo\tem_andamento\t2026-03-27 18:29:19\t0\n0756123-83.2025.8.07.0016\tFinalizado\tem_analise_inicial\t2026-03-27 18:29:19\t0\n5000472-08.2025.8.08.0044\tAtivo\tem_andamento\t2026-03-27 18:29:19\t0\n5000384-75.2025.8.08.0009\tNão Informado\tem_analise_inicial\t2026-03-27 18:29:19\t0\n5000385-60.2025.8.08.0009\tNão Informado\tem_analise_inicial\t2026-03-27 18:29:19\t0\n",
+  "stderr": "",
+  "execution_time_ms": 55
+}

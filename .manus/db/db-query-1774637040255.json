@@ -1,0 +1,52 @@
+{
+  "query": "SELECT cnj, status_original, \n  JSON_KEYS(raw_payload) AS chaves,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.situation')) AS situation,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.status')) AS status_field,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.court')) AS court,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.court_name')) AS court_name,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.subject')) AS subject,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.value')) AS valor,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.distribution_date')) AS dist_date,\n  JSON_LENGTH(JSON_EXTRACT(raw_payload, '$.parties')) AS num_partes,\n  JSON_LENGTH(JSON_EXTRACT(raw_payload, '$.steps')) AS num_movimentacoes\nFROM processos \nWHERE raw_payload IS NOT NULL \nLIMIT 3;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute SELECT cnj, status_original, \n  JSON_KEYS(raw_payload) AS chaves,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.situation')) AS situation,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.status')) AS status_field,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.court')) AS court,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.court_name')) AS court_name,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.subject')) AS subject,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.value')) AS valor,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.distribution_date')) AS dist_date,\n  JSON_LENGTH(JSON_EXTRACT(raw_payload, '$.parties')) AS num_partes,\n  JSON_LENGTH(JSON_EXTRACT(raw_payload, '$.steps')) AS num_movimentacoes\nFROM processos \nWHERE raw_payload IS NOT NULL \nLIMIT 3;",
+  "rows": [
+    {
+      "cnj": "0714284-08.2025.8.07.0007",
+      "status_original": "Ativo",
+      "chaves": "[\"amount\", \"area\", \"attachments\", \"city\", \"classifications\", \"code\", \"county\", \"courts\", \"crawler\", \"created_at\", \"distribution_date\", \"free_justice\", \"instance\", \"justice\", \"justice_description\", \"last_step\", \"metadata\", \"name\", \"parties\", \"phase\", \"related_lawsuits\", \"secrecy_level\", \"state\", \"status\", \"steps\", \"subjects\", \"tags\", \"tribunal\", \"tribunal_acronym\", \"updated_at\"]",
+      "situation": "NULL",
+      "status_field": "Ativo",
+      "court": "NULL",
+      "court_name": "NULL",
+      "subject": "NULL",
+      "valor": "NULL",
+      "dist_date": "2025-06-09T19:27:58.385Z",
+      "num_partes": "0",
+      "num_movimentacoes": "0"
+    },
+    {
+      "cnj": "0756123-83.2025.8.07.0016",
+      "status_original": "Finalizado",
+      "chaves": "[\"amount\", \"area\", \"attachments\", \"city\", \"classifications\", \"code\", \"county\", \"courts\", \"crawler\", \"created_at\", \"distribution_date\", \"free_justice\", \"instance\", \"justice\", \"justice_description\", \"last_step\", \"metadata\", \"name\", \"parties\", \"phase\", \"related_lawsuits\", \"secrecy_level\", \"state\", \"status\", \"steps\", \"subjects\", \"tags\", \"tribunal\", \"tribunal_acronym\", \"updated_at\"]",
+      "situation": "NULL",
+      "status_field": "Finalizado",
+      "court": "NULL",
+      "court_name": "NULL",
+      "subject": "NULL",
+      "valor": "NULL",
+      "dist_date": "2025-06-11T18:11:44.800Z",
+      "num_partes": "0",
+      "num_movimentacoes": "0"
+    },
+    {
+      "cnj": "5000472-08.2025.8.08.0044",
+      "status_original": "Ativo",
+      "chaves": "[\"amount\", \"area\", \"attachments\", \"city\", \"classifications\", \"code\", \"county\", \"courts\", \"crawler\", \"created_at\", \"distribution_date\", \"free_justice\", \"instance\", \"judge\", \"justice\", \"justice_description\", \"last_step\", \"metadata\", \"name\", \"parties\", \"phase\", \"related_lawsuits\", \"secrecy_level\", \"state\", \"status\", \"steps\", \"subjects\", \"tags\", \"tribunal\", \"tribunal_acronym\", \"updated_at\"]",
+      "situation": "NULL",
+      "status_field": "Ativo",
+      "court": "NULL",
+      "court_name": "NULL",
+      "subject": "NULL",
+      "valor": "NULL",
+      "dist_date": "2025-04-02T21:49:10.672Z",
+      "num_partes": "0",
+      "num_movimentacoes": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "cnj\tstatus_original\tchaves\tsituation\tstatus_field\tcourt\tcourt_name\tsubject\tvalor\tdist_date\tnum_partes\tnum_movimentacoes\n0714284-08.2025.8.07.0007\tAtivo\t[\"amount\", \"area\", \"attachments\", \"city\", \"classifications\", \"code\", \"county\", \"courts\", \"crawler\", \"created_at\", \"distribution_date\", \"free_justice\", \"instance\", \"justice\", \"justice_description\", \"last_step\", \"metadata\", \"name\", \"parties\", \"phase\", \"related_lawsuits\", \"secrecy_level\", \"state\", \"status\", \"steps\", \"subjects\", \"tags\", \"tribunal\", \"tribunal_acronym\", \"updated_at\"]\tNULL\tAtivo\tNULL\tNULL\tNULL\tNULL\t2025-06-09T19:27:58.385Z\t0\t0\n0756123-83.2025.8.07.0016\tFinalizado\t[\"amount\", \"area\", \"attachments\", \"city\", \"classifications\", \"code\", \"county\", \"courts\", \"crawler\", \"created_at\", \"distribution_date\", \"free_justice\", \"instance\", \"justice\", \"justice_description\", \"last_step\", \"metadata\", \"name\", \"parties\", \"phase\", \"related_lawsuits\", \"secrecy_level\", \"state\", \"status\", \"steps\", \"subjects\", \"tags\", \"tribunal\", \"tribunal_acronym\", \"updated_at\"]\tNULL\tFinalizado\tNULL\tNULL\tNULL\tNULL\t2025-06-11T18:11:44.800Z\t0\t0\n5000472-08.2025.8.08.0044\tAtivo\t[\"amount\", \"area\", \"attachments\", \"city\", \"classifications\", \"code\", \"county\", \"courts\", \"crawler\", \"created_at\", \"distribution_date\", \"free_justice\", \"instance\", \"judge\", \"justice\", \"justice_description\", \"last_step\", \"metadata\", \"name\", \"parties\", \"phase\", \"related_lawsuits\", \"secrecy_level\", \"state\", \"status\", \"steps\", \"subjects\", \"tags\", \"tribunal\", \"tribunal_acronym\", \"updated_at\"]\tNULL\tAtivo\tNULL\tNULL\tNULL\tNULL\t2025-04-02T21:49:10.672Z\t0\t0\n",
+  "stderr": "",
+  "execution_time_ms": 57
+}

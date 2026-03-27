@@ -1,0 +1,16 @@
+{
+  "query": "SELECT \n  COUNT(*) AS total,\n  SUM(raw_payload IS NOT NULL) AS com_payload,\n  SUM(raw_payload IS NULL) AS sem_payload,\n  SUM(status_original IS NOT NULL AND status_original != 'Não Informado') AS com_status_real\nFROM processos;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute SELECT \n  COUNT(*) AS total,\n  SUM(raw_payload IS NOT NULL) AS com_payload,\n  SUM(raw_payload IS NULL) AS sem_payload,\n  SUM(status_original IS NOT NULL AND status_original != 'Não Informado') AS com_status_real\nFROM processos;",
+  "rows": [
+    {
+      "total": "162",
+      "com_payload": "162",
+      "sem_payload": "0",
+      "com_status_real": "78"
+    }
+  ],
+  "messages": [],
+  "stdout": "total\tcom_payload\tsem_payload\tcom_status_real\n162\t162\t0\t78\n",
+  "stderr": "",
+  "execution_time_ms": 205
+}
