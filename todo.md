@@ -189,3 +189,9 @@
 ## Histórico Completo de Movimentações na Página de Detalhes
 
 - [x] Exibir array steps[] completo da Judit na página /admin/processo/:cnj com timeline visual
+
+## Cards de Status Clicáveis no Dashboard
+
+- [x] Cards de distribuição por status no Dashboard tornam-se clicáveis e navegam para a tabela de processos filtrada pelo status selecionado
+- [x] Tabela de processos recebe parâmetro de status via URL/query para pré-filtrar automaticamente
+- [x] Indicador visual (highlight/seleção ativa) no card do status selecionado

@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useCallback } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
@@ -337,7 +337,7 @@ function GraficoStatusProcessos() {
 }
 
 // ─── Dashboard Principal ────────────────────────────────────────────────────
-function DashboardView() {
+function DashboardView({ onVerStatus }: { onVerStatus: (status: string) => void }) {
   const { data, isLoading, refetch } = trpc.admin.dashboard.useQuery();
   const rotinaMutation = trpc.admin.rodarRotina7dias.useMutation({
     onSuccess: (r) => {
@@ -409,15 +409,29 @@ function DashboardView() {
               const label = STATUS_RESUMIDO_LABELS[status] ?? status;
               const iconColor = STATUS_ICON_COLORS[status] ?? "text-gray-600 bg-gray-50";
               return (
-                <div
+                <button
                   key={status}
-                  className="flex items-center gap-2.5 p-3 rounded-lg border border-border/60 bg-card"
+                  onClick={() => count > 0 && onVerStatus(status)}
+                  disabled={count === 0}
+                  title={count > 0 ? `Ver ${count} processo(s) com status "${label}"` : `Nenhum processo com status "${label}"`}
+                  className={`flex items-center gap-2.5 p-3 rounded-lg border text-left w-full transition-all ${
+                    count > 0
+                      ? "border-border/60 bg-card hover:border-primary/50 hover:bg-primary/5 hover:shadow-sm cursor-pointer active:scale-[0.98]"
+                      : "border-border/40 bg-muted/30 cursor-not-allowed opacity-60"
+                  }`}
                 >
                   <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${iconColor}`}>
                     <span className="text-sm font-bold">{count}</span>
                   </div>
-                  <p className="text-xs text-muted-foreground leading-tight">{label}</p>
-                </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground leading-tight">{label}</p>
+                    {count > 0 && (
+                      <p className="text-[10px] text-primary/70 mt-0.5 flex items-center gap-0.5">
+                        <ChevronRight className="w-2.5 h-2.5" /> Ver processos
+                      </p>
+                    )}
+                  </div>
+                </button>
               );
             })}
           </div>
@@ -792,9 +806,16 @@ function LogsView() {
   );
 }
 
-// ─── Página Admin Principal ─────────────────────────────────────────────────
+// ─── Página Admin Principal ────────────────────────────────────────────────────
 export default function Admin() {
   const { user, loading, isAuthenticated, logout } = useAuth();
+  const [abaAtiva, setAbaAtiva] = useState("dashboard");
+  const [filtroStatusProcessos, setFiltroStatusProcessos] = useState<string | undefined>(undefined);
+
+  const handleVerStatus = useCallback((status: string) => {
+    setFiltroStatusProcessos(status);
+    setAbaAtiva("processos");
+  }, []);
 
   if (loading) {
     return (
@@ -899,7 +920,7 @@ export default function Admin() {
 
       {/* Conteúdo */}
       <div className="container py-6">
-        <Tabs defaultValue="dashboard">
+        <Tabs value={abaAtiva} onValueChange={(v) => { setAbaAtiva(v); if (v !== "processos") setFiltroStatusProcessos(undefined); }}>
           <TabsList className="mb-6 bg-white border border-border shadow-sm">
             <TabsTrigger value="dashboard" className="flex items-center gap-1.5 text-xs">
               <LayoutDashboard className="w-3.5 h-3.5" />
@@ -931,8 +952,8 @@ export default function Admin() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="dashboard"><DashboardView /></TabsContent>
-          <TabsContent value="processos"><AdminProcessos /></TabsContent>
+          <TabsContent value="dashboard"><DashboardView onVerStatus={handleVerStatus} /></TabsContent>
+          <TabsContent value="processos"><AdminProcessos filtroStatusInicial={filtroStatusProcessos} key={filtroStatusProcessos ?? "all"} /></TabsContent>
           <TabsContent value="parceiros"><AdminParceiros /></TabsContent>
           <TabsContent value="importacao"><ImportacaoView /></TabsContent>
           <TabsContent value="logs"><AdminHistorico /></TabsContent>

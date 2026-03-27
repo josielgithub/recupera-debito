@@ -236,11 +236,14 @@ function SortableHead({
 }
 
 // ─── Componente Principal ────────────────────────────────────────────────────
-export default function AdminProcessos() {
+export default function AdminProcessos({ filtroStatusInicial }: { filtroStatusInicial?: string } = {}) {
   const [, setLocation] = useLocation();
   const [pagina, setPagina] = useState(1);
-  const [filtros, setFiltros] = useState<Filtros>(FILTROS_VAZIOS);
-  const [filtrosAplicados, setFiltrosAplicados] = useState<Filtros>(FILTROS_VAZIOS);
+  const filtrosIniciais: Filtros = filtroStatusInicial
+    ? { ...FILTROS_VAZIOS, status: [filtroStatusInicial] }
+    : FILTROS_VAZIOS;
+  const [filtros, setFiltros] = useState<Filtros>(filtrosIniciais);
+  const [filtrosAplicados, setFiltrosAplicados] = useState<Filtros>(filtrosIniciais);
   const [filtroAberto, setFiltroAberto] = useState(false);
   const [editando, setEditando] = useState<ProcessoRow | null>(null);
   const [novoStatus, setNovoStatus] = useState("");

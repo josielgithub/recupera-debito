@@ -1,0 +1,16 @@
+{
+  "query": "\nSELECT request_id, status, created_at, updated_at\nFROM judit_requests\nWHERE cnj = '7002287-82.2025.8.22.0022'\nORDER BY created_at DESC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute \nSELECT request_id, status, created_at, updated_at\nFROM judit_requests\nWHERE cnj = '7002287-82.2025.8.22.0022'\nORDER BY created_at DESC;\n",
+  "rows": [
+    {
+      "request_id": "a0405b85-97ee-4494-aa47-21bf9f89bda9",
+      "status": "completed",
+      "created_at": "2026-03-27 18:24:27",
+      "updated_at": "2026-03-27 18:29:28"
+    }
+  ],
+  "messages": [],
+  "stdout": "request_id\tstatus\tcreated_at\tupdated_at\na0405b85-97ee-4494-aa47-21bf9f89bda9\tcompleted\t2026-03-27 18:24:27\t2026-03-27 18:29:28\n",
+  "stderr": "",
+  "execution_time_ms": 55
+}
