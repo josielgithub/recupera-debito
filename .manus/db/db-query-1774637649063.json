@@ -1,0 +1,9 @@
+{
+  "query": "SELECT \n  cnj,\n  status_original,\n  status_resumido,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.status')) AS payload_status,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.phase')) AS payload_phase,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.situation')) AS payload_situation,\n  LEFT(raw_payload, 200) AS payload_inicio\nFROM processos\nWHERE status_resumido = 'em_analise_inicial'\n  AND status_original = 'Finalizado'\nLIMIT 3;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute SELECT \n  cnj,\n  status_original,\n  status_resumido,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.status')) AS payload_status,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.phase')) AS payload_phase,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.situation')) AS payload_situation,\n  LEFT(raw_payload, 200) AS payload_inicio\nFROM processos\nWHERE status_resumido = 'em_analise_inicial'\n  AND status_original = 'Finalizado'\nLIMIT 3;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 51
+}

@@ -1,0 +1,122 @@
+{
+  "query": "SELECT \n  status_resumido,\n  status_original,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.phase')) AS fase,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.status')) AS status_judit,\n  COUNT(*) AS qtd\nFROM processos\nGROUP BY status_resumido, status_original, fase, status_judit\nORDER BY status_resumido, qtd DESC;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute SELECT \n  status_resumido,\n  status_original,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.phase')) AS fase,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.status')) AS status_judit,\n  COUNT(*) AS qtd\nFROM processos\nGROUP BY status_resumido, status_original, fase, status_judit\nORDER BY status_resumido, qtd DESC;",
+  "rows": [
+    {
+      "status_resumido": "em_analise_inicial",
+      "status_original": "Não Informado",
+      "fase": "NULL",
+      "status_judit": "NULL",
+      "qtd": "76"
+    },
+    {
+      "status_resumido": "em_analise_inicial",
+      "status_original": "Finalizado",
+      "fase": "Arquivado",
+      "status_judit": "Finalizado",
+      "qtd": "35"
+    },
+    {
+      "status_resumido": "em_analise_inicial",
+      "status_original": "NÃO INFORMADO",
+      "fase": "Arquivado",
+      "status_judit": "Finalizado",
+      "qtd": "3"
+    },
+    {
+      "status_resumido": "protocolado",
+      "status_original": "Finalizado",
+      "fase": "Arquivado",
+      "status_judit": "Finalizado",
+      "qtd": "4"
+    },
+    {
+      "status_resumido": "protocolado",
+      "status_original": "Ativo",
+      "fase": "Sentença",
+      "status_judit": "Ativo",
+      "qtd": "2"
+    },
+    {
+      "status_resumido": "protocolado",
+      "status_original": "Não Informado",
+      "fase": "NULL",
+      "status_judit": "NULL",
+      "qtd": "2"
+    },
+    {
+      "status_resumido": "protocolado",
+      "status_original": "Ativo",
+      "fase": "Inicial",
+      "status_judit": "Ativo",
+      "qtd": "1"
+    },
+    {
+      "status_resumido": "protocolado",
+      "status_original": "Ativo",
+      "fase": "Trânsito em julgado ou acordo",
+      "status_judit": "Ativo",
+      "qtd": "1"
+    },
+    {
+      "status_resumido": "protocolado",
+      "status_original": "Ativo",
+      "fase": "Citação expedida",
+      "status_judit": "Ativo",
+      "qtd": "1"
+    },
+    {
+      "status_resumido": "em_andamento",
+      "status_original": "Ativo",
+      "fase": "Sentença",
+      "status_judit": "Ativo",
+      "qtd": "16"
+    },
+    {
+      "status_resumido": "em_andamento",
+      "status_original": "Ativo",
+      "fase": "Suspenso",
+      "status_judit": "Ativo",
+      "qtd": "8"
+    },
+    {
+      "status_resumido": "em_andamento",
+      "status_original": "Ativo",
+      "fase": "Inicial",
+      "status_judit": "Ativo",
+      "qtd": "6"
+    },
+    {
+      "status_resumido": "em_andamento",
+      "status_original": "NÃO INFORMADO",
+      "fase": "Sentença",
+      "status_judit": "Ativo",
+      "qtd": "3"
+    },
+    {
+      "status_resumido": "em_andamento",
+      "status_original": "Ativo",
+      "fase": "Trânsito em julgado ou acordo",
+      "status_judit": "Ativo",
+      "qtd": "2"
+    },
+    {
+      "status_resumido": "em_andamento",
+      "status_original": "Ativo",
+      "fase": "Citação expedida",
+      "status_judit": "Ativo",
+      "qtd": "1"
+    },
+    {
+      "status_resumido": "em_andamento",
+      "status_original": "Ativo",
+      "fase": "Citado",
+      "status_judit": "Ativo",
+      "qtd": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "status_resumido\tstatus_original\tfase\tstatus_judit\tqtd\nem_analise_inicial\tNão Informado\tNULL\tNULL\t76\nem_analise_inicial\tFinalizado\tArquivado\tFinalizado\t35\nem_analise_inicial\tNÃO INFORMADO\tArquivado\tFinalizado\t3\nprotocolado\tFinalizado\tArquivado\tFinalizado\t4\nprotocolado\tAtivo\tSentença\tAtivo\t2\nprotocolado\tNão Informado\tNULL\tNULL\t2\nprotocolado\tAtivo\tInicial\tAtivo\t1\nprotocolado\tAtivo\tTrânsito em julgado ou acordo\tAtivo\t1\nprotocolado\tAtivo\tCitação expedida\tAtivo\t1\nem_andamento\tAtivo\tSentença\tAtivo\t16\nem_andamento\tAtivo\tSuspenso\tAtivo\t8\nem_andamento\tAtivo\tInicial\tAtivo\t6\nem_andamento\tNÃO INFORMADO\tSentença\tAtivo\t3\nem_andamento\tAtivo\tTrânsito em julgado ou acordo\tAtivo\t2\nem_andamento\tAtivo\tCitação expedida\tAtivo\t1\nem_andamento\tAtivo\tCitado\tAtivo\t1\n",
+  "stderr": "",
+  "execution_time_ms": 55
+}

@@ -1,0 +1,45 @@
+{
+  "query": "SELECT \n  status_resumido,\n  status_original,\n  COUNT(*) AS qtd\nFROM processos\nGROUP BY status_resumido, status_original\nORDER BY status_resumido, qtd DESC;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute SELECT \n  status_resumido,\n  status_original,\n  COUNT(*) AS qtd\nFROM processos\nGROUP BY status_resumido, status_original\nORDER BY status_resumido, qtd DESC;",
+  "rows": [
+    {
+      "status_resumido": "em_analise_inicial",
+      "status_original": "Não Informado",
+      "qtd": "76"
+    },
+    {
+      "status_resumido": "protocolado",
+      "status_original": "Ativo",
+      "qtd": "5"
+    },
+    {
+      "status_resumido": "protocolado",
+      "status_original": "Não Informado",
+      "qtd": "2"
+    },
+    {
+      "status_resumido": "em_andamento",
+      "status_original": "Ativo",
+      "qtd": "34"
+    },
+    {
+      "status_resumido": "em_andamento",
+      "status_original": "NÃO INFORMADO",
+      "qtd": "3"
+    },
+    {
+      "status_resumido": "arquivado_encerrado",
+      "status_original": "Finalizado",
+      "qtd": "39"
+    },
+    {
+      "status_resumido": "arquivado_encerrado",
+      "status_original": "NÃO INFORMADO",
+      "qtd": "3"
+    }
+  ],
+  "messages": [],
+  "stdout": "status_resumido\tstatus_original\tqtd\nem_analise_inicial\tNão Informado\t76\nprotocolado\tAtivo\t5\nprotocolado\tNão Informado\t2\nem_andamento\tAtivo\t34\nem_andamento\tNÃO INFORMADO\t3\narquivado_encerrado\tFinalizado\t39\narquivado_encerrado\tNÃO INFORMADO\t3\n",
+  "stderr": "",
+  "execution_time_ms": 54
+}

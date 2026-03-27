@@ -1,0 +1,26 @@
+{
+  "query": "-- Corrigir processos com status Finalizado + phase Arquivado que estão errados\nUPDATE processos\nSET \n  status_resumido = 'arquivado_encerrado',\n  updated_at = NOW()\nWHERE \n  raw_payload IS NOT NULL\n  AND (\n    JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.status')) = 'Finalizado'\n    OR JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.phase')) LIKE '%rquivado%'\n    OR JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.phase')) LIKE '%xtinto%'\n    OR JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.phase')) LIKE '%ncerrado%'\n  )\n  AND status_resumido IN ('em_analise_inicial', 'protocolado');\n\n-- Verificar resultado\nSELECT status_resumido, COUNT(*) as qtd FROM processos GROUP BY status_resumido ORDER BY qtd DESC;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute -- Corrigir processos com status Finalizado + phase Arquivado que estão errados\nUPDATE processos\nSET \n  status_resumido = 'arquivado_encerrado',\n  updated_at = NOW()\nWHERE \n  raw_payload IS NOT NULL\n  AND (\n    JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.status')) = 'Finalizado'\n    OR JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.phase')) LIKE '%rquivado%'\n    OR JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.phase')) LIKE '%xtinto%'\n    OR JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.phase')) LIKE '%ncerrado%'\n  )\n  AND status_resumido IN ('em_analise_inicial', 'protocolado');\n\n-- Verificar resultado\nSELECT status_resumido, COUNT(*) as qtd FROM processos GROUP BY status_resumido ORDER BY qtd DESC;",
+  "rows": [
+    {
+      "status_resumido": "em_analise_inicial",
+      "qtd": "76"
+    },
+    {
+      "status_resumido": "arquivado_encerrado",
+      "qtd": "42"
+    },
+    {
+      "status_resumido": "em_andamento",
+      "qtd": "37"
+    },
+    {
+      "status_resumido": "protocolado",
+      "qtd": "7"
+    }
+  ],
+  "messages": [],
+  "stdout": "status_resumido\tqtd\nem_analise_inicial\t76\narquivado_encerrado\t42\nem_andamento\t37\nprotocolado\t7\n",
+  "stderr": "",
+  "execution_time_ms": 67
+}

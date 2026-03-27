@@ -173,3 +173,8 @@
 - [x] Reprocessar os 162 processos para salvar o payload completo
 - [x] Criar endpoint admin.processoDetalhe que retorna raw_payload + dados do processo
 - [x] Criar painel de detalhes do processo no AdminProcessos (modal com dados ricos da Judit)
+
+## Bug: Status Incorreto (Arquivado → em_analise_inicial)
+
+- [x] Corrigir mapearStatusJudit: combinação status=Finalizado + phase=Arquivado agora mapeada para arquivado_encerrado
+- [x] Reprocessar processos com status incorreto via SQL (42 processos arquivados, 76 sem resposta da Judit ainda)

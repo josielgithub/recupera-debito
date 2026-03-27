@@ -202,31 +202,49 @@ export function mapearStatusJudit(data: unknown): { statusResumido: StatusResumi
   const statusOriginal = candidatos[0] ?? "Não Informado";
   const texto = statusOriginal.toLowerCase();
 
+  // Extrair também phase/fase para combinações (ex: status=Finalizado + phase=Arquivado)
+  const phaseVal = (
+    (typeof payload.phase === "string" ? payload.phase : "") ||
+    (nested && typeof (nested as Record<string, unknown>).phase === "string" ? (nested as Record<string, unknown>).phase as string : "")
+  ).toLowerCase();
+  const statusVal = (
+    (typeof payload.status === "string" ? payload.status : "") ||
+    (nested && typeof (nested as Record<string, unknown>).status === "string" ? (nested as Record<string, unknown>).status as string : "")
+  ).toLowerCase();
+
   let statusResumido: StatusResumido = "em_analise_inicial";
 
   // Mapeamento baseado nos valores reais retornados pela Judit
-  if (/^ativo$|^ativa$|movimento|andamento|tramit|em curso|em andamento/.test(texto)) {
-    statusResumido = "em_andamento";
-  } else if (/^finalizado$|^baixado$|arquivado|extinto|encerrado|baixa definitiva/.test(texto)) {
+  // Prioridade: verificar combinações de status+phase antes de avaliar individualmente
+  const textoCompleto = `${texto} ${phaseVal} ${statusVal}`;
+
+  if (/arquivado|extinto|encerrado|baixa definitiva|baixado/.test(textoCompleto) ||
+      (statusVal === "finalizado" && /arquivado|extinto|encerrado/.test(phaseVal)) ||
+      texto === "finalizado" || statusVal === "finalizado") {
     statusResumido = "arquivado_encerrado";
-  } else if (/senten[çc]a|concluso|julgado|aguarda.*despacho|aguarda.*senten/.test(texto)) {
+  } else if (/^ativo$|^ativa$|movimento|andamento|tramit|em curso|em andamento/.test(texto) ||
+             /^ativo$|^ativa$/.test(statusVal)) {
+    statusResumido = "em_andamento";
+  } else if (/senten[\u00e7c]a|concluso|julgado|aguarda.*despacho|aguarda.*senten/.test(textoCompleto)) {
     statusResumido = "aguardando_sentenca";
-  } else if (/audi[eê]ncia|pauta/.test(texto)) {
+  } else if (/audi[e\u00ea]ncia|pauta/.test(textoCompleto)) {
     statusResumido = "aguardando_audiencia";
-  } else if (/recurso|apela[çc][aã]o|agravo|embargos|2[ªa].*inst|segunda.*inst/.test(texto)) {
+  } else if (/recurso|apela[\u00e7c][\u00e3a]o|agravo|embargos|2[\u00aaa].*inst|segunda.*inst/.test(textoCompleto)) {
     statusResumido = "em_recurso";
-  } else if (/execu[çc][aã]o|cumprimento/.test(texto)) {
+  } else if (/execu[\u00e7c][\u00e3a]o|cumprimento/.test(textoCompleto)) {
     statusResumido = "cumprimento_de_sentenca";
-  } else if (/acordo|negocia[çc][aã]o|concilia[çc][aã]o/.test(texto)) {
+  } else if (/acordo|negocia[\u00e7c][\u00e3a]o|concilia[\u00e7c][\u00e3a]o|tr[\u00e2a]nsito.*julgado/.test(textoCompleto)) {
     statusResumido = "acordo_negociacao";
-  } else if (/procedente|ganho|favorav|provido/.test(texto)) {
+  } else if (/procedente|ganho|favorav|provido/.test(textoCompleto)) {
     statusResumido = "concluido_ganho";
-  } else if (/improcedente|perdido|desfavorav|n[aã]o provido/.test(texto)) {
+  } else if (/improcedente|perdido|desfavorav|n[a\u00e3]o provido/.test(textoCompleto)) {
     statusResumido = "concluido_perdido";
-  } else if (/documento|pend[eê]ncia/.test(texto)) {
+  } else if (/documento|pend[e\u00ea]ncia/.test(textoCompleto)) {
     statusResumido = "aguardando_documentos";
-  } else if (/protocolado|distribu[ií]do|petici/.test(texto)) {
+  } else if (/protocolado|distribu[i\u00ed]do|petici|inicial|cita[\u00e7c][\u00e3a]o/.test(textoCompleto)) {
     statusResumido = "protocolado";
+  } else if (/suspen/.test(textoCompleto)) {
+    statusResumido = "em_andamento";
   }
 
   return { statusResumido, statusOriginal };
