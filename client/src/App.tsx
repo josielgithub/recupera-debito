@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch, useLocation } from "wouter";
+import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
@@ -11,9 +11,8 @@ import { useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 
 // Handles post-OAuth redirect: if the user just logged in and there's a stored returnPath,
-// navigate to it and clear the localStorage key.
+// do a full page navigation to ensure the session cookie is properly read.
 function OAuthReturnRedirect() {
-  const [, setLocation] = useLocation();
   const { data: user, isLoading } = trpc.auth.me.useQuery(undefined, {
     retry: false,
     refetchOnWindowFocus: false,
@@ -25,10 +24,11 @@ function OAuthReturnRedirect() {
     const returnPath = localStorage.getItem("oauth_return_path");
     if (!returnPath) return;
     localStorage.removeItem("oauth_return_path");
+    // Use full page reload so the new session cookie is picked up cleanly
     if (returnPath !== window.location.pathname) {
-      setLocation(returnPath);
+      window.location.href = returnPath;
     }
-  }, [user, isLoading, setLocation]);
+  }, [user, isLoading]);
 
   return null;
 }
