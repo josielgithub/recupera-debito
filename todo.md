@@ -219,3 +219,7 @@
 
 - [x] Diagnosticar fluxo OAuth: getLoginUrl() não preserva returnPath=/admin
 - [x] Corrigir redirecionamento pós-login para /admin quando usuário clica em "Admin"
+
+## Dev Auth Bypass
+
+- [x] Acesso à área admin sem login no ambiente de desenvolvimento (NODE_ENV !== production)
