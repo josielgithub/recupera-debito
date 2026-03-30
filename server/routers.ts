@@ -36,7 +36,8 @@ import {
   coletarResultadosPendentes,
   criarRequisicaoJudit,
   dispararAtualizacaoBackground,
-  solicitarAnaliseIA,
+  iniciarAnaliseIA,
+  verificarAnaliseIA,
 } from "./judit";
 import { updateAiSummary } from "./db";
 import { createHash } from "crypto";
@@ -454,26 +455,33 @@ export const appRouter = router({
         return { steps, fromCache, requestId, total: steps.length };
       }),
 
-    // Solicitar análise IA da Judit para um processo
-    processoAnaliseIA: protectedProcedure
+    // Inicia análise IA e retorna requestId imediatamente (sem esperar)
+    processoAnaliseIAIniciar: protectedProcedure
       .input(z.object({ cnj: z.string() }))
       .mutation(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
         const processo = await getProcessoByCnj(input.cnj);
         if (!processo) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
-
-        // Se já tem resumo recente (menos de 7 dias), retornar do cache
+        // Cache válido por 7 dias
         if (processo.aiSummary && processo.aiSummaryUpdatedAt) {
           const diasDesde = (Date.now() - new Date(processo.aiSummaryUpdatedAt).getTime()) / (1000 * 60 * 60 * 24);
           if (diasDesde < 7) {
-            return { summary: processo.aiSummary, fromCache: true };
+            return { requestId: null as string | null, fromCache: true, summary: processo.aiSummary };
           }
         }
-
-        // Solicitar nova análise à Judit IA
-        const summary = await solicitarAnaliseIA(input.cnj);
-        await updateAiSummary(input.cnj, summary);
-        return { summary, fromCache: false };
+        const requestId = await iniciarAnaliseIA(input.cnj);
+        return { requestId, fromCache: false, summary: null as string | null };
+      }),
+    // Verifica o status de uma análise IA em andamento
+    processoAnaliseIAStatus: protectedProcedure
+      .input(z.object({ cnj: z.string(), requestId: z.string() }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const result = await verificarAnaliseIA(input.requestId, input.cnj);
+        if (result.status === "completed" && result.summary) {
+          await updateAiSummary(input.cnj, result.summary);
+        }
+        return result;
       }),
 
     // Gerar planilha modelo para download (base64)

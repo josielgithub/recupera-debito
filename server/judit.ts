@@ -527,12 +527,10 @@ async function vincularClienteDoPayload(cnj: string, payload: unknown): Promise<
 
 // ─── Análise IA da Judit ──────────────────────────────────────────────────
 /**
- * Solicita uma análise IA (summary) para um processo via Judit IA.
- * Cria uma nova requisição com judit_ia: ["summary"], aguarda conclusão
- * (polling) e retorna o texto do resumo gerado.
+ * Cria uma requisição Judit IA e retorna o requestId imediatamente.
+ * O frontend faz polling via buscarResultadoAnaliseIA.
  */
-export async function solicitarAnaliseIA(cnj: string): Promise<string> {
-  // 1. Criar requisição com judit_ia: ["summary"]
+export async function iniciarAnaliseIA(cnj: string): Promise<string> {
   const data = await retryWithBackoff(
     () =>
       juditFetch("/requests", {
@@ -551,41 +549,49 @@ export async function solicitarAnaliseIA(cnj: string): Promise<string> {
 
   const requestId = data.request_id ?? data.id;
   if (!requestId) throw new Error(`[Judit IA] Resposta sem requestId para CNJ ${cnj}`);
-
   console.log(`[Judit IA] Requisição criada: requestId=${requestId} CNJ=${cnj}`);
+  return requestId;
+}
 
-  // 2. Polling até completar (máx 20 tentativas × 5s = 100s)
-  for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
-    await sleep(POLL_INTERVAL_MS);
-    const status = await verificarStatusRequisicao(requestId);
-    console.log(`[Judit IA] Poll ${attempt + 1}/${MAX_POLL_ATTEMPTS}: status=${status}`);
+/**
+ * Verifica o status de uma análise IA e retorna o resumo se pronto.
+ * Retorna { status: "pending" | "completed" | "error", summary?: string }
+ */
+export async function verificarAnaliseIA(
+  requestId: string,
+  cnj: string
+): Promise<{ status: "pending" | "completed" | "error"; summary?: string }> {
+  const reqStatus = await verificarStatusRequisicao(requestId);
+  console.log(`[Judit IA] Status requestId=${requestId}: ${reqStatus}`);
 
-    if (status === "completed") {
-      // 3. Buscar resultado — procurar o objeto com response_type = "ia"
-      const responseData = await retryWithBackoff(
-        () => juditFetch(`/responses?request_id=${requestId}`),
-        3,
-        `GET /responses (IA) requestId=${requestId}`
-      ) as { page_data?: unknown[] };
-
-      const pageData = responseData.page_data ?? [];
-      for (const entry of pageData) {
-        const e = entry as Record<string, unknown>;
-        if (e.response_type === "ia") {
-          const summary = e.response_data as string;
-          if (summary) {
-            console.log(`[Judit IA] Resumo obtido para CNJ=${cnj} (${summary.length} chars)`);
-            return summary;
-          }
-        }
-      }
-      throw new Error(`[Judit IA] Requisição completada mas sem objeto response_type=ia para CNJ=${cnj}`);
-    }
-
-    if (status === "error") {
-      throw new Error(`[Judit IA] Requisição retornou erro para CNJ=${cnj}`);
-    }
+  if (reqStatus === "processing") {
+    return { status: "pending" };
   }
 
-  throw new Error(`[Judit IA] Timeout aguardando análise IA para CNJ=${cnj}`);
+  if (reqStatus === "error") {
+    return { status: "error" };
+  }
+
+  if (reqStatus === "completed") {
+    const responseData = await retryWithBackoff(
+      () => juditFetch(`/responses?request_id=${requestId}`),
+      3,
+      `GET /responses (IA) requestId=${requestId}`
+    ) as { page_data?: unknown[] };
+
+    const pageData = responseData.page_data ?? [];
+    for (const entry of pageData) {
+      const e = entry as Record<string, unknown>;
+      if (e.response_type === "ia") {
+        const summary = e.response_data as string;
+        if (summary) {
+          console.log(`[Judit IA] Resumo obtido para CNJ=${cnj} (${summary.length} chars)`);
+          return { status: "completed", summary };
+        }
+      }
+    }
+    return { status: "error" };
+  }
+
+  return { status: "pending" };
 }

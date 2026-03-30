@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
@@ -445,17 +445,54 @@ function AnaliseIACard({
   const [summary, setSummary] = useStateIA<string | null>(aiSummaryInicial ?? null);
   const [updatedAt, setUpdatedAt] = useStateIA<string | null>(aiSummaryUpdatedAt ?? null);
   const [expandido, setExpandido] = useStateIA(!!aiSummaryInicial);
+  const [pollingRequestId, setPollingRequestId] = useStateIA<string | null>(null);
+  const [pollingError, setPollingError] = useStateIA<string | null>(null);
 
-  const analiseMutation = trpc.admin.processoAnaliseIA.useMutation({
-    onSuccess: (data) => {
-      setSummary(data.summary);
+  const utils = trpc.useUtils();
+
+  // Polling: verifica status a cada 5s enquanto pollingRequestId estiver definido
+  const { data: statusData } = trpc.admin.processoAnaliseIAStatus.useQuery(
+    { cnj, requestId: pollingRequestId ?? "" },
+    {
+      enabled: !!pollingRequestId,
+      refetchInterval: 5000,
+      refetchIntervalInBackground: true,
+    }
+  );
+
+  // Quando o status mudar para completed ou error, parar o polling
+  useEffect(() => {
+    if (!statusData) return;
+    if (statusData.status === "completed" && statusData.summary) {
+      setSummary(statusData.summary);
       setUpdatedAt(new Date().toISOString());
       setExpandido(true);
+      setPollingRequestId(null);
+      utils.admin.processoDetalhe.invalidate({ cnj });
+    } else if (statusData.status === "error") {
+      setPollingError("A Judit IA retornou um erro ao processar este processo.");
+      setPollingRequestId(null);
+    }
+  }, [statusData]);
+
+  const iniciarMutation = trpc.admin.processoAnaliseIAIniciar.useMutation({
+    onSuccess: (data) => {
+      if (data.fromCache && data.summary) {
+        setSummary(data.summary);
+        setUpdatedAt(new Date().toISOString());
+        setExpandido(true);
+      } else if (data.requestId) {
+        setPollingRequestId(data.requestId);
+        setPollingError(null);
+      }
+    },
+    onError: (err) => {
+      setPollingError(err.message);
     },
   });
 
-  const isLoading = analiseMutation.isPending;
-  const error = analiseMutation.error;
+  const isLoading = iniciarMutation.isPending || !!pollingRequestId;
+  const error = pollingError ? { message: pollingError } : iniciarMutation.error;
 
   return (
     <Card className="border-violet-200 dark:border-violet-800">
@@ -476,7 +513,7 @@ function AnaliseIACard({
               size="sm"
               variant={summary ? "outline" : "default"}
               className={summary ? "gap-1.5 text-xs h-7" : "gap-1.5 text-xs h-7 bg-violet-600 hover:bg-violet-700 text-white"}
-              onClick={() => analiseMutation.mutate({ cnj })}
+              onClick={() => iniciarMutation.mutate({ cnj })}
               disabled={isLoading}
             >
               {isLoading ? (

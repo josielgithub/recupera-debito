@@ -223,3 +223,7 @@
 ## Dev Auth Bypass
 
 - [x] Acesso à área admin sem login no ambiente de desenvolvimento (NODE_ENV !== production)
+
+## Bug: Timeout Análise IA
+
+- [x] Refatorar Análise IA para polling assíncrono (backend retorna requestId, frontend faz polling)
