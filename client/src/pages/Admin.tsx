@@ -845,7 +845,7 @@ export default function Admin() {
             </Alert>
             <Button
               className="w-full"
-              onClick={() => (window.location.href = getLoginUrl())}
+              onClick={() => (window.location.href = getLoginUrl("/admin"))}
             >
               Entrar com Manus
             </Button>

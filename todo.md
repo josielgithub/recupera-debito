@@ -214,3 +214,8 @@
 - [x] Botão "Gerar Análise IA" na página de detalhes do processo
 - [x] Renderizar o resumo Markdown retornado pela Judit IA
 - [x] Indicador de loading durante geração da análise
+
+## Bug: Login Admin Redireciona para Área do Cliente
+
+- [x] Diagnosticar fluxo OAuth: getLoginUrl() não preserva returnPath=/admin
+- [x] Corrigir redirecionamento pós-login para /admin quando usuário clica em "Admin"
