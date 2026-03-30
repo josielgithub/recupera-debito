@@ -583,7 +583,9 @@ export default function ProcessoDetalhe() {
     );
   }
 
-  const payload: JuditPayload = data.rawPayload ? JSON.parse(data.rawPayload as string) : {};
+  const payload: JuditPayload = data.rawPayload
+    ? (typeof data.rawPayload === "string" ? JSON.parse(data.rawPayload) : (data.rawPayload as unknown as JuditPayload))
+    : {};
   const requisicoes = (data as any).requisicoes ?? [];
 
   return (
