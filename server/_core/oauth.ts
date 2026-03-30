@@ -14,19 +14,8 @@ export function registerOAuthRoutes(app: Express) {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
 
-    console.log("[OAuth Callback] Query params:", JSON.stringify(req.query));
-    console.log("[OAuth Callback] code present:", !!code, "| state present:", !!state);
-    if (state) {
-      try {
-        const decoded = Buffer.from(state, "base64").toString("utf-8");
-        console.log("[OAuth Callback] decoded state:", decoded);
-      } catch (e) {
-        console.log("[OAuth Callback] could not decode state:", e);
-      }
-    }
-
     if (!code || !state) {
-      console.error("[OAuth Callback] Missing code or state — full query:", req.query);
+      console.error("[OAuth Callback] Missing code or state");
       res.status(400).json({ error: "code and state are required" });
       return;
     }
