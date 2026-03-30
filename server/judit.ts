@@ -524,3 +524,68 @@ async function vincularClienteDoPayload(cnj: string, payload: unknown): Promise<
     console.error(`[Judit] Erro ao vincular cliente para ${cnj}:`, err);
   }
 }
+
+// ─── Análise IA da Judit ──────────────────────────────────────────────────
+/**
+ * Solicita uma análise IA (summary) para um processo via Judit IA.
+ * Cria uma nova requisição com judit_ia: ["summary"], aguarda conclusão
+ * (polling) e retorna o texto do resumo gerado.
+ */
+export async function solicitarAnaliseIA(cnj: string): Promise<string> {
+  // 1. Criar requisição com judit_ia: ["summary"]
+  const data = await retryWithBackoff(
+    () =>
+      juditFetch("/requests", {
+        method: "POST",
+        body: JSON.stringify({
+          search: {
+            search_type: "lawsuit_cnj",
+            search_key: cnj,
+          },
+          judit_ia: ["summary"],
+        }),
+      }),
+    3,
+    `POST /requests (IA) CNJ=${cnj}`
+  ) as { request_id?: string; id?: string };
+
+  const requestId = data.request_id ?? data.id;
+  if (!requestId) throw new Error(`[Judit IA] Resposta sem requestId para CNJ ${cnj}`);
+
+  console.log(`[Judit IA] Requisição criada: requestId=${requestId} CNJ=${cnj}`);
+
+  // 2. Polling até completar (máx 20 tentativas × 5s = 100s)
+  for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+    await sleep(POLL_INTERVAL_MS);
+    const status = await verificarStatusRequisicao(requestId);
+    console.log(`[Judit IA] Poll ${attempt + 1}/${MAX_POLL_ATTEMPTS}: status=${status}`);
+
+    if (status === "completed") {
+      // 3. Buscar resultado — procurar o objeto com response_type = "ia"
+      const responseData = await retryWithBackoff(
+        () => juditFetch(`/responses?request_id=${requestId}`),
+        3,
+        `GET /responses (IA) requestId=${requestId}`
+      ) as { page_data?: unknown[] };
+
+      const pageData = responseData.page_data ?? [];
+      for (const entry of pageData) {
+        const e = entry as Record<string, unknown>;
+        if (e.response_type === "ia") {
+          const summary = e.response_data as string;
+          if (summary) {
+            console.log(`[Judit IA] Resumo obtido para CNJ=${cnj} (${summary.length} chars)`);
+            return summary;
+          }
+        }
+      }
+      throw new Error(`[Judit IA] Requisição completada mas sem objeto response_type=ia para CNJ=${cnj}`);
+    }
+
+    if (status === "error") {
+      throw new Error(`[Judit IA] Requisição retornou erro para CNJ=${cnj}`);
+    }
+  }
+
+  throw new Error(`[Judit IA] Timeout aguardando análise IA para CNJ=${cnj}`);
+}

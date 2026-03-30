@@ -96,6 +96,8 @@ export const processos = mysqlTable("processos", {
   fonteAtualizacao: mysqlEnum("fonte_atualizacao", ["judit"]).default("judit").notNull(),
   ultimaAtualizacaoApi: timestamp("ultima_atualizacao_api"),
   rawPayload: json("raw_payload"),
+  aiSummary: text("ai_summary"),
+  aiSummaryUpdatedAt: timestamp("ai_summary_updated_at"),
   semAtualizacao7dias: boolean("sem_atualizacao_7dias").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),

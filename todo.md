@@ -206,3 +206,11 @@
 - [x] Identificar campos de nome e CPF do cliente no payload Judit (parties[])
 - [x] Adaptar upsertProcesso para criar/vincular cliente automaticamente com dados da Judit
 - [x] Retroativamente popular tabela clientes a partir dos raw_payload existentes nos processos
+
+## Análise IA da Judit
+
+- [x] Endpoint backend para criar requisição Judit com judit_ia:["summary"] e aguardar/buscar resultado
+- [x] Salvar análise IA no banco de dados (campo ai_summary na tabela processos)
+- [x] Botão "Gerar Análise IA" na página de detalhes do processo
+- [x] Renderizar o resumo Markdown retornado pela Judit IA
+- [x] Indicador de loading durante geração da análise

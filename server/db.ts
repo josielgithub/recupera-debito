@@ -828,3 +828,16 @@ export async function vincularClienteAoProcesso(cnj: string, clienteId: number):
   if (!db) return;
   await db.update(processos).set({ clienteId }).where(eq(processos.cnj, cnj));
 }
+
+// ─── Análise IA (Judit IA) ─────────────────────────────────────────────────
+/**
+ * Salva o resumo gerado pela Judit IA no processo.
+ */
+export async function updateAiSummary(cnj: string, aiSummary: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(processos)
+    .set({ aiSummary, aiSummaryUpdatedAt: new Date() })
+    .where(eq(processos.cnj, cnj));
+}

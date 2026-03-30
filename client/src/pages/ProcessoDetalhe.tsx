@@ -30,7 +30,11 @@ import {
   ChevronUp,
   History,
   Info,
+  Sparkles,
+  Bot,
 } from "lucide-react";
+import { Streamdown } from "streamdown";
+import { useState as useStateIA } from "react";
 import { STATUS_RESUMIDO_LABELS, STATUS_CORES } from "@shared/const";
 
 // ─── Tipos do payload Judit ──────────────────────────────────────────────────
@@ -428,6 +432,119 @@ function MovimentacoesTimeline({ cnj }: { cnj: string }) {
   );
 }
 
+// ─── Componente de Análise IA ───────────────────────────────────────────────
+function AnaliseIACard({
+  cnj,
+  aiSummaryInicial,
+  aiSummaryUpdatedAt,
+}: {
+  cnj: string;
+  aiSummaryInicial?: string | null;
+  aiSummaryUpdatedAt?: string | null;
+}) {
+  const [summary, setSummary] = useStateIA<string | null>(aiSummaryInicial ?? null);
+  const [updatedAt, setUpdatedAt] = useStateIA<string | null>(aiSummaryUpdatedAt ?? null);
+  const [expandido, setExpandido] = useStateIA(!!aiSummaryInicial);
+
+  const analiseMutation = trpc.admin.processoAnaliseIA.useMutation({
+    onSuccess: (data) => {
+      setSummary(data.summary);
+      setUpdatedAt(new Date().toISOString());
+      setExpandido(true);
+    },
+  });
+
+  const isLoading = analiseMutation.isPending;
+  const error = analiseMutation.error;
+
+  return (
+    <Card className="border-violet-200 dark:border-violet-800">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Bot className="w-4 h-4 text-violet-500" />
+            <span>Análise IA</span>
+            <span className="text-xs font-normal text-muted-foreground bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 px-1.5 py-0.5 rounded-full">Beta</span>
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            {updatedAt && (
+              <span className="text-xs text-muted-foreground hidden sm:block">
+                Gerado em {formatDateTime(updatedAt)}
+              </span>
+            )}
+            <Button
+              size="sm"
+              variant={summary ? "outline" : "default"}
+              className={summary ? "gap-1.5 text-xs h-7" : "gap-1.5 text-xs h-7 bg-violet-600 hover:bg-violet-700 text-white"}
+              onClick={() => analiseMutation.mutate({ cnj })}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <><Loader2 className="w-3 h-3 animate-spin" /> Gerando análise...</>
+              ) : summary ? (
+                <><RefreshCw className="w-3 h-3" /> Regenerar</>
+              ) : (
+                <><Sparkles className="w-3 h-3" /> Gerar Análise IA</>
+              )}
+            </Button>
+            {summary && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setExpandido((v) => !v)}
+                className="h-7 w-7 p-0"
+              >
+                {expandido ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+
+      {expandido && summary && (
+        <CardContent>
+          <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed">
+            <Streamdown>{summary}</Streamdown>
+          </div>
+        </CardContent>
+      )}
+
+      {!summary && !isLoading && (
+        <CardContent>
+          <div className="flex flex-col items-center gap-3 py-6 text-center">
+            <Sparkles className="w-8 h-8 text-violet-400" />
+            <p className="text-sm text-muted-foreground">
+              Clique em <strong>Gerar Análise IA</strong> para obter um resumo inteligente deste processo gerado pela Judit IA.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              A análise inclui resumo das partes, classe, assuntos e cronologia das movimentações. Pode levar até 2 minutos.
+            </p>
+          </div>
+        </CardContent>
+      )}
+
+      {isLoading && (
+        <CardContent>
+          <div className="flex flex-col items-center gap-3 py-6 text-center">
+            <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
+            <p className="text-sm text-muted-foreground">Aguardando a Judit IA processar o resumo...</p>
+            <p className="text-xs text-muted-foreground">Isso pode levar até 2 minutos.</p>
+          </div>
+        </CardContent>
+      )}
+
+      {error && (
+        <CardContent>
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>Erro ao gerar análise: {error.message}</span>
+          </div>
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
 // ─── Componente principal ────────────────────────────────────────────────────
 export default function ProcessoDetalhe() {
   const params = useParams<{ cnj: string }>();
@@ -747,6 +864,9 @@ export default function ProcessoDetalhe() {
           )}
         </CardContent>
       </Card>
+
+      {/* Análise IA da Judit */}
+      <AnaliseIACard cnj={cnj} aiSummaryInicial={(data as any).aiSummary} aiSummaryUpdatedAt={(data as any).aiSummaryUpdatedAt} />
 
       {/* Payload bruto (expansível) */}
       <Card>

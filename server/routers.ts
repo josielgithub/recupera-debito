@@ -36,7 +36,9 @@ import {
   coletarResultadosPendentes,
   criarRequisicaoJudit,
   dispararAtualizacaoBackground,
+  solicitarAnaliseIA,
 } from "./judit";
+import { updateAiSummary } from "./db";
 import { createHash } from "crypto";
 import * as XLSX from "xlsx";
 
@@ -450,6 +452,28 @@ export const appRouter = router({
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
         const { steps, fromCache, requestId } = await buscarMovimentacoesJudit(input.cnj);
         return { steps, fromCache, requestId, total: steps.length };
+      }),
+
+    // Solicitar análise IA da Judit para um processo
+    processoAnaliseIA: protectedProcedure
+      .input(z.object({ cnj: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const processo = await getProcessoByCnj(input.cnj);
+        if (!processo) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+
+        // Se já tem resumo recente (menos de 7 dias), retornar do cache
+        if (processo.aiSummary && processo.aiSummaryUpdatedAt) {
+          const diasDesde = (Date.now() - new Date(processo.aiSummaryUpdatedAt).getTime()) / (1000 * 60 * 60 * 24);
+          if (diasDesde < 7) {
+            return { summary: processo.aiSummary, fromCache: true };
+          }
+        }
+
+        // Solicitar nova análise à Judit IA
+        const summary = await solicitarAnaliseIA(input.cnj);
+        await updateAiSummary(input.cnj, summary);
+        return { summary, fromCache: false };
       }),
 
     // Gerar planilha modelo para download (base64)
