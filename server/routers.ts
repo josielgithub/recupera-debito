@@ -32,6 +32,7 @@ import {
 import { processarPlanilha } from "./importacao";
 import {
   atualizarProcesso,
+  buscarESalvarProcessoJudit,
   buscarMovimentacoesJudit,
   coletarResultadosPendentes,
   criarRequisicaoJudit,
@@ -373,6 +374,25 @@ export const appRouter = router({
           return { ok: true, atualizado, processo };
         } catch (err) {
           return { ok: false, erro: String(err), atualizado: false, processo: null };
+        }
+      }),
+
+    // Busca CNJ na Judit e salva no banco (cria processo se não existir)
+    juditBuscarESalvarCnj: protectedProcedure
+      .input(z.object({ cnj: z.string().min(1) }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        try {
+          const resultado = await buscarESalvarProcessoJudit(input.cnj);
+          return {
+            ok: true,
+            atualizado: resultado.atualizado,
+            criado: resultado.criado,
+            notFound: resultado.notFound,
+            processo: resultado.processo,
+          };
+        } catch (err) {
+          return { ok: false, erro: String(err), atualizado: false, criado: false, notFound: false, processo: null };
         }
       }),
 

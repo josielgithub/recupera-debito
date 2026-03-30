@@ -1,0 +1,466 @@
+{
+  "query": "SELECT p.id, p.cnj, p.cliente_id, c.nome as cliente_nome FROM processos p LEFT JOIN clientes c ON p.cliente_id = c.id WHERE p.status_resumido = 'em_analise_inicial' ORDER BY p.id;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute SELECT p.id, p.cnj, p.cliente_id, c.nome as cliente_nome FROM processos p LEFT JOIN clientes c ON p.cliente_id = c.id WHERE p.status_resumido = 'em_analise_inicial' ORDER BY p.id;",
+  "rows": [
+    {
+      "id": "30200",
+      "cnj": "5000384-75.2025.8.08.0009",
+      "cliente_id": "90001",
+      "cliente_nome": "LUCELIA QUARESMA CAMPOS"
+    },
+    {
+      "id": "30201",
+      "cnj": "5000385-60.2025.8.08.0009",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30204",
+      "cnj": "0800238-58.2025.8.10.0065",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30205",
+      "cnj": "0801147-20.2025.8.10.0027",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30207",
+      "cnj": "0800897-54.2025.8.10.0037",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30208",
+      "cnj": "0800445-35.2025.8.10.0137",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30209",
+      "cnj": "0800452-61.2025.8.10.0061",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30210",
+      "cnj": "0800451-76.2025.8.10.0061",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30211",
+      "cnj": "0800756-23.2025.8.10.0138",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30212",
+      "cnj": "0800216-25.2025.8.10.0089",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30214",
+      "cnj": "0800937-11.2025.8.10.0110",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30216",
+      "cnj": "0800916-05.2025.8.10.0023",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30217",
+      "cnj": "0800835-79.2025.8.10.0080",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30219",
+      "cnj": "0801635-73.2025.8.10.0059",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30220",
+      "cnj": "0803072-70.2025.8.10.0053",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30224",
+      "cnj": "5000853-33.2025.8.13.0349",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30225",
+      "cnj": "5013722-67.2025.8.13.0433",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30226",
+      "cnj": "5014928-19.2025.8.13.0433",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30228",
+      "cnj": "5002674-27.2025.8.13.0073",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30229",
+      "cnj": "5002516-43.2025.8.13.0017",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30230",
+      "cnj": "5010617-97.2025.8.13.0525",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30231",
+      "cnj": "5004749-64.2025.8.13.0194",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30232",
+      "cnj": "5013462-59.2025.8.13.0313",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30233",
+      "cnj": "5000923-07.2025.8.13.0137",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30234",
+      "cnj": "0802039-41.2025.8.12.0101",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30236",
+      "cnj": "0800433-66.2025.8.12.0007",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30237",
+      "cnj": "0800571-21.2025.8.12.0011",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30238",
+      "cnj": "0800421-34.2025.8.12.0013",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30239",
+      "cnj": "0801755-40.2024.8.12.0013",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30243",
+      "cnj": "0801095-91.2025.8.12.0019",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30244",
+      "cnj": "0800130-50.2025.8.12.0040",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30246",
+      "cnj": "0800384-38.2025.8.12.0035",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30249",
+      "cnj": "0800142-82.2025.8.12.0034",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30251",
+      "cnj": "0800356-10.2025.8.12.0055",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30253",
+      "cnj": "0800518-46.2025.8.12.0009",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30257",
+      "cnj": "0811984-25.2025.8.12.0110",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30259",
+      "cnj": "0800990-29.2025.8.12.0015",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30262",
+      "cnj": "0800641-45.2025.8.12.0041",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30264",
+      "cnj": "0801567-98.2025.8.12.0114",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30267",
+      "cnj": "0800638-66.2025.8.12.0049",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30279",
+      "cnj": "0800425-03.2025.8.15.0041",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30280",
+      "cnj": "0803208-68.2025.8.15.0331",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30282",
+      "cnj": "0801002-39.2025.8.15.0151",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30283",
+      "cnj": "0800974-67.2026.8.15.0141",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30285",
+      "cnj": "0801404-58.2025.8.15.0301",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30286",
+      "cnj": "0802213-27.2025.8.15.0211",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30287",
+      "cnj": "0802322-16.2025.8.15.0381",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30288",
+      "cnj": "0000200-03.2025.8.17.3390",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30291",
+      "cnj": "0002076-44.2025.8.17.8223",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30292",
+      "cnj": "0014564-97.2025.8.17.8201",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30293",
+      "cnj": "0800936-70.2025.8.18.0088",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30294",
+      "cnj": "0800125-27.2025.8.18.0051",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30295",
+      "cnj": "0800126-12.2025.8.18.0051",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30296",
+      "cnj": "0802030-55.2025.8.18.0152",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30297",
+      "cnj": "0802478-80.2025.8.18.0167",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30298",
+      "cnj": "0802480-50.2025.8.18.0167",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30299",
+      "cnj": "0017897-83.2025.8.16.0021",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30300",
+      "cnj": "0000538-73.2025.8.16.0166",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30301",
+      "cnj": "0003600-24.2025.8.16.0069",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30304",
+      "cnj": "0016979-79.2025.8.16.0021",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30305",
+      "cnj": "0017917-74.2025.8.16.0021",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30307",
+      "cnj": "0001293-63.2025.8.16.0048",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30308",
+      "cnj": "0001294-48.2025.8.16.0048",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30309",
+      "cnj": "0001403-23.2025.8.16.0158",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30310",
+      "cnj": "0001581-13.2025.8.16.0209",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30311",
+      "cnj": "0001023-35.2025.8.16.0114",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30312",
+      "cnj": "0023145-32.2025.8.16.0182",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30315",
+      "cnj": "0001230-51.2025.8.16.0076",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30316",
+      "cnj": "0003092-31.2025.8.16.0117",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30317",
+      "cnj": "0003093-16.2025.8.16.0117",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30318",
+      "cnj": "0003094-98.2025.8.16.0117",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30336",
+      "cnj": "5000522-24.2025.8.24.0065",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30342",
+      "cnj": "5003046-74.2025.8.24.0103",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30344",
+      "cnj": "5002739-66.2025.8.24.0024",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30346",
+      "cnj": "5012096-76.2025.8.24.0022",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30352",
+      "cnj": "5035841-37.2025.8.24.0038",
+      "cliente_id": "NULL",
+      "cliente_nome": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tcnj\tcliente_id\tcliente_nome\n30200\t5000384-75.2025.8.08.0009\t90001\tLUCELIA QUARESMA CAMPOS\n30201\t5000385-60.2025.8.08.0009\tNULL\tNULL\n30204\t0800238-58.2025.8.10.0065\tNULL\tNULL\n30205\t0801147-20.2025.8.10.0027\tNULL\tNULL\n30207\t0800897-54.2025.8.10.0037\tNULL\tNULL\n30208\t0800445-35.2025.8.10.0137\tNULL\tNULL\n30209\t0800452-61.2025.8.10.0061\tNULL\tNULL\n30210\t0800451-76.2025.8.10.0061\tNULL\tNULL\n30211\t0800756-23.2025.8.10.0138\tNULL\tNULL\n30212\t0800216-25.2025.8.10.0089\tNULL\tNULL\n30214\t0800937-11.2025.8.10.0110\tNULL\tNULL\n30216\t0800916-05.2025.8.10.0023\tNULL\tNULL\n30217\t0800835-79.2025.8.10.0080\tNULL\tNULL\n30219\t0801635-73.2025.8.10.0059\tNULL\tNULL\n30220\t0803072-70.2025.8.10.0053\tNULL\tNULL\n30224\t5000853-33.2025.8.13.0349\tNULL\tNULL\n30225\t5013722-67.2025.8.13.0433\tNULL\tNULL\n30226\t5014928-19.2025.8.13.0433\tNULL\tNULL\n30228\t5002674-27.2025.8.13.0073\tNULL\tNULL\n30229\t5002516-43.2025.8.13.0017\tNULL\tNULL\n30230\t5010617-97.2025.8.13.0525\tNULL\tNULL\n30231\t5004749-64.2025.8.13.0194\tNULL\tNULL\n30232\t5013462-59.2025.8.13.0313\tNULL\tNULL\n30233\t5000923-07.2025.8.13.0137\tNULL\tNULL\n30234\t0802039-41.2025.8.12.0101\tNULL\tNULL\n30236\t0800433-66.2025.8.12.0007\tNULL\tNULL\n30237\t0800571-21.2025.8.12.0011\tNULL\tNULL\n30238\t0800421-34.2025.8.12.0013\tNULL\tNULL\n30239\t0801755-40.2024.8.12.0013\tNULL\tNULL\n30243\t0801095-91.2025.8.12.0019\tNULL\tNULL\n30244\t0800130-50.2025.8.12.0040\tNULL\tNULL\n30246\t0800384-38.2025.8.12.0035\tNULL\tNULL\n30249\t0800142-82.2025.8.12.0034\tNULL\tNULL\n30251\t0800356-10.2025.8.12.0055\tNULL\tNULL\n30253\t0800518-46.2025.8.12.0009\tNULL\tNULL\n30257\t0811984-25.2025.8.12.0110\tNULL\tNULL\n30259\t0800990-29.2025.8.12.0015\tNULL\tNULL\n30262\t0800641-45.2025.8.12.0041\tNULL\tNULL\n30264\t0801567-98.2025.8.12.0114\tNULL\tNULL\n30267\t0800638-66.2025.8.12.0049\tNULL\tNULL\n30279\t0800425-03.2025.8.15.0041\tNULL\tNULL\n30280\t0803208-68.2025.8.15.0331\tNULL\tNULL\n30282\t0801002-39.2025.8.15.0151\tNULL\tNULL\n30283\t0800974-67.2026.8.15.0141\tNULL\tNULL\n30285\t0801404-58.2025.8.15.0301\tNULL\tNULL\n30286\t0802213-27.2025.8.15.0211\tNULL\tNULL\n30287\t0802322-16.2025.8.15.0381\tNULL\tNULL\n30288\t0000200-03.2025.8.17.3390\tNULL\tNULL\n30291\t0002076-44.2025.8.17.8223\tNULL\tNULL\n30292\t0014564-97.2025.8.17.8201\tNULL\tNULL\n30293\t0800936-70.2025.8.18.0088\tNULL\tNULL\n30294\t0800125-27.2025.8.18.0051\tNULL\tNULL\n30295\t0800126-12.2025.8.18.0051\tNULL\tNULL\n30296\t0802030-55.2025.8.18.0152\tNULL\tNULL\n30297\t0802478-80.2025.8.18.0167\tNULL\tNULL\n30298\t0802480-50.2025.8.18.0167\tNULL\tNULL\n30299\t0017897-83.2025.8.16.0021\tNULL\tNULL\n30300\t0000538-73.2025.8.16.0166\tNULL\tNULL\n30301\t0003600-24.2025.8.16.0069\tNULL\tNULL\n30304\t0016979-79.2025.8.16.0021\tNULL\tNULL\n30305\t0017917-74.2025.8.16.0021\tNULL\tNULL\n30307\t0001293-63.2025.8.16.0048\tNULL\tNULL\n30308\t0001294-48.2025.8.16.0048\tNULL\tNULL\n30309\t0001403-23.2025.8.16.0158\tNULL\tNULL\n30310\t0001581-13.2025.8.16.0209\tNULL\tNULL\n30311\t0001023-35.2025.8.16.0114\tNULL\tNULL\n30312\t0023145-32.2025.8.16.0182\tNULL\tNULL\n30315\t0001230-51.2025.8.16.0076\tNULL\tNULL\n30316\t0003092-31.2025.8.16.0117\tNULL\tNULL\n30317\t0003093-16.2025.8.16.0117\tNULL\tNULL\n30318\t0003094-98.2025.8.16.0117\tNULL\tNULL\n30336\t5000522-24.2025.8.24.0065\tNULL\tNULL\n30342\t5003046-74.2025.8.24.0103\tNULL\tNULL\n30344\t5002739-66.2025.8.24.0024\tNULL\tNULL\n30346\t5012096-76.2025.8.24.0022\tNULL\tNULL\n30352\t5035841-37.2025.8.24.0038\tNULL\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 65
+}

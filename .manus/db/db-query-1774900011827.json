@@ -1,0 +1,15 @@
+{
+  "query": "\nSELECT p.parceiro_id, par.nome_escritorio, COUNT(*) as total \nFROM processos p \nJOIN parceiros par ON p.parceiro_id = par.id\nWHERE p.cnj LIKE '%.8.08.%'\nGROUP BY p.parceiro_id, par.nome_escritorio\nLIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute \nSELECT p.parceiro_id, par.nome_escritorio, COUNT(*) as total \nFROM processos p \nJOIN parceiros par ON p.parceiro_id = par.id\nWHERE p.cnj LIKE '%.8.08.%'\nGROUP BY p.parceiro_id, par.nome_escritorio\nLIMIT 5;\n",
+  "rows": [
+    {
+      "parceiro_id": "30198",
+      "nome_escritorio": "Recupera Debito",
+      "total": "3"
+    }
+  ],
+  "messages": [],
+  "stdout": "parceiro_id\tnome_escritorio\ttotal\n30198\tRecupera Debito\t3\n",
+  "stderr": "",
+  "execution_time_ms": 55
+}

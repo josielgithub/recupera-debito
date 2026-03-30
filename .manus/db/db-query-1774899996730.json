@@ -1,0 +1,90 @@
+{
+  "query": "SELECT id, nome_escritorio FROM parceiros ORDER BY id LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute SELECT id, nome_escritorio FROM parceiros ORDER BY id LIMIT 20;",
+  "rows": [
+    {
+      "id": "30198",
+      "nome_escritorio": "Recupera Debito"
+    },
+    {
+      "id": "30199",
+      "nome_escritorio": "Recupera Debito"
+    },
+    {
+      "id": "30200",
+      "nome_escritorio": "Recupera Debito"
+    },
+    {
+      "id": "30201",
+      "nome_escritorio": "Recupera Debito"
+    },
+    {
+      "id": "30202",
+      "nome_escritorio": "Recupera Debito"
+    },
+    {
+      "id": "30203",
+      "nome_escritorio": "Recupera Debito"
+    },
+    {
+      "id": "30204",
+      "nome_escritorio": "Recupera Debito"
+    },
+    {
+      "id": "30205",
+      "nome_escritorio": "Recupera Debito"
+    },
+    {
+      "id": "30206",
+      "nome_escritorio": "Recupera Debito"
+    },
+    {
+      "id": "30207",
+      "nome_escritorio": "Recupera Debito"
+    },
+    {
+      "id": "30208",
+      "nome_escritorio": "Recupera Debito"
+    },
+    {
+      "id": "30209",
+      "nome_escritorio": "Recupera Debito"
+    },
+    {
+      "id": "30210",
+      "nome_escritorio": "Recupera Debito"
+    },
+    {
+      "id": "30211",
+      "nome_escritorio": "Recupera Debito"
+    },
+    {
+      "id": "30212",
+      "nome_escritorio": "Recupera Debito"
+    },
+    {
+      "id": "30213",
+      "nome_escritorio": "Recupera Debito"
+    },
+    {
+      "id": "30214",
+      "nome_escritorio": "Recupera Debito"
+    },
+    {
+      "id": "30215",
+      "nome_escritorio": "Recupera Debito"
+    },
+    {
+      "id": "30216",
+      "nome_escritorio": "Recupera Debito"
+    },
+    {
+      "id": "30217",
+      "nome_escritorio": "Recupera Debito"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tnome_escritorio\n30198\tRecupera Debito\n30199\tRecupera Debito\n30200\tRecupera Debito\n30201\tRecupera Debito\n30202\tRecupera Debito\n30203\tRecupera Debito\n30204\tRecupera Debito\n30205\tRecupera Debito\n30206\tRecupera Debito\n30207\tRecupera Debito\n30208\tRecupera Debito\n30209\tRecupera Debito\n30210\tRecupera Debito\n30211\tRecupera Debito\n30212\tRecupera Debito\n30213\tRecupera Debito\n30214\tRecupera Debito\n30215\tRecupera Debito\n30216\tRecupera Debito\n30217\tRecupera Debito\n",
+  "stderr": "",
+  "execution_time_ms": 60
+}

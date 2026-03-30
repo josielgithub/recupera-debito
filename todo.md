@@ -227,3 +227,10 @@
 ## Bug: Timeout Análise IA
 
 - [x] Refatorar Análise IA para polling assíncrono (backend retorna requestId, frontend faz polling)
+
+## Salvar Processo Individual ao Buscar por CNJ
+
+- [x] Backend: nova procedure admin.juditBuscarESalvarCnj — busca CNJ na Judit e salva/atualiza no banco mesmo que não exista ainda
+- [x] Backend: criar cliente automaticamente a partir do payload (campo name) se não existir
+- [x] Frontend: atualizar PainelConsultaCnj para usar a nova procedure e exibir feedback de "salvo no banco"
+- [x] Testes: 22 testes passando, TypeScript sem erros

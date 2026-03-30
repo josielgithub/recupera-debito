@@ -818,6 +818,58 @@ export async function listLogsImportacao(limit = 20) {
   return db.select().from(logsImportacao).orderBy(desc(logsImportacao.createdAt)).limit(limit);
 }
 
+// ─── Criar ou atualizar processo a partir do payload Judit ──────────────────────
+/**
+ * Cria um novo processo no banco a partir dos dados retornados pela Judit,
+ * ou atualiza o payload/status se já existir.
+ * Retorna { id, criado: true/false }.
+ */
+export async function upsertProcessoFromJudit(
+  cnj: string,
+  statusResumido: StatusResumido,
+  statusOriginal: string,
+  payload: unknown,
+  requestId?: string
+): Promise<{ id: number; criado: boolean }> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  // Verificar se já existe
+  const existing = await db.select({ id: processos.id }).from(processos).where(eq(processos.cnj, cnj)).limit(1);
+
+  if (existing[0]) {
+    // Já existe — apenas atualiza payload e status
+    await db
+      .update(processos)
+      .set({
+        statusResumido,
+        statusOriginal,
+        ultimaAtualizacaoApi: new Date(),
+        rawPayload: payload as Record<string, unknown>,
+        semAtualizacao7dias: false,
+        ...(requestId ? { juditProcessId: requestId } : {}),
+      })
+      .where(eq(processos.cnj, cnj));
+    return { id: existing[0].id, criado: false };
+  }
+
+  // Não existe — criar novo processo
+  // clienteId é nullable no banco real; usamos 0 como placeholder e vinculamos depois
+  await db.insert(processos).values({
+    cnj,
+    statusResumido,
+    statusOriginal,
+    ultimaAtualizacaoApi: new Date(),
+    rawPayload: payload as Record<string, unknown>,
+    semAtualizacao7dias: false,
+    fonteAtualizacao: "judit",
+    ...(requestId ? { juditProcessId: requestId } : {}),
+  } as unknown as typeof processos.$inferInsert);
+
+  const result = await db.select({ id: processos.id }).from(processos).where(eq(processos.cnj, cnj)).limit(1);
+  return { id: result[0]!.id, criado: true };
+}
+
 // ─── Vincular cliente ao processo ─────────────────────────────────────────────
 /**
  * Atualiza o cliente_id de um processo pelo CNJ.

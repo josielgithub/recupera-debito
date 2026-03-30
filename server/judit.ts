@@ -17,6 +17,7 @@ import {
   updateProcessoStatus,
   upsertCliente,
   upsertJuditRequest,
+  upsertProcessoFromJudit,
   vincularClienteAoProcesso,
 } from "./db";
 import { StatusResumido } from "../drizzle/schema";
@@ -509,6 +510,75 @@ export async function buscarMovimentacoesJudit(cnj: string): Promise<{
   }
 
   return { steps: [], fromCache: false, requestId: completada.requestId };
+}
+
+// ─── Buscar na Judit e salvar no banco (cria se não existir) ─────────────────
+/**
+ * Consulta o CNJ na API Judit com polling e salva/atualiza o processo no banco.
+ * Se o processo não existir no banco, ele é criado automaticamente.
+ * Retorna { atualizado, criado, processo }.
+ */
+export async function buscarESalvarProcessoJudit(cnj: string): Promise<{
+  atualizado: boolean;
+  criado: boolean;
+  processo: Awaited<ReturnType<typeof getProcessoByCnj>>;
+  notFound: boolean;
+}> {
+  try {
+    const requestId = await criarRequisicaoJudit(cnj);
+
+    // Polling até completar
+    for (let i = 0; i < MAX_POLL_ATTEMPTS; i++) {
+      await sleep(POLL_INTERVAL_MS);
+      const status = await verificarStatusRequisicao(requestId);
+
+      if (status === "completed") {
+        const resultado = await obterResultadoJudit(requestId);
+
+        if (!resultado) {
+          await updateJuditRequestStatus(requestId, "completed");
+          const processo = await getProcessoByCnj(cnj);
+          return { atualizado: false, criado: false, processo, notFound: true };
+        }
+
+        // Verificar se é um erro LAWSUIT_NOT_FOUND
+        const r = resultado as Record<string, unknown>;
+        if (r.code === 2 || (typeof r.message === "string" && r.message.includes("NOT_FOUND"))) {
+          await updateJuditRequestStatus(requestId, "completed");
+          const processo = await getProcessoByCnj(cnj);
+          return { atualizado: false, criado: false, processo, notFound: true };
+        }
+
+        const { statusResumido, statusOriginal } = mapearStatusJudit(resultado);
+
+        // Criar ou atualizar processo no banco
+        const { criado } = await upsertProcessoFromJudit(cnj, statusResumido, statusOriginal, resultado, requestId);
+        await updateJuditRequestStatus(requestId, "completed");
+
+        // Extrair e vincular cliente
+        await vincularClienteDoPayload(cnj, resultado);
+
+        console.log(`[Judit] Processo ${cnj} ${criado ? "criado" : "atualizado"}: ${statusOriginal} → ${statusResumido}`);
+
+        const processo = await getProcessoByCnj(cnj);
+        return { atualizado: true, criado, processo, notFound: false };
+      }
+
+      if (status === "error") {
+        await updateJuditRequestStatus(requestId, "error");
+        const processo = await getProcessoByCnj(cnj);
+        return { atualizado: false, criado: false, processo, notFound: false };
+      }
+    }
+
+    // Timeout
+    const processo = await getProcessoByCnj(cnj);
+    return { atualizado: false, criado: false, processo, notFound: false };
+  } catch (error) {
+    console.error(`[Judit] Erro ao buscar/salvar processo ${cnj}:`, error);
+    const processo = await getProcessoByCnj(cnj);
+    return { atualizado: false, criado: false, processo, notFound: false };
+  }
 }
 
 // ─── Helper: extrair e vincular cliente do payload Judit ──────────────────

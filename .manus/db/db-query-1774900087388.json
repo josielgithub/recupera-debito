@@ -1,0 +1,19 @@
+{
+  "query": "\nSELECT p.id, p.cnj, p.status_resumido, p.status_original, p.parceiro_id, p.cliente_id, c.nome as cliente_nome\nFROM processos p\nLEFT JOIN clientes c ON p.cliente_id = c.id\nWHERE p.cnj = '5000384-75.2025.8.08.0009';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute \nSELECT p.id, p.cnj, p.status_resumido, p.status_original, p.parceiro_id, p.cliente_id, c.nome as cliente_nome\nFROM processos p\nLEFT JOIN clientes c ON p.cliente_id = c.id\nWHERE p.cnj = '5000384-75.2025.8.08.0009';\n",
+  "rows": [
+    {
+      "id": "30200",
+      "cnj": "5000384-75.2025.8.08.0009",
+      "status_resumido": "em_analise_inicial",
+      "status_original": "Não Informado",
+      "parceiro_id": "30198",
+      "cliente_id": "90001",
+      "cliente_nome": "LUCELIA QUARESMA CAMPOS"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tcnj\tstatus_resumido\tstatus_original\tparceiro_id\tcliente_id\tcliente_nome\n30200\t5000384-75.2025.8.08.0009\tem_analise_inicial\tNão Informado\t30198\t90001\tLUCELIA QUARESMA CAMPOS\n",
+  "stderr": "",
+  "execution_time_ms": 57
+}

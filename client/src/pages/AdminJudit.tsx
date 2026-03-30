@@ -318,24 +318,36 @@ function PainelConsultaCpf() {
   );
 }
 
-// ─── Painel: Consulta por CNJ ─────────────────────────────────────────────────
+// ─── Painel: Buscar e Salvar por CNJ ─────────────────────────────────────────────
 function PainelConsultaCnj() {
   const [cnj, setCnj] = useState("");
   const [resultado, setResultado] = useState<{
     atualizado: boolean;
+    criado: boolean;
+    notFound: boolean;
     processo: {
       cnj: string;
       statusResumido: string;
       statusOriginal: string | null;
       ultimaAtualizacaoApi: Date | string | null;
+      clienteNome: string | null;
     } | null;
   } | null>(null);
 
-  const consultar = trpc.admin.juditConsultarCnj.useMutation({
+  const consultar = trpc.admin.juditBuscarESalvarCnj.useMutation({
     onSuccess: (data) => {
       if (data.ok) {
-        setResultado({ atualizado: data.atualizado, processo: data.processo as typeof resultado extends null ? never : NonNullable<typeof resultado>["processo"] });
-        if (data.atualizado) {
+        setResultado({
+          atualizado: data.atualizado,
+          criado: data.criado,
+          notFound: data.notFound,
+          processo: data.processo as typeof resultado extends null ? never : NonNullable<typeof resultado>["processo"],
+        });
+        if (data.notFound) {
+          toast.warning("CNJ não encontrado na base da Judit. O processo não foi salvo.");
+        } else if (data.criado) {
+          toast.success("Processo criado e salvo no banco de dados com sucesso!");
+        } else if (data.atualizado) {
           toast.success("Processo atualizado com sucesso via Judit!");
         } else {
           toast.info("Requisição criada. O processo será atualizado quando a Judit processar.");
@@ -351,13 +363,14 @@ function PainelConsultaCnj() {
     <Card className="shadow-sm">
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          <Search className="w-4 h-4 text-primary" />
-          Consultar e Atualizar por CNJ
+          <Database className="w-4 h-4 text-primary" />
+          Buscar e Salvar Processo por CNJ
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-xs text-muted-foreground">
-          Cria uma requisição na Judit para o CNJ informado e aguarda o resultado (polling de até 100 segundos).
+          Consulta o CNJ na Judit e <strong>salva automaticamente no banco de dados</strong>.
+          Se o processo ainda não existir no sistema, ele será criado. Se já existir, será atualizado.
         </p>
         <div className="flex gap-2">
           <Input
@@ -373,34 +386,54 @@ function PainelConsultaCnj() {
             size="sm"
           >
             {consultar.isPending ? (
-              <><RefreshCw className="w-3.5 h-3.5 mr-2 animate-spin" /> Consultando...</>
+              <><RefreshCw className="w-3.5 h-3.5 mr-2 animate-spin" /> Buscando...</>
             ) : (
-              <><Zap className="w-3.5 h-3.5 mr-2" /> Consultar</>
+              <><Database className="w-3.5 h-3.5 mr-2" /> Buscar e Salvar</>
             )}
           </Button>
         </div>
 
-        {resultado && resultado.processo && (
+        {resultado && (
           <div className="border border-border rounded-lg p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <code className="text-xs font-mono">{resultado.processo.cnj}</code>
-              {resultado.atualizado ? (
-                <Badge className="bg-green-100 text-green-800 border-0 text-xs">
-                  <CheckCircle2 className="w-3 h-3 mr-1" /> Atualizado
-                </Badge>
-              ) : (
-                <Badge className="bg-yellow-100 text-yellow-800 border-0 text-xs">
-                  <Clock className="w-3 h-3 mr-1" /> Pendente
-                </Badge>
-              )}
-            </div>
-            <div className="text-xs text-muted-foreground space-y-1">
-              <p><strong>Status:</strong> <StatusBadge status={resultado.processo.statusResumido} /></p>
-              {resultado.processo.statusOriginal && (
-                <p><strong>Status Judit:</strong> {resultado.processo.statusOriginal}</p>
-              )}
-              <p><strong>Última atualização:</strong> {formatarData(resultado.processo.ultimaAtualizacaoApi)}</p>
-            </div>
+            {resultado.notFound ? (
+              <div className="flex items-center gap-2 text-yellow-700">
+                <AlertCircle className="w-4 h-4" />
+                <span className="text-xs font-medium">CNJ não encontrado na Judit — processo não salvo.</span>
+              </div>
+            ) : resultado.processo ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <code className="text-xs font-mono">{resultado.processo.cnj}</code>
+                  <div className="flex items-center gap-1.5">
+                    {resultado.criado && (
+                      <Badge className="bg-blue-100 text-blue-800 border-0 text-xs">
+                        <CheckCircle2 className="w-3 h-3 mr-1" /> Criado
+                      </Badge>
+                    )}
+                    {resultado.atualizado && !resultado.criado && (
+                      <Badge className="bg-green-100 text-green-800 border-0 text-xs">
+                        <CheckCircle2 className="w-3 h-3 mr-1" /> Atualizado
+                      </Badge>
+                    )}
+                    {!resultado.atualizado && !resultado.criado && (
+                      <Badge className="bg-yellow-100 text-yellow-800 border-0 text-xs">
+                        <Clock className="w-3 h-3 mr-1" /> Pendente
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <div className="text-xs text-muted-foreground space-y-1">
+                  {resultado.processo.clienteNome && (
+                    <p><strong>Cliente:</strong> {resultado.processo.clienteNome}</p>
+                  )}
+                  <p><strong>Status:</strong> <StatusBadge status={resultado.processo.statusResumido} /></p>
+                  {resultado.processo.statusOriginal && (
+                    <p><strong>Status Judit:</strong> {resultado.processo.statusOriginal}</p>
+                  )}
+                  <p><strong>Última atualização:</strong> {formatarData(resultado.processo.ultimaAtualizacaoApi)}</p>
+                </div>
+              </>
+            ) : null}
           </div>
         )}
       </CardContent>

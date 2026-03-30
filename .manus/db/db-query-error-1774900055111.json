@@ -1,0 +1,8 @@
+{
+  "query": "\nSELECT p.id, p.cnj, p.nome, p.status, p.fase, p.parceiro_id, p.cliente_id, c.nome as cliente_nome\nFROM processos p\nLEFT JOIN clientes c ON p.cliente_id = c.id\nWHERE p.cnj = '5000384-75.2025.8.08.0009';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute \nSELECT p.id, p.cnj, p.nome, p.status, p.fase, p.parceiro_id, p.cliente_id, c.nome as cliente_nome\nFROM processos p\nLEFT JOIN clientes c ON p.cliente_id = c.id\nWHERE p.cnj = '5000384-75.2025.8.08.0009';\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 2: Unknown column 'p.nome' in 'field list'"
+  ]
+}
