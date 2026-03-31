@@ -239,3 +239,11 @@
 
 - [x] Remover cron/setInterval e funções iniciarRotinaCron/pararRotinaCron do judit.ts
 - [x] Remover chamada iniciarRotinaCron e rotina setInterval do server/_core/index.ts
+
+## Seleção em Massa e Alteração de Status em Lote
+
+- [x] Backend: procedure admin.atualizarStatusEmLote(ids[], statusResumido)
+- [x] Frontend: checkbox em cada linha da tabela de processos
+- [x] Frontend: checkbox "selecionar todos" no cabeçalho da tabela
+- [x] Frontend: barra de ações ao selecionar processos (contador + dropdown de status + botão aplicar)
+- [x] Frontend: feedback visual (toast) com quantidade de processos atualizados

@@ -50,6 +50,8 @@ import {
   ArrowUpDown,
   Eye,
   ExternalLink,
+  ListChecks,
+  CheckSquare,
   Building2,
   MapPin,
   Scale,
@@ -60,6 +62,7 @@ import {
   Gavel,
 } from "lucide-react";
 import { STATUS_RESUMIDO_LABELS, STATUS_CORES } from "@shared/const";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
@@ -248,6 +251,9 @@ export default function AdminProcessos({ filtroStatusInicial }: { filtroStatusIn
   const [editando, setEditando] = useState<ProcessoRow | null>(null);
   const [novoStatus, setNovoStatus] = useState("");
   const [detalheCnj, setDetalheCnj] = useState<string | null>(null);
+  // Seleção em massa
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+  const [statusLote, setStatusLote] = useState("");
   const [ordenacao, setOrdenacao] = useState<{ col: OrderByColuna; dir: OrderDir }>({
     col: "updatedAt",
     dir: "desc",
@@ -279,6 +285,20 @@ export default function AdminProcessos({ filtroStatusInicial }: { filtroStatusIn
     orderDir: ordenacao.dir,
   });
 
+  const atualizarLoteMutation = trpc.admin.atualizarStatusEmLote.useMutation({
+    onSuccess: (res) => {
+      toast.success(
+        `${res.atualizados} processo${res.atualizados !== 1 ? "s" : ""} atualizado${res.atualizados !== 1 ? "s" : ""} com sucesso!${
+          res.erros > 0 ? ` (${res.erros} com erro)` : ""
+        }`
+      );
+      setSelecionados(new Set());
+      setStatusLote("");
+      refetch();
+    },
+    onError: (err) => toast.error(`Erro: ${err.message}`),
+  });
+
   const atualizarMutation = trpc.admin.atualizarStatusProcesso.useMutation({
     onSuccess: () => {
       toast.success("Status atualizado com sucesso!");
@@ -291,6 +311,39 @@ export default function AdminProcessos({ filtroStatusInicial }: { filtroStatusIn
   const processos = (data?.processos ?? []) as ProcessoRow[];
   const total = data?.total ?? 0;
   const totalPaginas = Math.ceil(total / 50);
+
+  // Helpers de seleção em massa
+  const todosSelecionados = processos.length > 0 && processos.every((p) => selecionados.has(p.cnj));
+  const algunsSelecionados = processos.some((p) => selecionados.has(p.cnj)) && !todosSelecionados;
+
+  function toggleTodos() {
+    if (todosSelecionados) {
+      setSelecionados((prev) => {
+        const next = new Set(prev);
+        processos.forEach((p) => next.delete(p.cnj));
+        return next;
+      });
+    } else {
+      setSelecionados((prev) => {
+        const next = new Set(prev);
+        processos.forEach((p) => next.add(p.cnj));
+        return next;
+      });
+    }
+  }
+
+  function toggleProcesso(cnj: string) {
+    setSelecionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(cnj)) next.delete(cnj); else next.add(cnj);
+      return next;
+    });
+  }
+
+  function aplicarLote() {
+    if (!statusLote || selecionados.size === 0) return;
+    atualizarLoteMutation.mutate({ cnjs: Array.from(selecionados), status: statusLote as any });
+  }
 
   const aplicarFiltros = useCallback(() => {
     setPagina(1);
@@ -524,10 +577,71 @@ export default function AdminProcessos({ filtroStatusInicial }: { filtroStatusIn
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+              {/* Barra de ações em massa */}
+              {selecionados.size > 0 && (
+                <div className="flex items-center gap-2 px-4 py-2.5 bg-primary/5 border-b border-primary/20 flex-wrap">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    <span>
+                      {selecionados.size} processo{selecionados.size !== 1 ? "s" : ""} selecionado{selecionados.size !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 ml-auto flex-wrap">
+                    <Select value={statusLote} onValueChange={setStatusLote}>
+                      <SelectTrigger className="h-7 text-xs w-52">
+                        <SelectValue placeholder="Selecionar novo status..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STATUS_OPTIONS.map(([value, label]) => (
+                          <SelectItem key={value} value={value} className="text-xs">{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs"
+                      disabled={!statusLote || atualizarLoteMutation.isPending}
+                      onClick={aplicarLote}
+                    >
+                      {atualizarLoteMutation.isPending ? (
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          Aplicando...
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1.5">
+                          <ListChecks className="w-3.5 h-3.5" />
+                          Aplicar a {selecionados.size}
+                        </span>
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-muted-foreground"
+                      onClick={() => { setSelecionados(new Set()); setStatusLote(""); }}
+                    >
+                      <X className="w-3.5 h-3.5 mr-1" />
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
+              <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/30">
+                    <TableHead className="w-10 pl-4">
+                      <Checkbox
+                        checked={todosSelecionados}
+                        ref={(el) => {
+                          if (el) (el as HTMLButtonElement & { indeterminate?: boolean }).indeterminate = algunsSelecionados;
+                        }}
+                        onCheckedChange={toggleTodos}
+                        aria-label="Selecionar todos na página"
+                      />
+                    </TableHead>
                     <SortableHead coluna="cnj" label="CNJ" ordenacao={ordenacao} onSort={handleSort} />
                     <SortableHead coluna="clienteNome" label="Cliente" ordenacao={ordenacao} onSort={handleSort} />
                     <SortableHead coluna="parceiroNome" label="Escritório" ordenacao={ordenacao} onSort={handleSort} />
@@ -538,8 +652,19 @@ export default function AdminProcessos({ filtroStatusInicial }: { filtroStatusIn
                 </TableHeader>
                 <TableBody>
                   {processos.map((p) => (
-                    <TableRow key={p.cnj} className="hover:bg-muted/20">
-                      <TableCell className="text-xs font-mono text-muted-foreground max-w-[160px] truncate">
+                    <TableRow
+                      key={p.cnj}
+                      className={`hover:bg-muted/20 transition-colors cursor-pointer ${selecionados.has(p.cnj) ? "bg-primary/5" : ""}`}
+                      onClick={() => toggleProcesso(p.cnj)}
+                    >
+                      <TableCell className="pl-4" onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selecionados.has(p.cnj)}
+                          onCheckedChange={() => toggleProcesso(p.cnj)}
+                          aria-label={`Selecionar processo ${p.cnj}`}
+                        />
+                      </TableCell>
+                      <TableCell className="text-xs font-mono text-muted-foreground max-w-[160px] truncate" onClick={(e) => e.stopPropagation()}>
                         {p.cnj}
                       </TableCell>
                       <TableCell className="text-xs">
@@ -594,7 +719,8 @@ export default function AdminProcessos({ filtroStatusInicial }: { filtroStatusIn
                   ))}
                 </TableBody>
               </Table>
-            </div>
+              </div>
+            </>
           )}
 
           {/* Paginação */}

@@ -237,6 +237,34 @@ export const appRouter = router({
         return { ok: true };
       }),
 
+    // Atualizar status de múltiplos processos em lote
+    atualizarStatusEmLote: protectedProcedure
+      .input(z.object({
+        cnjs: z.array(z.string()).min(1).max(500),
+        status: z.enum(STATUS_RESUMIDO),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        let atualizados = 0;
+        let erros = 0;
+        for (const cnj of input.cnjs) {
+          try {
+            const processo = await getProcessoByCnj(cnj);
+            if (!processo) { erros++; continue; }
+            await updateProcessoStatus(
+              cnj,
+              input.status as StatusResumido,
+              processo.statusOriginal ?? "",
+              processo.rawPayload
+            );
+            atualizados++;
+          } catch {
+            erros++;
+          }
+        }
+        return { atualizados, erros };
+      }),
+
     // Listar parceiros
     parceiros: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
