@@ -247,3 +247,16 @@
 - [x] Frontend: checkbox "selecionar todos" no cabeçalho da tabela
 - [x] Frontend: barra de ações ao selecionar processos (contador + dropdown de status + botão aplicar)
 - [x] Frontend: feedback visual (toast) com quantidade de processos atualizados
+
+## Limpeza de Escritórios Parceiros Duplicados
+
+- [x] Analisar padrão de duplicação na tabela parceiros
+- [x] Remover 325 duplicados do parceiro "Recupera Debito", mantendo apenas o id 30198
+- [x] Nenhum processo estava vinculado aos duplicados (parceiro_id > 30198 = 0 processos)
+- [x] Tabela parceiros agora tem apenas 1 registro
+
+## Correção: upsertParceiro sem duplicatas
+
+- [x] upsertParceiro já usa onDuplicateKeyUpdate corretamente (INSERT ... ON DUPLICATE KEY UPDATE)
+- [x] Constraint UNIQUE adicionada em nome_escritorio na tabela parceiros (migração aplicada)
+- [x] A constraint garante que futuras importações não criem duplicatas (banco rejeita automaticamente)

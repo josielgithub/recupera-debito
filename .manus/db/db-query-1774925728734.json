@@ -1,0 +1,19 @@
+{
+  "query": "\nSELECT COUNT(*) as total_parceiros FROM parceiros;\n\nSELECT id, nome_escritorio, whatsapp, email, created_at\nFROM parceiros\nORDER BY id\nLIMIT 10;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute \nSELECT COUNT(*) as total_parceiros FROM parceiros;\n\nSELECT id, nome_escritorio, whatsapp, email, created_at\nFROM parceiros\nORDER BY id\nLIMIT 10;\n",
+  "rows": [
+    {
+      "total_parceiros": "1"
+    },
+    {
+      "total_parceiros": "id\tnome_escritorio\twhatsapp\temail\tcreated_at"
+    },
+    {
+      "total_parceiros": "30198\tRecupera Debito\t(65) 99806-3157\tcontato@recuperadebito.com.br\t2026-03-27 18:23:24"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_parceiros\n1\nid\tnome_escritorio\twhatsapp\temail\tcreated_at\n30198\tRecupera Debito\t(65) 99806-3157\tcontato@recuperadebito.com.br\t2026-03-27 18:23:24\n",
+  "stderr": "",
+  "execution_time_ms": 65
+}

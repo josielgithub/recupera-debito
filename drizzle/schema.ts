@@ -28,7 +28,7 @@ export type InsertUser = typeof users.$inferInsert;
 // ─── Parceiros / Escritórios ───────────────────────────────────────────────
 export const parceiros = mysqlTable("parceiros", {
   id: int("id").autoincrement().primaryKey(),
-  nomeEscritorio: varchar("nome_escritorio", { length: 255 }).notNull(),
+  nomeEscritorio: varchar("nome_escritorio", { length: 255 }).notNull().unique(),
   whatsapp: varchar("whatsapp", { length: 30 }),
   email: varchar("email", { length: 320 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),

@@ -1,0 +1,13 @@
+{
+  "query": "\nSELECT COUNT(*) as processos_com_parceiro_duplicado\nFROM processos\nWHERE parceiro_id > 30198;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute \nSELECT COUNT(*) as processos_com_parceiro_duplicado\nFROM processos\nWHERE parceiro_id > 30198;\n",
+  "rows": [
+    {
+      "processos_com_parceiro_duplicado": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "processos_com_parceiro_duplicado\n0\n",
+  "stderr": "",
+  "execution_time_ms": 56
+}
