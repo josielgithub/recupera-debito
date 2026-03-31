@@ -445,54 +445,28 @@ function AnaliseIACard({
   const [summary, setSummary] = useStateIA<string | null>(aiSummaryInicial ?? null);
   const [updatedAt, setUpdatedAt] = useStateIA<string | null>(aiSummaryUpdatedAt ?? null);
   const [expandido, setExpandido] = useStateIA(!!aiSummaryInicial);
-  const [pollingRequestId, setPollingRequestId] = useStateIA<string | null>(null);
-  const [pollingError, setPollingError] = useStateIA<string | null>(null);
+  const [gerarError, setGerarError] = useStateIA<string | null>(null);
 
   const utils = trpc.useUtils();
 
-  // Polling: verifica status a cada 5s enquanto pollingRequestId estiver definido
-  const { data: statusData } = trpc.admin.processoAnaliseIAStatus.useQuery(
-    { cnj, requestId: pollingRequestId ?? "" },
-    {
-      enabled: !!pollingRequestId,
-      refetchInterval: 5000,
-      refetchIntervalInBackground: true,
-    }
-  );
-
-  // Quando o status mudar para completed ou error, parar o polling
-  useEffect(() => {
-    if (!statusData) return;
-    if (statusData.status === "completed" && statusData.summary) {
-      setSummary(statusData.summary);
-      setUpdatedAt(new Date().toISOString());
-      setExpandido(true);
-      setPollingRequestId(null);
-      utils.admin.processoDetalhe.invalidate({ cnj });
-    } else if (statusData.status === "error") {
-      setPollingError("A Judit IA retornou um erro ao processar este processo.");
-      setPollingRequestId(null);
-    }
-  }, [statusData]);
-
+  // LLM interno: resposta síncrona, sem polling
   const iniciarMutation = trpc.admin.processoAnaliseIAIniciar.useMutation({
     onSuccess: (data) => {
-      if (data.fromCache && data.summary) {
+      if (data.summary) {
         setSummary(data.summary);
         setUpdatedAt(new Date().toISOString());
         setExpandido(true);
-      } else if (data.requestId) {
-        setPollingRequestId(data.requestId);
-        setPollingError(null);
+        setGerarError(null);
+        utils.admin.processoDetalhe.invalidate({ cnj });
       }
     },
     onError: (err) => {
-      setPollingError(err.message);
+      setGerarError(err.message);
     },
   });
 
-  const isLoading = iniciarMutation.isPending || !!pollingRequestId;
-  const error = pollingError ? { message: pollingError } : iniciarMutation.error;
+  const isLoading = iniciarMutation.isPending;
+  const error = gerarError ? { message: gerarError } : iniciarMutation.error;
 
   return (
     <Card className="border-violet-200 dark:border-violet-800">
@@ -551,10 +525,10 @@ function AnaliseIACard({
           <div className="flex flex-col items-center gap-3 py-6 text-center">
             <Sparkles className="w-8 h-8 text-violet-400" />
             <p className="text-sm text-muted-foreground">
-              Clique em <strong>Gerar Análise IA</strong> para obter um resumo inteligente deste processo gerado pela Judit IA.
+              Clique em <strong>Gerar Resumo IA</strong> para obter um resumo inteligente deste processo gerado automaticamente.
             </p>
             <p className="text-xs text-muted-foreground">
-              A análise inclui resumo das partes, classe, assuntos e cronologia das movimentações. Pode levar até 2 minutos.
+              O resumo inclui situação atual, partes envolvidas, cronologia e perspectiva do processo. Gerado em segundos.
             </p>
           </div>
         </CardContent>
@@ -564,8 +538,8 @@ function AnaliseIACard({
         <CardContent>
           <div className="flex flex-col items-center gap-3 py-6 text-center">
             <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
-            <p className="text-sm text-muted-foreground">Aguardando a Judit IA processar o resumo...</p>
-            <p className="text-xs text-muted-foreground">Isso pode levar até 2 minutos.</p>
+            <p className="text-sm text-muted-foreground">Gerando resumo com IA...</p>
+            <p className="text-xs text-muted-foreground">Isso leva apenas alguns segundos.</p>
           </div>
         </CardContent>
       )}

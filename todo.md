@@ -260,3 +260,18 @@
 - [x] upsertParceiro já usa onDuplicateKeyUpdate corretamente (INSERT ... ON DUPLICATE KEY UPDATE)
 - [x] Constraint UNIQUE adicionada em nome_escritorio na tabela parceiros (migração aplicada)
 - [x] A constraint garante que futuras importações não criem duplicatas (banco rejeita automaticamente)
+
+## Análise IA Judit para Processos Inconclusivos
+
+- [ ] Disparar judit_ia:summary para os 38 processos arquivados inconclusivos
+- [ ] Aguardar processamento e coletar resultados
+- [ ] Reclassificar status (concluido_ganho / concluido_perdido / acordo_negociacao) com base no resumo IA
+
+## Resumo IA por Processo (LLM interno)
+
+- [ ] Banco: adicionar coluna `resumo_ia` (TEXT) e `resumo_ia_gerado_em` (BIGINT) na tabela `processos`
+- [ ] Backend: procedure `admin.gerarResumoIA(cnj)` — gera resumo via LLM com base nos dados do processo (partes, fase, movimentações, resultado)
+- [ ] Backend: retornar `resumo_ia` e `resumo_ia_gerado_em` no endpoint `admin.processoDetalhe`
+- [ ] Frontend: card "Resumo IA" na página de detalhes do processo com botão "Gerar Resumo"
+- [ ] Frontend: exibir resumo com markdown renderizado e data de geração
+- [ ] Frontend: botão "Regenerar" para atualizar o resumo existente

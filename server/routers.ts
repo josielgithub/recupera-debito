@@ -41,6 +41,7 @@ import {
   verificarAnaliseIA,
 } from "./judit";
 import { updateAiSummary } from "./db";
+import { invokeLLM } from "./_core/llm";
 import { createHash } from "crypto";
 import * as XLSX from "xlsx";
 
@@ -503,13 +504,14 @@ export const appRouter = router({
         return { steps, fromCache, requestId, total: steps.length };
       }),
 
-    // Inicia análise IA e retorna requestId imediatamente (sem esperar)
+    // Gera resumo IA do processo usando LLM interno (síncrono, sem polling)
     processoAnaliseIAIniciar: protectedProcedure
       .input(z.object({ cnj: z.string() }))
       .mutation(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
         const processo = await getProcessoByCnj(input.cnj);
         if (!processo) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+
         // Cache válido por 7 dias
         if (processo.aiSummary && processo.aiSummaryUpdatedAt) {
           const diasDesde = (Date.now() - new Date(processo.aiSummaryUpdatedAt).getTime()) / (1000 * 60 * 60 * 24);
@@ -517,19 +519,101 @@ export const appRouter = router({
             return { requestId: null as string | null, fromCache: true, summary: processo.aiSummary };
           }
         }
-        const requestId = await iniciarAnaliseIA(input.cnj);
-        return { requestId, fromCache: false, summary: null as string | null };
+
+        // Extrair dados do payload Judit
+        const payload = processo.rawPayload as Record<string, unknown> | null;
+        const rd = (payload as Record<string, unknown> | null);
+        const partes: string[] = [];
+        if (rd && Array.isArray(rd.parties)) {
+          for (const p of rd.parties as Record<string, unknown>[]) {
+            const nome = (p.name as string) ?? "";
+            const polo = (p.polarity as string) ?? "";
+            if (nome) partes.push(`${nome} (${polo === "active" ? "Polo Ativo" : polo === "passive" ? "Polo Passivo" : polo})`);
+          }
+        }
+        const steps: string[] = [];
+        if (rd && Array.isArray(rd.steps)) {
+          const allSteps = rd.steps as Record<string, unknown>[];
+          // Pegar as últimas 20 movimentações
+          const recentes = allSteps.slice(-20);
+          for (const s of recentes) {
+            const data = s.step_date ? new Date(s.step_date as string).toLocaleDateString("pt-BR") : "";
+            const conteudo = (s.content as string) ?? "";
+            if (conteudo) steps.push(`${data}: ${conteudo}`);
+          }
+        }
+        const lastStep = rd && typeof rd.last_step === "object" && rd.last_step
+          ? ((rd.last_step as Record<string, unknown>).content as string) ?? ""
+          : "";
+        const tribunal = (rd?.tribunal_acronym as string) ?? "";
+        const fase = (rd?.phase as string) ?? "";
+        const classe = (rd?.main_subject as string) ?? (rd?.class_code as string) ?? "";
+        const valor = (rd?.value as number) ?? null;
+        const statusLabel: Record<string, string> = {
+          concluido_ganho: "Ganho (Procedente)",
+          concluido_perdido: "Perdido (Improcedente)",
+          acordo_negociacao: "Acordo/Conciliação",
+          arquivado_encerrado: "Arquivado/Encerrado",
+          em_andamento: "Em Andamento",
+          cumprimento_de_sentenca: "Cumprimento de Sentença",
+          recurso: "Recurso",
+          em_analise_inicial: "Em Análise Inicial",
+          protocolado: "Protocolado",
+          suspenso: "Suspenso",
+          sem_atualizacao: "Sem Atualização",
+          outros: "Outros",
+        };
+        const statusTexto = statusLabel[processo.statusResumido ?? ""] ?? processo.statusResumido ?? "Desconhecido";
+
+        const prompt = `Você é um assistente jurídico especializado em direito do consumidor e processos cíveis.
+Gere um resumo executivo claro e objetivo do processo judicial abaixo, em português brasileiro.
+
+**Dados do Processo:**
+- CNJ: ${processo.cnj}
+- Tribunal: ${tribunal || "Não informado"}
+- Fase atual: ${fase || "Não informada"}
+- Classe/Assunto: ${classe || "Não informado"}
+- Valor da causa: ${valor ? `R$ ${valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "Não informado"}
+- Status no sistema: ${statusTexto}
+- Cliente: ${processo.clienteNome ?? "Não vinculado"}
+- Advogado: ${processo.advogado ?? "Não informado"}
+
+**Partes:**
+${partes.length > 0 ? partes.join("\n") : "Não disponível"}
+
+**Últimas movimentações (cronológica):**
+${steps.length > 0 ? steps.join("\n") : "Não disponível"}
+
+**Última movimentação registrada:** ${lastStep || "Não disponível"}
+
+Gere o resumo com as seguintes seções em Markdown:
+1. **Situação Atual** — status atual e fase do processo
+2. **Partes Envolvidas** — quem é o autor e o réu
+3. **Cronologia Resumida** — principais eventos em ordem cronológica (máximo 5 pontos)
+4. **Perspectiva** — análise objetiva das chances ou desfecho já ocorrido
+
+Seja conciso, direto e use linguagem acessível (não excessivamente técnica).`;
+
+        const response = await invokeLLM({
+          messages: [
+            { role: "system", content: "Você é um assistente jurídico especializado em análise de processos judiciais brasileiros. Responda sempre em português brasileiro com linguagem clara e objetiva." },
+            { role: "user", content: prompt },
+          ],
+        });
+
+        const rawContent = response.choices?.[0]?.message?.content;
+        const summary = typeof rawContent === "string" ? rawContent : "Não foi possível gerar o resumo.";
+
+        await updateAiSummary(input.cnj, summary);
+        return { requestId: null as string | null, fromCache: false, summary };
       }),
-    // Verifica o status de uma análise IA em andamento
+
+    // Mantido por compatibilidade (não é mais usado com LLM interno)
     processoAnaliseIAStatus: protectedProcedure
       .input(z.object({ cnj: z.string(), requestId: z.string() }))
       .query(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
-        const result = await verificarAnaliseIA(input.requestId, input.cnj);
-        if (result.status === "completed" && result.summary) {
-          await updateAiSummary(input.cnj, result.summary);
-        }
-        return result;
+        return { status: "completed" as const, summary: null as string | null };
       }),
 
     // Gerar planilha modelo para download (base64)
