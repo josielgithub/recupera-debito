@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE `import_jobs` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`nome_arquivo` varchar(255),\n\t`total_linhas` int NOT NULL DEFAULT 0,\n\t`linhas_importadas` int NOT NULL DEFAULT 0,\n\t`linhas_erro` int NOT NULL DEFAULT 0,\n\t`linhas_conciliadas` int NOT NULL DEFAULT 0,\n\t`linhas_nao_encontradas` int NOT NULL DEFAULT 0,\n\t`status` enum('importando','conciliando','concluido','erro') NOT NULL DEFAULT 'importando',\n\t`detalhes` json,\n\t`created_at` timestamp NOT NULL DEFAULT (now()),\n\t`updated_at` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `import_jobs_id` PRIMARY KEY(`id`)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute CREATE TABLE `import_jobs` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`nome_arquivo` varchar(255),\n\t`total_linhas` int NOT NULL DEFAULT 0,\n\t`linhas_importadas` int NOT NULL DEFAULT 0,\n\t`linhas_erro` int NOT NULL DEFAULT 0,\n\t`linhas_conciliadas` int NOT NULL DEFAULT 0,\n\t`linhas_nao_encontradas` int NOT NULL DEFAULT 0,\n\t`status` enum('importando','conciliando','concluido','erro') NOT NULL DEFAULT 'importando',\n\t`detalhes` json,\n\t`created_at` timestamp NOT NULL DEFAULT (now()),\n\t`updated_at` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `import_jobs_id` PRIMARY KEY(`id`)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 200
+}

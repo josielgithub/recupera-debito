@@ -283,3 +283,26 @@
 - [x] Backend: procedure admin.atualizarValorObtido — atualização manual do valor
 - [x] Frontend: card "Valor Obtido" na ficha do processo com botão "Extrair via IA" e campo editável
 - [ ] Frontend: exibir valor_obtido no dashboard de resultados (pendente)
+
+## Importação via Planilha com Conciliação Judit
+
+- [ ] Backend: endpoint multipart para upload de planilha (.xlsx/.csv)
+- [ ] Backend: parsing da planilha (colunas: CNJ, nome cliente, nome advogado, escritório)
+- [ ] Backend: criar cliente, advogado e processo no banco para cada linha
+- [ ] Backend: tabela import_jobs para rastrear o progresso da importação
+- [ ] Backend: fila de conciliação Judit — buscar cada CNJ e atualizar dados do processo
+- [ ] Frontend: página de importação com drag-and-drop de arquivo
+- [ ] Frontend: preview das linhas antes de confirmar importação
+- [ ] Frontend: barra de progresso em tempo real da conciliação Judit
+- [ ] Frontend: relatório final com sucesso/erro por linha
+
+## Importação via Planilha com Conciliação Judit
+
+- [x] Banco: tabela import_jobs para rastrear progresso da conciliação Judit em tempo real
+- [x] Backend: serviço importacaoSimples.ts com parsing das 4 colunas (cnj, nome_cliente, advogado, escritorio)
+- [x] Backend: procedure admin.importarPlanilhaSimples — importa e dispara conciliação Judit em background
+- [x] Backend: procedure admin.importJobStatus — polling do progresso em tempo real
+- [x] Backend: procedure admin.listarImportJobs — histórico de importações
+- [x] Backend: procedure admin.gerarPlanilhaModeloSimples — modelo com 4 colunas
+- [x] Frontend: nova aba "Importar + Judit" no Admin com drag-and-drop, barra de progresso e relatório final
+- [x] Frontend: histórico de importações anteriores com status e contadores

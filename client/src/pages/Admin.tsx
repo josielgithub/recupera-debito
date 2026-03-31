@@ -45,6 +45,7 @@ import AdminParceiros from "./AdminParceiros";
 import AdminConfig from "./AdminConfig";
 import AdminHistorico from "./AdminHistorico";
 import AdminJudit from "./AdminJudit";
+import AdminImportacaoSimples from "./AdminImportacaoSimples";
 
 import {
   BarChart,
@@ -934,6 +935,10 @@ export default function Admin() {
               <Building2 className="w-3.5 h-3.5" />
               Escritórios
             </TabsTrigger>
+            <TabsTrigger value="importacao-simples" className="flex items-center gap-1.5 text-xs">
+              <Zap className="w-3.5 h-3.5" />
+              Importar + Judit
+            </TabsTrigger>
             <TabsTrigger value="importacao" className="flex items-center gap-1.5 text-xs">
               <Upload className="w-3.5 h-3.5" />
               Importação
@@ -955,6 +960,7 @@ export default function Admin() {
           <TabsContent value="dashboard"><DashboardView onVerStatus={handleVerStatus} /></TabsContent>
           <TabsContent value="processos"><AdminProcessos filtroStatusInicial={filtroStatusProcessos} key={filtroStatusProcessos ?? "all"} /></TabsContent>
           <TabsContent value="parceiros"><AdminParceiros /></TabsContent>
+          <TabsContent value="importacao-simples"><AdminImportacaoSimples /></TabsContent>
           <TabsContent value="importacao"><ImportacaoView /></TabsContent>
           <TabsContent value="logs"><AdminHistorico /></TabsContent>
           <TabsContent value="judit"><AdminJudit /></TabsContent>

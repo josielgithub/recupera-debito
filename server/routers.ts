@@ -30,6 +30,7 @@ import {
   listAllJuditRequestsByCnj,
 } from "./db";
 import { processarPlanilha } from "./importacao";
+import { importarPlanilhaSimples, conciliarComJuditBackground } from "./importacaoSimples";
 import {
   atualizarProcesso,
   buscarESalvarProcessoJudit,
@@ -40,7 +41,7 @@ import {
   iniciarAnaliseIA,
   verificarAnaliseIA,
 } from "./judit";
-import { updateAiSummary, updateValorObtido } from "./db";
+import { updateAiSummary, updateValorObtido, getImportJob, listImportJobs } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { createHash } from "crypto";
 import * as XLSX from "xlsx";
@@ -698,6 +699,70 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         await updateValorObtido(input.cnj, input.valorObtido);
         return { ok: true };
       }),
+
+    // Importar planilha simplificada (CNJ, nome_cliente, advogado, escritorio) + conciliar Judit
+    importarPlanilhaSimples: protectedProcedure
+      .input(z.object({
+        fileBase64: z.string(),
+        nomeArquivo: z.string(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const buffer = Buffer.from(input.fileBase64, "base64");
+        const resultado = await importarPlanilhaSimples(buffer, input.nomeArquivo);
+
+        // Disparar conciliação Judit em background (não bloqueia a resposta)
+        const cnjsOk = resultado.detalhes
+          .filter((d) => d.status === "importado")
+          .map((d) => d.cnj);
+
+        if (cnjsOk.length > 0) {
+          // Executar em background sem await
+          conciliarComJuditBackground(resultado.jobId, cnjsOk).catch((err) =>
+            console.error("[ImportJob] Erro na conciliação background:", err)
+          );
+        }
+
+        return {
+          jobId: resultado.jobId,
+          totalLinhas: resultado.totalLinhas,
+          linhasOk: resultado.linhasOk,
+          linhasErro: resultado.linhasErro,
+          detalhes: resultado.detalhes,
+        };
+      }),
+
+    // Consultar progresso de um job de importação
+    importJobStatus: protectedProcedure
+      .input(z.object({ jobId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const job = await getImportJob(input.jobId);
+        if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "Job não encontrado" });
+        return job;
+      }),
+
+    // Listar histórico de jobs de importação simplificada
+    listarImportJobs: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return listImportJobs(30);
+    }),
+
+    // Gerar planilha modelo simplificada para download
+    gerarPlanilhaModeloSimples: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      const wb = XLSX.utils.book_new();
+      const dados = [
+        ["cnj", "nome_cliente", "advogado", "escritorio"],
+        ["0000001-02.2023.8.26.0001", "Maria da Silva", "Dr. João Santos", "Escritório Exemplo"],
+        ["0000002-03.2023.8.26.0001", "Carlos Oliveira", "Dra. Ana Lima", "Escritório Exemplo"],
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(dados);
+      ws["!cols"] = [{ wch: 30 }, { wch: 30 }, { wch: 25 }, { wch: 30 }];
+      XLSX.utils.book_append_sheet(wb, ws, "Processos");
+      const buf = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+      return { base64: buf as string, filename: "modelo_importacao_simples.xlsx" };
+    }),
 
     // Gerar planilha modelo para download (base64)
     gerarPlanilhaModelo: protectedProcedure.query(async ({ ctx }) => {

@@ -135,7 +135,24 @@ export const rateLimits = mysqlTable("rate_limits", {
 export type RateLimit = typeof rateLimits.$inferSelect;
 export type InsertRateLimit = typeof rateLimits.$inferInsert;
 
-// ─── Logs de Importação ────────────────────────────────────────────────────
+/// ─── Import Jobs (conciliação Judit) ───────────────────────────────────────
+export const importJobs = mysqlTable("import_jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  nomeArquivo: varchar("nome_arquivo", { length: 255 }),
+  totalLinhas: int("total_linhas").default(0).notNull(),
+  linhasImportadas: int("linhas_importadas").default(0).notNull(),
+  linhasErro: int("linhas_erro").default(0).notNull(),
+  linhasConciliadas: int("linhas_conciliadas").default(0).notNull(),
+  linhasNaoEncontradas: int("linhas_nao_encontradas").default(0).notNull(),
+  status: mysqlEnum("status", ["importando", "conciliando", "concluido", "erro"]).default("importando").notNull(),
+  detalhes: json("detalhes"), // array de { linha, cnj, status, erro }
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+export type ImportJob = typeof importJobs.$inferSelect;
+export type InsertImportJob = typeof importJobs.$inferInsert;
+
+// ─── Logs de Importação ──────────────────────────────────────────────
 export const logsImportacao = mysqlTable("logs_importacao", {
   id: int("id").autoincrement().primaryKey(),
   nomeArquivo: varchar("nome_arquivo", { length: 255 }),

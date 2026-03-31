@@ -16,6 +16,7 @@ import {
   clientes,
   juditRequests,
   logsConsulta,
+  importJobs,
   logsImportacao,
   parceiros,
   processos,
@@ -905,4 +906,43 @@ export async function updateValorObtido(cnj: string, valorObtido: number | null)
       valorObtidoUpdatedAt: new Date(),
     })
     .where(eq(processos.cnj, cnj));
+}
+
+// ─── Import Jobs ────────────────────────────────────────────────────────────
+export async function criarImportJob(nomeArquivo: string, totalLinhas: number): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(importJobs).values({
+    nomeArquivo,
+    totalLinhas,
+    status: "importando",
+    detalhes: [],
+  });
+  return (result as unknown as { insertId: number }).insertId;
+}
+
+export async function getImportJob(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(importJobs).where(eq(importJobs.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function updateImportJob(id: number, data: Partial<{
+  linhasImportadas: number;
+  linhasErro: number;
+  linhasConciliadas: number;
+  linhasNaoEncontradas: number;
+  status: "importando" | "conciliando" | "concluido" | "erro";
+  detalhes: unknown[];
+}>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(importJobs).set(data).where(eq(importJobs.id, id));
+}
+
+export async function listImportJobs(limit = 20) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(importJobs).orderBy(desc(importJobs.createdAt)).limit(limit);
 }
