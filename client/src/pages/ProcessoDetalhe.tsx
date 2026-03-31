@@ -432,7 +432,158 @@ function MovimentacoesTimeline({ cnj }: { cnj: string }) {
   );
 }
 
-// ─── Componente de Análise IA ───────────────────────────────────────────────
+/// ─── Componente de Valor Obtido ───────────────────────────────────────────
+function ValorObtidoCard({
+  cnj,
+  valorInicial,
+  valorUpdatedAt,
+}: {
+  cnj: string;
+  valorInicial?: string | number | null;
+  valorUpdatedAt?: string | null;
+}) {
+  const utils = trpc.useUtils();
+  const [editando, setEditando] = useStateIA(false);
+  const [inputValor, setInputValor] = useStateIA("");
+  const [iaFonte, setIaFonte] = useStateIA<string | null>(null);
+  const [iaConfianca, setIaConfianca] = useStateIA<string | null>(null);
+
+  const valorAtual = valorInicial != null ? Number(valorInicial) : null;
+
+  const extrairMutation = trpc.admin.extrairValorObtidoIA.useMutation({
+    onSuccess: (data) => {
+      setIaFonte(data.fonte);
+      setIaConfianca(data.confianca);
+      if (data.valor !== null) {
+        setInputValor(String(data.valor));
+      }
+      utils.admin.processoDetalhe.invalidate({ cnj });
+    },
+  });
+
+  const salvarMutation = trpc.admin.atualizarValorObtido.useMutation({
+    onSuccess: () => {
+      setEditando(false);
+      setIaFonte(null);
+      setIaConfianca(null);
+      utils.admin.processoDetalhe.invalidate({ cnj });
+    },
+  });
+
+  const handleSalvar = () => {
+    const num = parseFloat(inputValor.replace(",", "."));
+    salvarMutation.mutate({ cnj, valorObtido: isNaN(num) ? null : num });
+  };
+
+  const handleLimpar = () => {
+    salvarMutation.mutate({ cnj, valorObtido: null });
+    setInputValor("");
+  };
+
+  const confiancaColor = iaConfianca === "alta" ? "text-green-600" : iaConfianca === "media" ? "text-amber-600" : "text-red-500";
+
+  return (
+    <Card className="border-emerald-200 dark:border-emerald-800">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <DollarSign className="w-4 h-4 text-emerald-600" />
+            Valor Obtido
+            {valorAtual !== null && (
+              <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 ml-1">
+                {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(valorAtual)}
+              </Badge>
+            )}
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs h-7 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+              onClick={() => extrairMutation.mutate({ cnj })}
+              disabled={extrairMutation.isPending}
+            >
+              {extrairMutation.isPending ? (
+                <><Loader2 className="w-3 h-3 animate-spin" /> Extraindo...</>
+              ) : (
+                <><Sparkles className="w-3 h-3" /> Extrair via IA</>
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-xs h-7"
+              onClick={() => { setEditando((v) => !v); setInputValor(valorAtual !== null ? String(valorAtual) : ""); }}
+            >
+              {editando ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              {editando ? "Fechar" : "Editar"}
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Sugestão da IA */}
+        {iaFonte && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30 p-3 space-y-1">
+            <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
+              Sugestão da IA{" "}
+              <span className={`font-semibold ${confiancaColor}`}>
+                (confiança: {iaConfianca})
+              </span>
+            </p>
+            <p className="text-xs text-emerald-700 dark:text-emerald-400">{iaFonte}</p>
+            {inputValor && (
+              <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+                Valor sugerido: R$ {parseFloat(inputValor.replace(",", ".")).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              </p>
+            )}
+          </div>
+        )}
+        {/* Campo de edição manual */}
+        {editando && (
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">R$</span>
+              <Input
+                className="pl-9"
+                placeholder="0,00"
+                value={inputValor}
+                onChange={(e) => setInputValor(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSalvar()}
+              />
+            </div>
+            <Button size="sm" onClick={handleSalvar} disabled={salvarMutation.isPending} className="bg-emerald-600 hover:bg-emerald-700">
+              {salvarMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Salvar"}
+            </Button>
+            {valorAtual !== null && (
+              <Button size="sm" variant="outline" onClick={handleLimpar} disabled={salvarMutation.isPending} className="text-red-600 border-red-300 hover:bg-red-50">
+                Limpar
+              </Button>
+            )}
+          </div>
+        )}
+        {/* Estado vazio */}
+        {valorAtual === null && !editando && !extrairMutation.isPending && !iaFonte && (
+          <p className="text-sm text-muted-foreground py-2">
+            Nenhum valor registrado. Use <strong>Extrair via IA</strong> para detectar automaticamente ou <strong>Editar</strong> para inserir manualmente.
+          </p>
+        )}
+        {valorAtual !== null && !editando && (
+          <div className="text-xs text-muted-foreground">
+            Registrado em {valorUpdatedAt ? new Date(valorUpdatedAt).toLocaleDateString("pt-BR") : "data desconhecida"}
+          </div>
+        )}
+        {(extrairMutation.error || salvarMutation.error) && (
+          <p className="text-xs text-destructive">
+            {extrairMutation.error?.message ?? salvarMutation.error?.message}
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Componente de Análise IA ──────────────────────────────────────────────
 function AnaliseIACard({
   cnj,
   aiSummaryInicial,
@@ -877,6 +1028,9 @@ export default function ProcessoDetalhe() {
           )}
         </CardContent>
       </Card>
+
+      {/* Valor Obtido */}
+      <ValorObtidoCard cnj={cnj} valorInicial={(data as any).valorObtido} valorUpdatedAt={(data as any).valorObtidoUpdatedAt} />
 
       {/* Análise IA da Judit */}
       <AnaliseIACard cnj={cnj} aiSummaryInicial={(data as any).aiSummary} aiSummaryUpdatedAt={(data as any).aiSummaryUpdatedAt} />

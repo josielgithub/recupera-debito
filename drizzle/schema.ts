@@ -1,5 +1,6 @@
 import {
   boolean,
+  decimal,
   int,
   json,
   mysqlEnum,
@@ -98,6 +99,8 @@ export const processos = mysqlTable("processos", {
   rawPayload: json("raw_payload"),
   aiSummary: text("ai_summary"),
   aiSummaryUpdatedAt: timestamp("ai_summary_updated_at"),
+  valorObtido: decimal("valor_obtido", { precision: 15, scale: 2 }),
+  valorObtidoUpdatedAt: timestamp("valor_obtido_updated_at"),
   semAtualizacao7dias: boolean("sem_atualizacao_7dias").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),

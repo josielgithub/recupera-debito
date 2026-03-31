@@ -275,3 +275,11 @@
 - [ ] Frontend: card "Resumo IA" na página de detalhes do processo com botão "Gerar Resumo"
 - [ ] Frontend: exibir resumo com markdown renderizado e data de geração
 - [ ] Frontend: botão "Regenerar" para atualizar o resumo existente
+
+## Campo valor_obtido por Processo
+
+- [x] Banco: coluna valor_obtido (decimal 15,2, nullable) adicionada na tabela processos
+- [x] Backend: procedure admin.extrairValorObtidoIA — usa LLM para extrair valor das movimentações
+- [x] Backend: procedure admin.atualizarValorObtido — atualização manual do valor
+- [x] Frontend: card "Valor Obtido" na ficha do processo com botão "Extrair via IA" e campo editável
+- [ ] Frontend: exibir valor_obtido no dashboard de resultados (pendente)

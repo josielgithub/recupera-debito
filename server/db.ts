@@ -893,3 +893,16 @@ export async function updateAiSummary(cnj: string, aiSummary: string): Promise<v
     .set({ aiSummary, aiSummaryUpdatedAt: new Date() })
     .where(eq(processos.cnj, cnj));
 }
+
+// ─── Atualizar valor obtido de um processo ─────────────────────────────────
+export async function updateValorObtido(cnj: string, valorObtido: number | null): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(processos)
+    .set({
+      valorObtido: valorObtido !== null ? String(valorObtido) : null,
+      valorObtidoUpdatedAt: new Date(),
+    })
+    .where(eq(processos.cnj, cnj));
+}

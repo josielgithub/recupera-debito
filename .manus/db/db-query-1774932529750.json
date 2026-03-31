@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE `processos` ADD `valor_obtido` decimal(15,2); ALTER TABLE `processos` ADD `valor_obtido_updated_at` timestamp;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute ALTER TABLE `processos` ADD `valor_obtido` decimal(15,2); ALTER TABLE `processos` ADD `valor_obtido_updated_at` timestamp;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 448
+}

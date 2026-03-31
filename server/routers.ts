@@ -40,7 +40,7 @@ import {
   iniciarAnaliseIA,
   verificarAnaliseIA,
 } from "./judit";
-import { updateAiSummary } from "./db";
+import { updateAiSummary, updateValorObtido } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { createHash } from "crypto";
 import * as XLSX from "xlsx";
@@ -614,6 +614,89 @@ Seja conciso, direto e use linguagem acessível (não excessivamente técnica).`
       .query(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
         return { status: "completed" as const, summary: null as string | null };
+      }),
+
+    // Extrair valor obtido via IA a partir das movimentações do processo
+    extrairValorObtidoIA: protectedProcedure
+      .input(z.object({ cnj: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const processo = await getProcessoByCnj(input.cnj);
+        if (!processo) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+
+        const payload = processo.rawPayload as Record<string, unknown> | null;
+        const steps: Array<{ step_date?: string; content?: string }> = Array.isArray(payload?.steps)
+          ? (payload.steps as Array<{ step_date?: string; content?: string }>)
+          : [];
+        const lastStep = payload?.last_step as { content?: string } | null;
+        const valorCausa = payload?.value ?? payload?.amount;
+        const statusResumido = processo.statusResumido;
+        const nome = (payload?.name as string) ?? "";
+
+        // Montar contexto das últimas 20 movimentações
+        const movimentacoesTexto = steps
+          .slice(-20)
+          .map((s) => `[${s.step_date?.slice(0, 10) ?? "?"}] ${s.content ?? ""}`)
+          .join("\n");
+
+        const prompt = `Você é um assistente jurídico especializado. Analise as movimentações abaixo de um processo judicial brasileiro e extraia o VALOR MONETÁRIO OBTIDO (valor da sentença, valor do acordo, valor da condenação ou valor a ser pago ao autor).
+
+Processo: ${input.cnj}
+Partes: ${nome}
+Status: ${statusResumido}
+Valor da causa (pedido inicial): ${valorCausa ? `R$ ${Number(valorCausa).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "não informado"}
+Última movimentação: ${lastStep?.content ?? ""}
+
+Movimentações recentes:
+${movimentacoesTexto}
+
+Responda APENAS com um JSON no formato: { "valor": 12345.67, "fonte": "descrição de onde extraiu o valor", "confianca": "alta|media|baixa" }
+Se não for possível identificar um valor específico, responda: { "valor": null, "fonte": "não identificado", "confianca": "baixa" }`;
+
+        const response = await invokeLLM({
+          messages: [
+            { role: "system", content: "Você extrai valores monetários de textos jurídicos. Responda sempre com JSON válido." },
+            { role: "user", content: prompt },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "valor_obtido",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  valor: { type: ["number", "null"], description: "Valor monetário extraído em reais" },
+                  fonte: { type: "string", description: "Descrição de onde o valor foi extraído" },
+                  confianca: { type: "string", description: "Nível de confiança: alta, media ou baixa" },
+                },
+                required: ["valor", "fonte", "confianca"],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+
+        const rawContent = response.choices?.[0]?.message?.content;
+        let resultado = { valor: null as number | null, fonte: "não identificado", confianca: "baixa" };
+        try {
+          const parsed = typeof rawContent === "string" ? JSON.parse(rawContent) : rawContent;
+          resultado = { valor: parsed.valor ?? null, fonte: parsed.fonte ?? "", confianca: parsed.confianca ?? "baixa" };
+        } catch { /* mantém default */ }
+
+        if (resultado.valor !== null) {
+          await updateValorObtido(input.cnj, resultado.valor);
+        }
+        return resultado;
+      }),
+
+    // Atualizar valor obtido manualmente
+    atualizarValorObtido: protectedProcedure
+      .input(z.object({ cnj: z.string(), valorObtido: z.number().nullable() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        await updateValorObtido(input.cnj, input.valorObtido);
+        return { ok: true };
       }),
 
     // Gerar planilha modelo para download (base64)
