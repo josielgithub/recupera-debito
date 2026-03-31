@@ -390,42 +390,6 @@ export async function dispararAtualizacaoBackground(processoIds?: number[]): Pro
   return { criadas, erros };
 }
 
-// ─── Rotina automática a cada 6 horas ─────────────────────────────────────
-let cronHandle: ReturnType<typeof setInterval> | null = null;
-
-export function iniciarRotinaCron(): void {
-  if (cronHandle) return; // já iniciada
-
-  const SEIS_HORAS = 6 * 60 * 60 * 1000;
-
-  cronHandle = setInterval(async () => {
-    console.log("[Judit] Rotina automática iniciada (cron 6h)...");
-    try {
-      // 1. Disparar novas requisições para processos desatualizados
-      const { criadas } = await dispararAtualizacaoBackground();
-      console.log(`[Judit] Cron: ${criadas} novas requisições criadas.`);
-
-      // 2. Aguardar 2 minutos para processamento inicial
-      await sleep(2 * 60 * 1000);
-
-      // 3. Coletar resultados pendentes
-      const { atualizados, erros } = await coletarResultadosPendentes();
-      console.log(`[Judit] Cron concluído: ${atualizados} atualizados, ${erros} erros.`);
-    } catch (error) {
-      console.error("[Judit] Erro na rotina automática:", error);
-    }
-  }, SEIS_HORAS);
-
-  console.log("[Judit] Rotina automática iniciada (intervalo: 6h).");
-}
-
-export function pararRotinaCron(): void {
-  if (cronHandle) {
-    clearInterval(cronHandle);
-    cronHandle = null;
-    console.log("[Judit] Rotina automática parada.");
-  }
-}
 
 // ─── Buscar movimentações completas de um processo ────────────────────────
 export interface JuditStep {

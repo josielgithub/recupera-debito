@@ -7,7 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { mapearStatusJudit, iniciarRotinaCron } from "../judit";
+import { mapearStatusJudit } from "../judit";
 import { getProcessoByCnj, updateProcessoStatus } from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -91,18 +91,3 @@ async function startServer() {
 
 startServer().catch(console.error);
 
-// Iniciar rotina automática Judit (a cada 6h: cria requisições + coleta resultados)
-iniciarRotinaCron();
-
-// Rotina de monitoramento: verificar processos sem atualização a cada 6 horas
-setInterval(async () => {
-  try {
-    const { marcarProcessosSemAtualizacao } = await import("../db");
-    const afetados = await marcarProcessosSemAtualizacao();
-    if (afetados > 0) {
-      console.log(`[Rotina] ${afetados} processo(s) marcado(s) como sem atualização há 7 dias`);
-    }
-  } catch (err) {
-    console.error("[Rotina] Erro ao marcar processos:", err);
-  }
-}, 6 * 60 * 60 * 1000);

@@ -234,3 +234,8 @@
 - [x] Backend: criar cliente automaticamente a partir do payload (campo name) se não existir
 - [x] Frontend: atualizar PainelConsultaCnj para usar a nova procedure e exibir feedback de "salvo no banco"
 - [x] Testes: 22 testes passando, TypeScript sem erros
+
+## Remoção de Rotina Automática
+
+- [x] Remover cron/setInterval e funções iniciarRotinaCron/pararRotinaCron do judit.ts
+- [x] Remover chamada iniciarRotinaCron e rotina setInterval do server/_core/index.ts
