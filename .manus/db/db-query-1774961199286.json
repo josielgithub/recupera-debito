@@ -1,0 +1,150 @@
+{
+  "query": "\nSELECT p.id, p.cnj, p.status_resumido, p.created_at, c.nome as cliente_nome\nFROM processos p\nLEFT JOIN clientes c ON p.cliente_id = c.id\nORDER BY p.created_at DESC\nLIMIT 20;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user yf9iEUYDgMjHK2N.90ae4898ae71 --database FUtgBwVe3SdFnru4LzrCjK --execute \nSELECT p.id, p.cnj, p.status_resumido, p.created_at, c.nome as cliente_nome\nFROM processos p\nLEFT JOIN clientes c ON p.cliente_id = c.id\nORDER BY p.created_at DESC\nLIMIT 20;\n",
+  "rows": [
+    {
+      "id": "30350",
+      "cnj": "5001019-97.2025.8.24.0013",
+      "status_resumido": "em_andamento",
+      "created_at": "2026-03-27 18:23:49",
+      "cliente_nome": "IVETE BRIGIDA FOLLE"
+    },
+    {
+      "id": "30338",
+      "cnj": "5001201-74.2025.8.24.0016",
+      "status_resumido": "em_andamento",
+      "created_at": "2026-03-27 18:23:49",
+      "cliente_nome": "DEIZE CRISTINA DE SOUZA"
+    },
+    {
+      "id": "30349",
+      "cnj": "5009662-72.2025.8.24.0036",
+      "status_resumido": "acordo_negociacao",
+      "created_at": "2026-03-27 18:23:49",
+      "cliente_nome": "SIRLEY ALVES DE CARVALHO"
+    },
+    {
+      "id": "30342",
+      "cnj": "5003046-74.2025.8.24.0103",
+      "status_resumido": "em_andamento",
+      "created_at": "2026-03-27 18:23:49",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30337",
+      "cnj": "5014722-20.2025.8.24.0038",
+      "status_resumido": "acordo_negociacao",
+      "created_at": "2026-03-27 18:23:49",
+      "cliente_nome": "JOSE LEANDRO MAIA"
+    },
+    {
+      "id": "30334",
+      "cnj": "7002289-52.2025.8.22.0022",
+      "status_resumido": "concluido_ganho",
+      "created_at": "2026-03-27 18:23:49",
+      "cliente_nome": "ROMILDA DE JESUS PEREIRA"
+    },
+    {
+      "id": "30348",
+      "cnj": "5001621-77.2025.8.24.0049",
+      "status_resumido": "em_andamento",
+      "created_at": "2026-03-27 18:23:49",
+      "cliente_nome": "ODINEI LIVANIO MARAFON"
+    },
+    {
+      "id": "30345",
+      "cnj": "5001196-19.2025.8.24.0027",
+      "status_resumido": "acordo_negociacao",
+      "created_at": "2026-03-27 18:23:49",
+      "cliente_nome": "LUCIA HELENA OTTO"
+    },
+    {
+      "id": "30341",
+      "cnj": "5004272-67.2025.8.24.0054",
+      "status_resumido": "acordo_negociacao",
+      "created_at": "2026-03-27 18:23:49",
+      "cliente_nome": "ILBENOR SILVA DE SOUZA"
+    },
+    {
+      "id": "30339",
+      "cnj": "5000852-87.2025.8.24.0043",
+      "status_resumido": "em_andamento",
+      "created_at": "2026-03-27 18:23:49",
+      "cliente_nome": "BANCO BRADESCO S.A."
+    },
+    {
+      "id": "30336",
+      "cnj": "5000522-24.2025.8.24.0065",
+      "status_resumido": "em_andamento",
+      "created_at": "2026-03-27 18:23:49",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30335",
+      "cnj": "7036996-12.2025.8.22.0001",
+      "status_resumido": "em_andamento",
+      "created_at": "2026-03-27 18:23:49",
+      "cliente_nome": "ERMILSON LEITE TENASOL"
+    },
+    {
+      "id": "30333",
+      "cnj": "7002288-67.2025.8.22.0022",
+      "status_resumido": "concluido_perdido",
+      "created_at": "2026-03-27 18:23:49",
+      "cliente_nome": "ROMILDA DE JESUS PEREIRA"
+    },
+    {
+      "id": "30332",
+      "cnj": "7002287-82.2025.8.22.0022",
+      "status_resumido": "em_andamento",
+      "created_at": "2026-03-27 18:23:49",
+      "cliente_nome": "BANCO BRADESCO"
+    },
+    {
+      "id": "30347",
+      "cnj": "5005485-19.2025.8.24.0019",
+      "status_resumido": "acordo_negociacao",
+      "created_at": "2026-03-27 18:23:49",
+      "cliente_nome": "GABRIELLA NICACIO MEIRELES"
+    },
+    {
+      "id": "30346",
+      "cnj": "5012096-76.2025.8.24.0022",
+      "status_resumido": "em_andamento",
+      "created_at": "2026-03-27 18:23:49",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30344",
+      "cnj": "5002739-66.2025.8.24.0024",
+      "status_resumido": "em_andamento",
+      "created_at": "2026-03-27 18:23:49",
+      "cliente_nome": "NULL"
+    },
+    {
+      "id": "30343",
+      "cnj": "5021510-50.2025.8.24.0038",
+      "status_resumido": "em_andamento",
+      "created_at": "2026-03-27 18:23:49",
+      "cliente_nome": "CELSO CANDIDO DA SILVA"
+    },
+    {
+      "id": "30340",
+      "cnj": "5006020-91.2025.8.24.0036",
+      "status_resumido": "arquivado_encerrado",
+      "created_at": "2026-03-27 18:23:49",
+      "cliente_nome": "SIRLEY ALVES DE CARVALHO"
+    },
+    {
+      "id": "30351",
+      "cnj": "5001022-52.2025.8.24.0013",
+      "status_resumido": "em_andamento",
+      "created_at": "2026-03-27 18:23:49",
+      "cliente_nome": "IVETE BRIGIDA FOLLE"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tcnj\tstatus_resumido\tcreated_at\tcliente_nome\n30350\t5001019-97.2025.8.24.0013\tem_andamento\t2026-03-27 18:23:49\tIVETE BRIGIDA FOLLE\n30338\t5001201-74.2025.8.24.0016\tem_andamento\t2026-03-27 18:23:49\tDEIZE CRISTINA DE SOUZA\n30349\t5009662-72.2025.8.24.0036\tacordo_negociacao\t2026-03-27 18:23:49\tSIRLEY ALVES DE CARVALHO\n30342\t5003046-74.2025.8.24.0103\tem_andamento\t2026-03-27 18:23:49\tNULL\n30337\t5014722-20.2025.8.24.0038\tacordo_negociacao\t2026-03-27 18:23:49\tJOSE LEANDRO MAIA\n30334\t7002289-52.2025.8.22.0022\tconcluido_ganho\t2026-03-27 18:23:49\tROMILDA DE JESUS PEREIRA\n30348\t5001621-77.2025.8.24.0049\tem_andamento\t2026-03-27 18:23:49\tODINEI LIVANIO MARAFON\n30345\t5001196-19.2025.8.24.0027\tacordo_negociacao\t2026-03-27 18:23:49\tLUCIA HELENA OTTO\n30341\t5004272-67.2025.8.24.0054\tacordo_negociacao\t2026-03-27 18:23:49\tILBENOR SILVA DE SOUZA\n30339\t5000852-87.2025.8.24.0043\tem_andamento\t2026-03-27 18:23:49\tBANCO BRADESCO S.A.\n30336\t5000522-24.2025.8.24.0065\tem_andamento\t2026-03-27 18:23:49\tNULL\n30335\t7036996-12.2025.8.22.0001\tem_andamento\t2026-03-27 18:23:49\tERMILSON LEITE TENASOL\n30333\t7002288-67.2025.8.22.0022\tconcluido_perdido\t2026-03-27 18:23:49\tROMILDA DE JESUS PEREIRA\n30332\t7002287-82.2025.8.22.0022\tem_andamento\t2026-03-27 18:23:49\tBANCO BRADESCO\n30347\t5005485-19.2025.8.24.0019\tacordo_negociacao\t2026-03-27 18:23:49\tGABRIELLA NICACIO MEIRELES\n30346\t5012096-76.2025.8.24.0022\tem_andamento\t2026-03-27 18:23:49\tNULL\n30344\t5002739-66.2025.8.24.0024\tem_andamento\t2026-03-27 18:23:49\tNULL\n30343\t5021510-50.2025.8.24.0038\tem_andamento\t2026-03-27 18:23:49\tCELSO CANDIDO DA SILVA\n30340\t5006020-91.2025.8.24.0036\tarquivado_encerrado\t2026-03-27 18:23:49\tSIRLEY ALVES DE CARVALHO\n30351\t5001022-52.2025.8.24.0013\tem_andamento\t2026-03-27 18:23:49\tIVETE BRIGIDA FOLLE\n",
+  "stderr": "",
+  "execution_time_ms": 81
+}

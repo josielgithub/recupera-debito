@@ -25,7 +25,7 @@ import { StatusResumido } from "../drizzle/schema";
 // ─── Configuração ──────────────────────────────────────────────────────────
 const JUDIT_BASE_URL = process.env.JUDIT_BASE_URL ?? "https://requests.prod.judit.io";
 const JUDIT_API_KEY = process.env.JUDIT_API_KEY ?? "";
-const CACHE_TTL_DAYS = 7;
+// cache_ttl_in_days removido a pedido do suporte Judit (não recomendado para dados em tempo real)
 const BATCH_SIZE = 100;
 const MAX_POLL_ATTEMPTS = 20;
 const POLL_INTERVAL_MS = 5_000;
@@ -84,12 +84,12 @@ async function juditFetch(path: string, options: RequestInit = {}): Promise<unkn
 
 // ─── Etapa 1: Criar requisição por CNJ ────────────────────────────────────
 export async function criarRequisicaoJudit(cnj: string, processoId?: number): Promise<string> {
-  // Verificar cache: não consultar o mesmo CNJ em menos de 7 dias
+  // Verificar se já existe requisição recente com status processing (evitar duplicatas)
   const existing = await getJuditRequestByCnj(cnj);
-  if (existing) {
-    const diasDesde = (Date.now() - existing.createdAt.getTime()) / (1000 * 60 * 60 * 24);
-    if (diasDesde < CACHE_TTL_DAYS && existing.status !== "error") {
-      console.log(`[Judit] CNJ ${cnj} já possui requisição recente (${Math.round(diasDesde)}d). Reutilizando requestId: ${existing.requestId}`);
+  if (existing && existing.status === "processing") {
+    const minutoDesde = (Date.now() - existing.createdAt.getTime()) / (1000 * 60);
+    if (minutoDesde < 30) {
+      console.log(`[Judit] CNJ ${cnj} já possui requisição em processamento (${Math.round(minutoDesde)}min). Reutilizando requestId: ${existing.requestId}`);
       return existing.requestId;
     }
   }
@@ -103,7 +103,7 @@ export async function criarRequisicaoJudit(cnj: string, processoId?: number): Pr
             search_type: "lawsuit_cnj",
             search_key: cnj,
           },
-          cache_ttl_in_days: CACHE_TTL_DAYS,
+          // cache_ttl_in_days omitido — suporte Judit recomenda não usar para dados em tempo real
         }),
       }),
     3,
@@ -140,32 +140,78 @@ export async function verificarStatusRequisicao(requestId: string): Promise<"pro
 }
 
 // ─── Etapa 3: Obter resultado ──────────────────────────────────────────────
+/**
+ * Retorna o melhor resultado disponível no array page_data.
+ * Conforme orientação do suporte Judit, o array pode conter múltiplos objetos
+ * (ex: uma entrada por instância). Devemos iterar todos e escolher o mais completo.
+ * Entradas com lawsuit_not_found são ignoradas se houver outra instância com dados.
+ */
 export async function obterResultadoJudit(requestId: string): Promise<unknown | null> {
   const data = await retryWithBackoff(
     () => juditFetch(`/responses?request_id=${requestId}`),
     3,
     `GET /responses?request_id=${requestId}`
   ) as {
-    page_data?: Array<{ response_data?: unknown; parties?: unknown[]; steps?: unknown[]; attachments?: unknown[] }>;
+    page_data?: Array<{ response_data?: unknown; parties?: unknown[]; steps?: unknown[]; attachments?: unknown[]; response_type?: string }>;
     data?: unknown[];
     results?: unknown[];
     items?: unknown[];
   };
 
-  // Formato principal da Judit: { page_data: [{ response_data }] }
-  // response_data já contém parties, steps, attachments dentro dele
+  // Formato principal da Judit: { page_data: [{ response_data }, ...] }
+  // O suporte confirmou que page_data é um array com uma entrada por instância.
+  // Devemos iterar TODOS os objetos e escolher o que tem dados reais (não lawsuit_not_found).
   if (data.page_data && Array.isArray(data.page_data) && data.page_data.length > 0) {
-    const entry = data.page_data[0];
-    const rd = entry.response_data as Record<string, unknown> ?? {};
-    // steps, parties e attachments estão DENTRO do response_data
-    // entry.parties/steps/attachments são campos do envelope, não do processo
-    return {
-      ...rd,
-      // Garantir que steps do response_data seja preservado (não sobrescrever com [])
-      steps: (rd.steps as unknown[]) ?? (entry.steps as unknown[]) ?? [],
-      parties: (rd.parties as unknown[]) ?? (entry.parties as unknown[]) ?? [],
-      attachments: (rd.attachments as unknown[]) ?? (entry.attachments as unknown[]) ?? [],
-    };
+    console.log(`[Judit] page_data contém ${data.page_data.length} entrada(s) para requestId=${requestId}`);
+
+    let melhorResultado: Record<string, unknown> | null = null;
+    let melhorScore = -1;
+
+    for (let i = 0; i < data.page_data.length; i++) {
+      const entry = data.page_data[i];
+      const rd = (entry.response_data ?? {}) as Record<string, unknown>;
+
+      // Pular entradas de IA (response_type === 'ia')
+      if (entry.response_type === "ia") continue;
+
+      // Verificar se é lawsuit_not_found
+      const isNotFound =
+        rd.code === 2 ||
+        (typeof rd.message === "string" && rd.message.includes("NOT_FOUND")) ||
+        (typeof rd.status === "string" && rd.status.toLowerCase().includes("not_found"));
+
+      if (isNotFound) {
+        console.log(`[Judit] Entrada ${i} (requestId=${requestId}): lawsuit_not_found — ignorando`);
+        continue;
+      }
+
+      // Calcular score de completude: steps + parties + presença de status
+      const steps = (rd.steps as unknown[]) ?? (entry.steps as unknown[]) ?? [];
+      const parties = (rd.parties as unknown[]) ?? (entry.parties as unknown[]) ?? [];
+      const hasStatus = typeof rd.status === "string" && rd.status.length > 0;
+      const score = steps.length * 2 + parties.length + (hasStatus ? 10 : 0);
+
+      console.log(`[Judit] Entrada ${i} (requestId=${requestId}): status=${rd.status ?? "N/A"}, steps=${steps.length}, parties=${parties.length}, score=${score}`);
+
+      if (score > melhorScore) {
+        melhorScore = score;
+        melhorResultado = {
+          ...rd,
+          steps,
+          parties,
+          attachments: (rd.attachments as unknown[]) ?? (entry.attachments as unknown[]) ?? [],
+        };
+      }
+    }
+
+    if (melhorResultado) {
+      console.log(`[Judit] Melhor resultado selecionado para requestId=${requestId}: status=${melhorResultado.status ?? "N/A"}, steps=${(melhorResultado.steps as unknown[]).length}`);
+      return melhorResultado;
+    }
+
+    // Todos eram not_found
+    console.log(`[Judit] Todas as entradas retornaram lawsuit_not_found para requestId=${requestId}`);
+    return null;
   }
 
   // Fallback: formatos alternativos

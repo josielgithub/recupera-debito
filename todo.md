@@ -306,3 +306,13 @@
 - [x] Backend: procedure admin.gerarPlanilhaModeloSimples — modelo com 4 colunas
 - [x] Frontend: nova aba "Importar + Judit" no Admin com drag-and-drop, barra de progresso e relatório final
 - [x] Frontend: histórico de importações anteriores com status e contadores
+
+## Correções Integração Judit (31/03/2026 — suporte Judit)
+- [x] Remover cache_ttl_in_days das requisições (não recomendado para dados em tempo real)
+- [x] Corrigir obterResultadoJudit para iterar TODOS os objetos do array page_data (não apenas o primeiro)
+- [x] Ignorar entradas lawsuit_not_found quando houver outra instância com dados válidos
+- [x] Selecionar automaticamente a instância mais completa (score por steps + parties + status)
+- [x] Implementar endpoint webhook POST /api/judit/webhook para receber notificações assíncronas
+- [x] Remover cache local de 7 dias para requisições (substituído por deduplicação de 30min para processing)
+- [ ] Configurar URL do webhook na plataforma Judit: https://recuperadeb-futgbwve.manus.space/api/judit/webhook
+- [ ] Avaliar uso do serviço de monitoramento diário da Judit (em vez de polling manual)
