@@ -32,6 +32,11 @@ import {
   Info,
   Sparkles,
   Bot,
+  Download,
+  FolderOpen,
+  Stamp,
+  ScrollText,
+  Hammer,
 } from "lucide-react";
 import { Streamdown } from "streamdown";
 import { useState as useStateIA } from "react";
@@ -47,6 +52,17 @@ interface JuditStep {
   steps_count?: number;
   lawsuit_cnj?: string;
   lawsuit_instance?: number;
+}
+
+interface JuditAttachment {
+  attachment_id?: string;
+  attachment_name?: string;
+  attachment_date?: string;
+  content?: string;
+  status?: string;
+  step_id?: string;
+  tags?: { crawl_id?: string };
+  user_data?: unknown;
 }
 
 interface JuditPayload {
@@ -82,6 +98,7 @@ interface JuditPayload {
   steps?: JuditStep[];
   courts?: { code: string; name: string }[];
   crawler?: { source_name?: string; updated_at?: string };
+  attachments?: JuditAttachment[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -583,6 +600,208 @@ function ValorObtidoCard({
   );
 }
 
+// ─── Helpers de categorização de documentos ─────────────────────────────────
+function categorizarDocumento(att: JuditAttachment): {
+  tipo: "sentenca" | "alvara" | "decisao" | "mandado" | "acordao" | "certidao" | "peticao" | "outro";
+  label: string;
+  cor: string;
+  icone: "sentenca" | "alvara" | "decisao" | "mandado" | "acordao" | "certidao" | "peticao" | "outro";
+} {
+  const nome = ((att.attachment_name ?? att.content ?? "")).toLowerCase();
+  if (/senten/i.test(nome)) return { tipo: "sentenca", label: "Sentença", cor: "bg-purple-100 text-purple-800 border-purple-200", icone: "sentenca" };
+  if (/alvar/i.test(nome)) return { tipo: "alvara", label: "Alvará", cor: "bg-green-100 text-green-800 border-green-200", icone: "alvara" };
+  if (/decis/i.test(nome)) return { tipo: "decisao", label: "Decisão", cor: "bg-blue-100 text-blue-800 border-blue-200", icone: "decisao" };
+  if (/mandado/i.test(nome)) return { tipo: "mandado", label: "Mandado", cor: "bg-orange-100 text-orange-800 border-orange-200", icone: "mandado" };
+  if (/acórd|acordao/i.test(nome)) return { tipo: "acordao", label: "Acórdão", cor: "bg-indigo-100 text-indigo-800 border-indigo-200", icone: "acordao" };
+  if (/certid/i.test(nome)) return { tipo: "certidao", label: "Certidão", cor: "bg-slate-100 text-slate-700 border-slate-200", icone: "certidao" };
+  if (/peti/i.test(nome)) return { tipo: "peticao", label: "Petição", cor: "bg-amber-100 text-amber-800 border-amber-200", icone: "peticao" };
+  return { tipo: "outro", label: "Documento", cor: "bg-gray-100 text-gray-700 border-gray-200", icone: "outro" };
+}
+
+function DocIcon({ tipo }: { tipo: string }) {
+  if (tipo === "sentenca") return <ScrollText className="w-4 h-4" />;
+  if (tipo === "alvara") return <Stamp className="w-4 h-4" />;
+  if (tipo === "decisao") return <Gavel className="w-4 h-4" />;
+  if (tipo === "mandado") return <Hammer className="w-4 h-4" />;
+  if (tipo === "acordao") return <BookOpen className="w-4 h-4" />;
+  return <FileText className="w-4 h-4" />;
+}
+
+// ─── Componente de Documentos ─────────────────────────────────────────────────
+function DocumentosCard({ attachments }: { attachments: JuditAttachment[] }) {
+  const [expandido, setExpandido] = useState(true);
+  const [filtro, setFiltro] = useState<string>("todos");
+
+  if (!attachments || attachments.length === 0) return null;
+
+  // Ordenar: mais recentes primeiro
+  const ordenados = [...attachments].sort((a, b) => {
+    const da = a.attachment_date ? new Date(a.attachment_date).getTime() : 0;
+    const db = b.attachment_date ? new Date(b.attachment_date).getTime() : 0;
+    return db - da;
+  });
+
+  // Filtrar por tipo
+  const PRIORIDADE = ["sentenca", "alvara", "decisao", "mandado", "acordao"];
+  const filtrados = filtro === "todos"
+    ? ordenados
+    : filtro === "relevantes"
+    ? ordenados.filter(a => PRIORIDADE.includes(categorizarDocumento(a).tipo))
+    : ordenados.filter(a => categorizarDocumento(a).tipo === filtro);
+
+  const relevantes = ordenados.filter(a => PRIORIDADE.includes(categorizarDocumento(a).tipo));
+
+  return (
+    <Card className="border-blue-200 dark:border-blue-800">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <FolderOpen className="w-4 h-4 text-blue-500" />
+            Documentos
+            <Badge variant="secondary" className="text-xs">
+              {attachments.length} {attachments.length === 1 ? "documento" : "documentos"}
+            </Badge>
+            {relevantes.length > 0 && (
+              <Badge className="text-xs bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-100">
+                {relevantes.length} relevante{relevantes.length > 1 ? "s" : ""}
+              </Badge>
+            )}
+          </CardTitle>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setExpandido((v) => !v)}
+            className="h-7 w-7 p-0"
+          >
+            {expandido ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </Button>
+        </div>
+
+        {expandido && (
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {[
+              { key: "todos", label: `Todos (${attachments.length})` },
+              { key: "relevantes", label: `Relevantes (${relevantes.length})` },
+              { key: "sentenca", label: "Sentença" },
+              { key: "alvara", label: "Alvará" },
+              { key: "decisao", label: "Decisão" },
+              { key: "mandado", label: "Mandado" },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setFiltro(key)}
+                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                  filtro === key
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background text-muted-foreground border-border hover:border-primary/50"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+      </CardHeader>
+
+      {expandido && (
+        <CardContent>
+          {filtrados.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">
+              Nenhum documento encontrado para este filtro.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {filtrados.map((att, i) => {
+                const cat = categorizarDocumento(att);
+                const nome = att.attachment_name ?? att.content ?? "Documento sem nome";
+                const ext = nome.split(".").pop()?.toLowerCase();
+                const isPdf = ext === "pdf";
+                const isHtml = ext === "html" || ext === "htm";
+
+                return (
+                  <div
+                    key={att.attachment_id ?? i}
+                    className="flex items-start gap-3 p-3 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors"
+                  >
+                    {/* Ícone e badge de tipo */}
+                    <div className={`shrink-0 mt-0.5 p-1.5 rounded-md border ${cat.cor}`}>
+                      <DocIcon tipo={cat.tipo} />
+                    </div>
+
+                    {/* Informações */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+                        <span className="text-sm font-medium text-foreground truncate max-w-xs">
+                          {nome}
+                        </span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${cat.cor}`}>
+                          {cat.label}
+                        </span>
+                        {att.status === "pending" && (
+                          <span className="text-xs px-1.5 py-0.5 rounded border bg-amber-50 text-amber-700 border-amber-200">
+                            Pendente
+                          </span>
+                        )}
+                        {att.status === "done" && (
+                          <span className="text-xs px-1.5 py-0.5 rounded border bg-green-50 text-green-700 border-green-200">
+                            Disponível
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                        {att.attachment_date && (
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {formatDateTime(att.attachment_date)}
+                          </span>
+                        )}
+                        {att.attachment_id && (
+                          <span className="font-mono opacity-60">ID: {att.attachment_id}</span>
+                        )}
+                        {(isPdf || isHtml) && (
+                          <span className="uppercase font-mono opacity-60">{ext}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Botão de ação */}
+                    <div className="shrink-0">
+                      {att.status === "done" ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 gap-1.5 text-xs"
+                          title="Download disponível"
+                        >
+                          <Download className="w-3 h-3" />
+                          Baixar
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">
+                          Solicitar via Judit
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Aviso sobre download */}
+          <div className="mt-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+            <p className="text-xs text-amber-800 dark:text-amber-300">
+              <strong>Sobre os documentos:</strong> Os documentos listados são os attachments indexados pela Judit.
+              Documentos com status <strong>"Pendente"</strong> ainda não foram baixados pelo sistema de captura.
+              Para obter o arquivo, é necessário solicitar o download via API da Judit (funcionalidade a ser habilitada).
+            </p>
+          </div>
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
 // ─── Componente de Análise IA ──────────────────────────────────────────────
 function AnaliseIACard({
   cnj,
@@ -951,6 +1170,11 @@ export default function ProcessoDetalhe() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* ─── Documentos (Sentença, Alvará, Decisão etc.) ─── */}
+      {payload.attachments && payload.attachments.length > 0 && (
+        <DocumentosCard attachments={payload.attachments} />
       )}
 
       {/* ─── Histórico Completo de Movimentações ─── */}

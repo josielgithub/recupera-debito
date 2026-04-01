@@ -316,3 +316,10 @@
 - [x] Remover cache local de 7 dias para requisições (substituído por deduplicação de 30min para processing)
 - [ ] Configurar URL do webhook na plataforma Judit: https://recuperadeb-futgbwve.manus.space/api/judit/webhook
 - [ ] Avaliar uso do serviço de monitoramento diário da Judit (em vez de polling manual)
+
+## Seção de Documentos na Página de Detalhes
+
+- [x] Exibir seção "Documentos" na página de detalhes do processo com lista de attachments da Judit
+- [x] Filtrar e destacar documentos relevantes: sentença, alvará, decisão, mandado, acórdão
+- [ ] Endpoint tRPC para baixar/visualizar documento via Judit (attachment_id)
+- [ ] Botão para solicitar download do documento na Judit
