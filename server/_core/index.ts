@@ -1,4 +1,3 @@
-import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
@@ -7,9 +6,21 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { mapearStatusJudit, obterResultadoJudit } from "../judit";
-import { getProcessoByCnj, updateProcessoStatus, updateJuditRequestStatus, upsertProcessoFromJudit, upsertCliente, vincularClienteAoProcesso } from "../db";
-import { extrairNomeClienteDoPayload } from "../db";
+import {
+  mapearStatusJudit,
+  obterResultadoJudit,
+} from "../judit";
+import {
+  getProcessoByCnj,
+  updateProcessoStatus,
+  updateJuditRequestStatus,
+  upsertProcessoFromJudit,
+  upsertCliente,
+  vincularClienteAoProcesso,
+  extrairNomeClienteDoPayload,
+} from "../db";
+
+// ─── Helpers de rede ──────────────────────────────────────────────────────────
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -23,93 +34,224 @@ function isPortAvailable(port: number): Promise<boolean> {
 
 async function findAvailablePort(startPort: number = 3000): Promise<number> {
   for (let port = startPort; port < startPort + 20; port++) {
-    if (await isPortAvailable(port)) {
-      return port;
-    }
+    if (await isPortAvailable(port)) return port;
   }
   throw new Error(`No available port found starting from ${startPort}`);
 }
 
+// ─── Processamento do payload Judit (reutilizado pelo webhook) ────────────────
+
+/**
+ * Seleciona o melhor resultado do array page_data.
+ * Conforme orientação do suporte Judit, o array contém uma entrada por instância.
+ * Entradas lawsuit_not_found são ignoradas se houver outra com dados reais.
+ */
+function selecionarMelhorResultado(
+  pageData: Array<Record<string, unknown>>
+): Record<string, unknown> | null {
+  let melhorResultado: Record<string, unknown> | null = null;
+  let melhorScore = -1;
+
+  for (let i = 0; i < pageData.length; i++) {
+    const entry = pageData[i];
+    const rd = (entry.response_data ?? {}) as Record<string, unknown>;
+
+    // Pular entradas de IA
+    if (entry.response_type === "ia") continue;
+
+    // Verificar lawsuit_not_found
+    const isNotFound =
+      rd.code === 2 ||
+      (typeof rd.message === "string" && rd.message.includes("NOT_FOUND")) ||
+      (typeof rd.status === "string" && rd.status.toLowerCase().includes("not_found"));
+
+    if (isNotFound) {
+      console.log(`[Judit Webhook] Entrada ${i}: lawsuit_not_found — ignorando`);
+      continue;
+    }
+
+    // Score de completude: steps + parties + presença de status
+    const steps = (rd.steps as unknown[]) ?? (entry.steps as unknown[]) ?? [];
+    const parties = (rd.parties as unknown[]) ?? (entry.parties as unknown[]) ?? [];
+    const hasStatus = typeof rd.status === "string" && rd.status.length > 0;
+    const score = steps.length * 2 + parties.length + (hasStatus ? 10 : 0);
+
+    console.log(
+      `[Judit Webhook] Entrada ${i}: status=${rd.status ?? "N/A"}, ` +
+      `steps=${steps.length}, parties=${parties.length}, score=${score}`
+    );
+
+    if (score > melhorScore) {
+      melhorScore = score;
+      melhorResultado = {
+        ...rd,
+        steps,
+        parties,
+        attachments: (rd.attachments as unknown[]) ?? (entry.attachments as unknown[]) ?? [],
+      };
+    }
+  }
+
+  return melhorResultado;
+}
+
+/**
+ * Processa o resultado selecionado: atualiza banco, vincula cliente.
+ * Executado de forma assíncrona após responder HTTP 200.
+ */
+async function processarResultadoJudit(
+  requestId: string,
+  resultado: Record<string, unknown>
+): Promise<void> {
+  // Extrair CNJ do resultado
+  const cnj = (
+    resultado.lawsuit_cnj ??
+    resultado.cnj ??
+    resultado.numero_processo ??
+    resultado.number
+  ) as string | undefined;
+
+  if (!cnj) {
+    console.warn(`[Judit Webhook] CNJ não encontrado no resultado para requestId=${requestId}`);
+    await updateJuditRequestStatus(requestId, "completed");
+    return;
+  }
+
+  const { statusResumido, statusOriginal } = mapearStatusJudit(resultado);
+
+  // Criar ou atualizar processo no banco
+  const { criado } = await upsertProcessoFromJudit(
+    cnj, statusResumido, statusOriginal, resultado, requestId
+  );
+  await updateJuditRequestStatus(requestId, "completed");
+
+  // Vincular cliente pelo nome extraído do payload
+  const nomeProcesso = resultado.name as string | undefined;
+  const nomeCliente = extrairNomeClienteDoPayload(nomeProcesso);
+  if (nomeCliente) {
+    const clienteId = await upsertCliente({ nome: nomeCliente });
+    await vincularClienteAoProcesso(cnj, clienteId);
+  }
+
+  console.log(
+    `[Judit Webhook] ✅ Processo ${cnj} ${criado ? "CRIADO" : "ATUALIZADO"} ` +
+    `via webhook → ${statusResumido} (${statusOriginal}) | requestId=${requestId}`
+  );
+}
+
+// ─── Servidor principal ───────────────────────────────────────────────────────
+
 async function startServer() {
   const app = express();
   const server = createServer(app);
-  // Configure body parser with larger size limit for file uploads
+
+  // Body parser com limite maior para uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  // OAuth callback under /api/oauth/callback
+
+  // OAuth
   registerOAuthRoutes(app);
 
-  // ─── Webhook da Judit ──────────────────────────────────────────────────────────────────────────────
+  // ─── Webhook da Judit (fluxo principal — orientado a eventos) ─────────────
   /**
    * POST /api/judit/webhook
+   *
    * Recebe notificações assíncronas da Judit quando uma requisição é concluída.
-   * Formato esperado: { request_id, status, page_data: [...] }
-   * URL a configurar na Judit: https://<dominio>/api/judit/webhook
+   * Responde HTTP 200 imediatamente (< 2s) e processa o payload em background.
+   *
+   * Formato esperado:
+   *   { request_id, status, page_data: [{ response_data, response_type, ... }] }
+   *
+   * URL configurada na conta Judit:
+   *   https://recuperadeb-futgbwve.manus.space/api/judit/webhook
    */
-  app.post("/api/judit/webhook", async (req, res) => {
-    try {
-      const body = req.body as Record<string, unknown>;
-      console.log("[Judit Webhook] Recebido:", JSON.stringify(body).slice(0, 300));
+  app.post("/api/judit/webhook", (req, res) => {
+    // ── Responder SEMPRE HTTP 200 imediatamente ──────────────────────────────
+    res.status(200).json({ ok: true });
 
-      // Responder imediatamente para não deixar a Judit aguardando
-      res.status(200).json({ ok: true });
+    // ── Processar em background (não bloqueia a resposta) ───────────────────
+    setImmediate(async () => {
+      try {
+        const body = req.body as Record<string, unknown>;
+        const origem = req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "desconhecido";
 
-      const requestId = (body.request_id ?? body.requestId) as string | undefined;
-      const status = ((body.status ?? body.state ?? "") as string).toLowerCase();
+        // Log completo do payload recebido
+        console.log(
+          `[Judit Webhook] Recebido de ${origem}: ` +
+          JSON.stringify(body).slice(0, 500)
+        );
 
-      if (!requestId) {
-        console.warn("[Judit Webhook] request_id ausente no payload");
-        return;
+        // ── Validação básica ────────────────────────────────────────────────
+        const requestId = (body.request_id ?? body.requestId) as string | undefined;
+        if (!requestId) {
+          console.warn("[Judit Webhook] ⚠️  request_id ausente no payload — ignorando");
+          return;
+        }
+
+        const status = ((body.status ?? body.state ?? "") as string).toLowerCase();
+
+        // Apenas processar quando concluído
+        if (status !== "done" && status !== "completed") {
+          console.log(`[Judit Webhook] Status "${status}" para requestId=${requestId} — aguardando conclusão`);
+          return;
+        }
+
+        // ── Tentar processar diretamente do payload (sem chamada extra à API) ─
+        const pageData = body.page_data as Array<Record<string, unknown>> | undefined;
+
+        if (pageData && Array.isArray(pageData) && pageData.length > 0) {
+          console.log(
+            `[Judit Webhook] page_data contém ${pageData.length} entrada(s) ` +
+            `para requestId=${requestId}`
+          );
+
+          const resultado = selecionarMelhorResultado(pageData);
+
+          if (resultado) {
+            await processarResultadoJudit(requestId, resultado);
+            return;
+          }
+
+          // Todos eram not_found
+          console.log(
+            `[Judit Webhook] Todas as entradas retornaram lawsuit_not_found ` +
+            `para requestId=${requestId}`
+          );
+          await updateJuditRequestStatus(requestId, "completed");
+          return;
+        }
+
+        // ── Fallback: buscar resultado via API (payload sem page_data) ───────
+        console.log(
+          `[Judit Webhook] page_data ausente no payload — buscando via API ` +
+          `(requestId=${requestId})`
+        );
+
+        const resultado = await obterResultadoJudit(requestId);
+        if (!resultado) {
+          console.log(
+            `[Judit Webhook] Nenhum resultado válido via API para requestId=${requestId}`
+          );
+          await updateJuditRequestStatus(requestId, "completed");
+          return;
+        }
+
+        await processarResultadoJudit(requestId, resultado as Record<string, unknown>);
+      } catch (err) {
+        console.error("[Judit Webhook] ❌ Erro no processamento em background:", err);
       }
-
-      // Apenas processar quando status for done/completed
-      if (status !== "done" && status !== "completed") {
-        console.log(`[Judit Webhook] Status ${status} para requestId=${requestId} — aguardando conclusão`);
-        return;
-      }
-
-      // Buscar o resultado via API (garante que iteramos todos os objetos do array)
-      const resultado = await obterResultadoJudit(requestId);
-
-      if (!resultado) {
-        console.log(`[Judit Webhook] Nenhum resultado válido para requestId=${requestId} (todos lawsuit_not_found)`);
-        await updateJuditRequestStatus(requestId, "completed");
-        return;
-      }
-
-      // Extrair CNJ do resultado
-      const r = resultado as Record<string, unknown>;
-      const cnj = (r.lawsuit_cnj ?? r.cnj ?? r.numero_processo) as string | undefined;
-
-      if (!cnj) {
-        console.warn(`[Judit Webhook] CNJ não encontrado no resultado para requestId=${requestId}`);
-        await updateJuditRequestStatus(requestId, "completed");
-        return;
-      }
-
-      const { statusResumido, statusOriginal } = mapearStatusJudit(resultado);
-      const { criado } = await upsertProcessoFromJudit(cnj, statusResumido, statusOriginal, resultado, requestId);
-      await updateJuditRequestStatus(requestId, "completed");
-
-      // Vincular cliente
-      const nomeProcesso = r.name as string | undefined;
-      const nomeCliente = extrairNomeClienteDoPayload(nomeProcesso);
-      if (nomeCliente) {
-        const clienteId = await upsertCliente({ nome: nomeCliente });
-        await vincularClienteAoProcesso(cnj, clienteId);
-      }
-
-      console.log(`[Judit Webhook] Processo ${cnj} ${criado ? "criado" : "atualizado"} via webhook → ${statusResumido} (${statusOriginal})`);
-    } catch (err) {
-      console.error("[Judit Webhook] Erro:", err);
-    }
+    });
   });
 
-  // Manter rota legada /api/judit/callback por compatibilidade
+  // ── Rota legada /api/judit/callback (mantida por compatibilidade) ──────────
   app.post("/api/judit/callback", async (req, res) => {
     try {
       const payload = req.body as Record<string, unknown>;
-      const cnj = (payload?.cnj ?? payload?.numero_processo ?? (payload?.lawsuit as Record<string, unknown>)?.cnj) as string | undefined;
+      const cnj = (
+        payload?.cnj ??
+        payload?.numero_processo ??
+        (payload?.lawsuit as Record<string, unknown>)?.cnj
+      ) as string | undefined;
 
       if (!cnj) {
         console.warn("[Judit Callback] CNJ ausente no payload:", payload);
@@ -132,6 +274,8 @@ async function startServer() {
       return res.status(500).json({ erro: "Erro interno" });
     }
   });
+
+  // tRPC
   app.use(
     "/api/trpc",
     createExpressMiddleware({
@@ -139,7 +283,8 @@ async function startServer() {
       createContext,
     })
   );
-  // development mode uses Vite, production mode uses static files
+
+  // Vite (dev) ou arquivos estáticos (prod)
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
   } else {
@@ -159,4 +304,3 @@ async function startServer() {
 }
 
 startServer().catch(console.error);
-

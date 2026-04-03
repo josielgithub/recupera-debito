@@ -323,3 +323,13 @@
 - [x] Filtrar e destacar documentos relevantes: sentença, alvará, decisão, mandado, acórdão
 - [ ] Endpoint tRPC para baixar/visualizar documento via Judit (attachment_id)
 - [ ] Botão para solicitar download do documento na Judit
+
+## Refatoração Webhook Judit (modelo orientado a eventos)
+
+- [x] Manter criarRequisicaoJudit() sem polling
+- [x] Marcar verificarStatusRequisicao() e obterResultadoJudit() como fallback opcional
+- [x] Implementar processamento completo no POST /api/judit/webhook
+- [x] Reutilizar lógica de score, parsing de steps/parties e mapearStatusJudit()
+- [x] Responder sempre HTTP 200 em < 2s (processar de forma assíncrona)
+- [x] Adicionar log de origem e validação de request_id
+- [x] Manter polling apenas como fallback para requests antigos
