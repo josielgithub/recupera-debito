@@ -333,3 +333,15 @@
 - [x] Responder sempre HTTP 200 em < 2s (processar de forma assíncrona)
 - [x] Adicionar log de origem e validação de request_id
 - [x] Manter polling apenas como fallback para requests antigos
+
+## Entidade Investidor
+- [x] Criar tabela investidores no schema e migrar banco
+- [x] Adicionar coluna investidorId (nullable FK) na tabela processos
+- [x] Helpers de banco: upsertInvestidor, getInvestidores, vincularInvestidorAoProcesso
+- [x] Procedures tRPC: listInvestidores, upsertInvestidor, vincularInvestidorEmLote, dashboardInvestidores
+- [x] Filtro por investidor na procedure admin.processos
+- [x] Atualizar importação simples e completa para aceitar coluna "investidor"
+- [x] Seção "Processos por Investidor" no dashboard admin (aba Investidores)
+- [x] Página de detalhes do investidor com lista de processos
+- [x] Ação em lote "Vincular a investidor" na lista de processos
+- [x] Exibir investidor na tela de detalhes do processo

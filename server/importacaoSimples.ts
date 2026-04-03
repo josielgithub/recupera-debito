@@ -1,13 +1,15 @@
 /**
- * Serviço de importação simplificada de planilha Excel
- * Colunas esperadas: cnj, nome_cliente, advogado, escritorio
- * Após importar, dispara conciliação automática com a API Judit em background.
+ * Serviço de importação simplificada de planilha Exc/**
+ * Colunas esperadas: cnj, nome_cliente, advogado, escritorio, investidor
+* Após importar, dispara conciliação automática com a API Judit em background.
  */
 import * as XLSX from "xlsx";
 import {
   upsertCliente,
   upsertParceiro,
   upsertProcesso,
+  upsertInvestidor,
+  vincularInvestidorAoProcesso,
   criarImportJob,
   updateImportJob,
   getImportJob,
@@ -19,6 +21,7 @@ export interface LinhaImportacaoSimples {
   nome_cliente?: string;
   advogado?: string;
   escritorio?: string;
+  investidor?: string;
 }
 
 export interface DetalheImportacao {
@@ -80,6 +83,7 @@ export async function importarPlanilhaSimples(
       nome_cliente: norm["nome_cliente"] ?? norm["cliente"] ?? norm["nome"] ?? "",
       advogado: norm["advogado"] ?? norm["nome_advogado"] ?? "",
       escritorio: norm["escritorio"] ?? norm["nome_escritorio"] ?? norm["escritorio_parceiro"] ?? "",
+      investidor: norm["investidor"] ?? norm["nome_investidor"] ?? "",
     };
   });
 
@@ -132,6 +136,13 @@ export async function importarPlanilhaSimples(
         advogado: row.advogado || null,
         statusResumido: "em_analise_inicial",
       });
+
+      // 4. Vincular investidor (se informado)
+      const nomeInvestidor = row.investidor?.trim();
+      if (nomeInvestidor) {
+        const investidorId = await upsertInvestidor(nomeInvestidor);
+        await vincularInvestidorAoProcesso(cnj, investidorId);
+      }
 
       linhasOk++;
       detalhes.push({ linha: linhaNum, cnj, nomeCliente, status: "importado" });

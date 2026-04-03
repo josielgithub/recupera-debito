@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   Cliente,
@@ -9,11 +9,13 @@ import {
   InsertParceiro,
   InsertProcesso,
   InsertUser,
+  Investidor,
   JuditRequest,
   Parceiro,
   Processo,
   StatusResumido,
   clientes,
+  investidores,
   juditRequests,
   logsConsulta,
   importJobs,
@@ -296,6 +298,7 @@ interface FiltrosProcessos {
   busca?: string;
   orderBy?: OrderByColuna;
   orderDir?: "asc" | "desc";
+  investidorId?: number;
 }
 
 export async function listAllProcessos(page = 1, pageSize = 50, filtros?: FiltrosProcessos) {
@@ -315,6 +318,9 @@ export async function listAllProcessos(page = 1, pageSize = 50, filtros?: Filtro
     const fim = new Date(filtros.dataFim);
     fim.setHours(23, 59, 59, 999);
     condicoes.push(lte(processos.updatedAt, fim));
+  }
+  if (filtros?.investidorId) {
+    condicoes.push(eq(processos.investidorId, filtros.investidorId));
   }
 
   const whereClause = condicoes.length > 0 ? and(...condicoes) : undefined;
@@ -945,4 +951,101 @@ export async function listImportJobs(limit = 20) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(importJobs).orderBy(desc(importJobs.createdAt)).limit(limit);
+}
+
+// ─── Investidores ──────────────────────────────────────────────────────────────────────
+
+export async function listInvestidores(): Promise<Investidor[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(investidores).orderBy(investidores.nome);
+}
+
+export async function upsertInvestidor(nome: string, percentualParticipacao?: number | null): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  // Tentar inserir; se já existe, retornar o id existente
+  await db
+    .insert(investidores)
+    .values({ nome, percentualParticipacao: percentualParticipacao != null ? String(percentualParticipacao) : null })
+    .onDuplicateKeyUpdate({ set: { nome } });
+  const rows = await db.select({ id: investidores.id }).from(investidores).where(eq(investidores.nome, nome)).limit(1);
+  return rows[0]?.id ?? 0;
+}
+
+export async function vincularInvestidorAoProcesso(cnj: string, investidorId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(processos).set({ investidorId }).where(eq(processos.cnj, cnj));
+}
+
+export async function vincularInvestidorEmLote(cnjs: string[], investidorId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  let count = 0;
+  for (const cnj of cnjs) {
+    await db.update(processos).set({ investidorId }).where(eq(processos.cnj, cnj));
+    count++;
+  }
+  return count;
+}
+
+export async function getDashboardInvestidores() {
+  const db = await getDb();
+  if (!db) return [];
+
+  // Buscar todos os investidores
+  const todos = await db.select().from(investidores).orderBy(investidores.nome);
+
+  // Para cada investidor, contar processos por status
+  const resultado = [];
+  for (const inv of todos) {
+    const procs = await db
+      .select({ statusResumido: processos.statusResumido })
+      .from(processos)
+      .where(eq(processos.investidorId, inv.id));
+
+    const contagem = {
+      total: procs.length,
+      em_andamento: 0,
+      aguardando_sentenca: 0,
+      cumprimento_de_sentenca: 0,
+      concluido_ganho: 0,
+      concluido_perdido: 0,
+      outros: 0,
+    };
+    for (const p of procs) {
+      const s = p.statusResumido;
+      if (s === "em_andamento" || s === "protocolado" || s === "em_recurso" || s === "aguardando_audiencia") contagem.em_andamento++;
+      else if (s === "aguardando_sentenca") contagem.aguardando_sentenca++;
+      else if (s === "cumprimento_de_sentenca") contagem.cumprimento_de_sentenca++;
+      else if (s === "concluido_ganho" || s === "acordo_negociacao") contagem.concluido_ganho++;
+      else if (s === "concluido_perdido") contagem.concluido_perdido++;
+      else contagem.outros++;
+    }
+
+    resultado.push({
+      id: inv.id,
+      nome: inv.nome,
+      percentualParticipacao: inv.percentualParticipacao,
+      ...contagem,
+    });
+  }
+
+  return resultado;
+}
+
+export async function getProcessosSemInvestidor(limit = 100) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: processos.id,
+      cnj: processos.cnj,
+      statusResumido: processos.statusResumido,
+      clienteId: processos.clienteId,
+    })
+    .from(processos)
+    .where(isNull(processos.investidorId))
+    .limit(limit);
 }

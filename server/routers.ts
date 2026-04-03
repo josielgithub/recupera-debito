@@ -41,7 +41,10 @@ import {
   iniciarAnaliseIA,
   verificarAnaliseIA,
 } from "./judit";
-import { updateAiSummary, updateValorObtido, getImportJob, listImportJobs } from "./db";
+import { updateAiSummary, updateValorObtido, getImportJob, listImportJobs,
+  listInvestidores, upsertInvestidor, vincularInvestidorAoProcesso,
+  vincularInvestidorEmLote, getDashboardInvestidores, getProcessosSemInvestidor,
+} from "./db";
 import { invokeLLM } from "./_core/llm";
 import { createHash } from "crypto";
 import * as XLSX from "xlsx";
@@ -156,6 +159,7 @@ export const appRouter = router({
         busca: z.string().optional(),
         orderBy: z.enum(["cnj", "statusResumido", "clienteNome", "parceiroNome", "updatedAt"]).optional(),
         orderDir: z.enum(["asc", "desc"]).optional(),
+        investidorId: z.number().optional(),
       }))
       .query(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
@@ -166,6 +170,7 @@ export const appRouter = router({
           busca: input.busca,
           orderBy: input.orderBy,
           orderDir: input.orderDir,
+          investidorId: input.investidorId,
         });
       }),
 
@@ -762,6 +767,49 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
       XLSX.utils.book_append_sheet(wb, ws, "Processos");
       const buf = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
       return { base64: buf as string, filename: "modelo_importacao_simples.xlsx" };
+    }),
+
+    // ─── Investidores ──────────────────────────────────────────────────────────────────────
+    listInvestidores: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return listInvestidores();
+    }),
+
+    upsertInvestidor: protectedProcedure
+      .input(z.object({
+        nome: z.string().min(1),
+        percentualParticipacao: z.number().min(0).max(100).nullable().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const id = await upsertInvestidor(input.nome, input.percentualParticipacao);
+        return { id };
+      }),
+
+    vincularInvestidor: protectedProcedure
+      .input(z.object({ cnj: z.string(), investidorId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        await vincularInvestidorAoProcesso(input.cnj, input.investidorId);
+        return { ok: true };
+      }),
+
+    vincularInvestidorEmLote: protectedProcedure
+      .input(z.object({ cnjs: z.array(z.string()), investidorId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const count = await vincularInvestidorEmLote(input.cnjs, input.investidorId);
+        return { count };
+      }),
+
+    dashboardInvestidores: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return getDashboardInvestidores();
+    }),
+
+    processosSemInvestidor: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return getProcessosSemInvestidor(200);
     }),
 
     // Gerar planilha modelo para download (base64)

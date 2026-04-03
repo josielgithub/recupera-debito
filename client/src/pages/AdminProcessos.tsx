@@ -82,9 +82,10 @@ interface Filtros {
   dataInicio: string;
   dataFim: string;
   busca: string;
+  investidorId: string;
 }
 
-const FILTROS_VAZIOS: Filtros = { status: [], dataInicio: "", dataFim: "", busca: "" };
+const FILTROS_VAZIOS: Filtros = { status: [], dataInicio: "", dataFim: "", busca: "", investidorId: "" };
 
 const STATUS_OPTIONS = Object.entries(STATUS_RESUMIDO_LABELS);
 
@@ -254,6 +255,9 @@ export default function AdminProcessos({ filtroStatusInicial }: { filtroStatusIn
   // Seleção em massa
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [statusLote, setStatusLote] = useState("");
+  const [investidorLote, setInvestidorLote] = useState("");
+  const { data: investidoresData } = trpc.admin.listInvestidores.useQuery();
+  const investidores = investidoresData ?? [];
   const [ordenacao, setOrdenacao] = useState<{ col: OrderByColuna; dir: OrderDir }>({
     col: "updatedAt",
     dir: "desc",
@@ -273,7 +277,18 @@ export default function AdminProcessos({ filtroStatusInicial }: { filtroStatusIn
     !!filtrosAplicados.dataInicio,
     !!filtrosAplicados.dataFim,
     !!filtrosAplicados.busca,
+    !!filtrosAplicados.investidorId,
   ].filter(Boolean).length;
+
+  const vincularInvestidorLoteMutation = trpc.admin.vincularInvestidorEmLote.useMutation({
+    onSuccess: (res) => {
+      toast.success(`${res.count} processo${res.count !== 1 ? 's' : ''} vinculado${res.count !== 1 ? 's' : ''} ao investidor!`);
+      setSelecionados(new Set());
+      setInvestidorLote("");
+      refetch();
+    },
+    onError: (err) => toast.error(`Erro: ${err.message}`),
+  });
 
   const { data, isLoading, refetch } = trpc.admin.processos.useQuery({
     page: pagina,
@@ -283,6 +298,7 @@ export default function AdminProcessos({ filtroStatusInicial }: { filtroStatusIn
     busca: filtrosAplicados.busca || undefined,
     orderBy: ordenacao.col,
     orderDir: ordenacao.dir,
+    investidorId: filtrosAplicados.investidorId ? parseInt(filtrosAplicados.investidorId) : undefined,
   });
 
   const atualizarLoteMutation = trpc.admin.atualizarStatusEmLote.useMutation({
@@ -343,6 +359,10 @@ export default function AdminProcessos({ filtroStatusInicial }: { filtroStatusIn
   function aplicarLote() {
     if (!statusLote || selecionados.size === 0) return;
     atualizarLoteMutation.mutate({ cnjs: Array.from(selecionados), status: statusLote as any });
+  }
+  function aplicarInvestidorLote() {
+    if (!investidorLote || selecionados.size === 0) return;
+    vincularInvestidorLoteMutation.mutate({ cnjs: Array.from(selecionados), investidorId: parseInt(investidorLote) });
   }
 
   const aplicarFiltros = useCallback(() => {
@@ -482,6 +502,30 @@ export default function AdminProcessos({ filtroStatusInicial }: { filtroStatusIn
                     className="h-9 text-xs"
                   />
                 </div>
+
+                {/* Filtro por investidor */}
+                {investidores.length > 0 && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                      <Users className="w-3 h-3" />
+                      Investidor
+                    </label>
+                    <Select
+                      value={filtros.investidorId || "_todos"}
+                      onValueChange={(v) => setFiltros((f) => ({ ...f, investidorId: v === "_todos" ? "" : v }))}
+                    >
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue placeholder="Todos os investidores" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_todos" className="text-xs">Todos os investidores</SelectItem>
+                        {(investidores as any[]).map((inv) => (
+                          <SelectItem key={inv.id} value={String(inv.id)} className="text-xs">{inv.nome}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2 pt-1">
@@ -616,11 +660,45 @@ export default function AdminProcessos({ filtroStatusInicial }: { filtroStatusIn
                         </span>
                       )}
                     </Button>
+                    {/* Ação: vincular investidor em lote */}
+                    {investidores.length > 0 && (
+                      <>
+                        <Select value={investidorLote} onValueChange={setInvestidorLote}>
+                          <SelectTrigger className="h-7 text-xs w-44">
+                            <SelectValue placeholder="Vincular investidor..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(investidores as any[]).map((inv) => (
+                              <SelectItem key={inv.id} value={String(inv.id)} className="text-xs">{inv.nome}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs bg-background"
+                          disabled={!investidorLote || vincularInvestidorLoteMutation.isPending}
+                          onClick={aplicarInvestidorLote}
+                        >
+                          {vincularInvestidorLoteMutation.isPending ? (
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-3 h-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                              Vinculando...
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1.5">
+                              <Users className="w-3.5 h-3.5" />
+                              Vincular
+                            </span>
+                          )}
+                        </Button>
+                      </>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-7 text-xs text-muted-foreground"
-                      onClick={() => { setSelecionados(new Set()); setStatusLote(""); }}
+                      onClick={() => { setSelecionados(new Set()); setStatusLote(""); setInvestidorLote(""); }}
                     >
                       <X className="w-3.5 h-3.5 mr-1" />
                       Cancelar

@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import Admin from "./pages/Admin";
 import ProcessoDetalhe from "./pages/ProcessoDetalhe";
+import AdminInvestidores from "./pages/AdminInvestidores";
 import { useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 
@@ -39,6 +40,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/admin" component={Admin} />
       <Route path="/admin/processo/:cnj" component={ProcessoDetalhe} />
+      <Route path="/admin/investidores" component={AdminInvestidores} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

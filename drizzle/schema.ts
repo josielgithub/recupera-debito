@@ -26,6 +26,18 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+// ─── Investidores ────────────────────────────────────────────────────────────
+export const investidores = mysqlTable("investidores", {
+  id: int("id").autoincrement().primaryKey(),
+  nome: varchar("nome", { length: 255 }).notNull().unique(),
+  percentualParticipacao: decimal("percentual_participacao", { precision: 5, scale: 2 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Investidor = typeof investidores.$inferSelect;
+export type InsertInvestidor = typeof investidores.$inferInsert;
+
 // ─── Parceiros / Escritórios ───────────────────────────────────────────────
 export const parceiros = mysqlTable("parceiros", {
   id: int("id").autoincrement().primaryKey(),
@@ -101,11 +113,11 @@ export const processos = mysqlTable("processos", {
   aiSummaryUpdatedAt: timestamp("ai_summary_updated_at"),
   valorObtido: decimal("valor_obtido", { precision: 15, scale: 2 }),
   valorObtidoUpdatedAt: timestamp("valor_obtido_updated_at"),
-  semAtualizacao7dias: boolean("sem_atualizacao_7dias").default(false).notNull(),
+   semAtualizacao7dias: boolean("sem_atualizacao_7dias").default(false).notNull(),
+  investidorId: int("investidor_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
-
 export type Processo = typeof processos.$inferSelect;
 export type InsertProcesso = typeof processos.$inferInsert;
 

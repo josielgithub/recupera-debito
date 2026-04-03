@@ -46,6 +46,7 @@ import AdminConfig from "./AdminConfig";
 import AdminHistorico from "./AdminHistorico";
 import AdminJudit from "./AdminJudit";
 import AdminImportacaoSimples from "./AdminImportacaoSimples";
+import AdminInvestidores from "./AdminInvestidores";
 
 import {
   BarChart,
@@ -951,6 +952,10 @@ export default function Admin() {
               <Zap className="w-3.5 h-3.5" />
               Judit
             </TabsTrigger>
+            <TabsTrigger value="investidores" className="flex items-center gap-1.5 text-xs">
+              <TrendingUp className="w-3.5 h-3.5" />
+              Investidores
+            </TabsTrigger>
             <TabsTrigger value="config" className="flex items-center gap-1.5 text-xs">
               <Settings className="w-3.5 h-3.5" />
               Config
@@ -964,6 +969,7 @@ export default function Admin() {
           <TabsContent value="importacao"><ImportacaoView /></TabsContent>
           <TabsContent value="logs"><AdminHistorico /></TabsContent>
           <TabsContent value="judit"><AdminJudit /></TabsContent>
+          <TabsContent value="investidores"><AdminInvestidores /></TabsContent>
           <TabsContent value="config"><AdminConfig /></TabsContent>
         </Tabs>
       </div>
