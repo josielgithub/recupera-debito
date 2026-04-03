@@ -299,6 +299,7 @@ interface FiltrosProcessos {
   orderBy?: OrderByColuna;
   orderDir?: "asc" | "desc";
   investidorId?: number;
+  advogado?: string;
 }
 
 export async function listAllProcessos(page = 1, pageSize = 50, filtros?: FiltrosProcessos) {
@@ -321,6 +322,9 @@ export async function listAllProcessos(page = 1, pageSize = 50, filtros?: Filtro
   }
   if (filtros?.investidorId) {
     condicoes.push(eq(processos.investidorId, filtros.investidorId));
+  }
+  if (filtros?.advogado && filtros.advogado.trim()) {
+    condicoes.push(sql`${processos.advogado} LIKE ${'%' + filtros.advogado.trim() + '%'}`);
   }
 
   const whereClause = condicoes.length > 0 ? and(...condicoes) : undefined;

@@ -83,9 +83,10 @@ interface Filtros {
   dataFim: string;
   busca: string;
   investidorId: string;
+  advogado: string;
 }
 
-const FILTROS_VAZIOS: Filtros = { status: [], dataInicio: "", dataFim: "", busca: "", investidorId: "" };
+const FILTROS_VAZIOS: Filtros = { status: [], dataInicio: "", dataFim: "", busca: "", investidorId: "", advogado: "" };
 
 const STATUS_OPTIONS = Object.entries(STATUS_RESUMIDO_LABELS);
 
@@ -278,6 +279,7 @@ export default function AdminProcessos({ filtroStatusInicial }: { filtroStatusIn
     !!filtrosAplicados.dataFim,
     !!filtrosAplicados.busca,
     !!filtrosAplicados.investidorId,
+    !!filtrosAplicados.advogado,
   ].filter(Boolean).length;
 
   const vincularInvestidorLoteMutation = trpc.admin.vincularInvestidorEmLote.useMutation({
@@ -299,6 +301,7 @@ export default function AdminProcessos({ filtroStatusInicial }: { filtroStatusIn
     orderBy: ordenacao.col,
     orderDir: ordenacao.dir,
     investidorId: filtrosAplicados.investidorId ? parseInt(filtrosAplicados.investidorId) : undefined,
+    advogado: filtrosAplicados.advogado || undefined,
   });
 
   const atualizarLoteMutation = trpc.admin.atualizarStatusEmLote.useMutation({
@@ -499,6 +502,20 @@ export default function AdminProcessos({ filtroStatusInicial }: { filtroStatusIn
                     type="date"
                     value={filtros.dataFim}
                     onChange={(e) => setFiltros((f) => ({ ...f, dataFim: e.target.value }))}
+                    className="h-9 text-xs"
+                  />
+                </div>
+
+                {/* Filtro por advogado */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                    <Users className="w-3 h-3" />
+                    Advogado
+                  </label>
+                  <Input
+                    placeholder="Nome do advogado..."
+                    value={filtros.advogado}
+                    onChange={(e) => setFiltros((f) => ({ ...f, advogado: e.target.value }))}
                     className="h-9 text-xs"
                   />
                 </div>

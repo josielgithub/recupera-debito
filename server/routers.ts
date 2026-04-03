@@ -160,6 +160,7 @@ export const appRouter = router({
         orderBy: z.enum(["cnj", "statusResumido", "clienteNome", "parceiroNome", "updatedAt"]).optional(),
         orderDir: z.enum(["asc", "desc"]).optional(),
         investidorId: z.number().optional(),
+        advogado: z.string().optional(),
       }))
       .query(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
@@ -171,6 +172,7 @@ export const appRouter = router({
           orderBy: input.orderBy,
           orderDir: input.orderDir,
           investidorId: input.investidorId,
+          advogado: input.advogado,
         });
       }),
 

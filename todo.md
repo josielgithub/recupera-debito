@@ -345,3 +345,9 @@
 - [x] Página de detalhes do investidor com lista de processos
 - [x] Ação em lote "Vincular a investidor" na lista de processos
 - [x] Exibir investidor na tela de detalhes do processo
+
+## Filtro por Advogado nos Processos
+- [x] Backend: adicionar campo `advogado` à interface FiltrosProcessos no db.ts
+- [x] Backend: aplicar filtro LIKE por advogado na query listAllProcessos
+- [x] Backend: adicionar `advogado` ao input da procedure admin.processos no routers.ts
+- [x] Frontend: adicionar campo de texto "Advogado" no painel de filtros avançados do AdminProcessos
