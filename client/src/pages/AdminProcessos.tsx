@@ -241,11 +241,13 @@ function SortableHead({
 }
 
 // ─── Componente Principal ────────────────────────────────────────────────────
-export default function AdminProcessos({ filtroStatusInicial }: { filtroStatusInicial?: string } = {}) {
+export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorIdInicial }: { filtroStatusInicial?: string; filtroInvestidorIdInicial?: number } = {}) {
   const [, setLocation] = useLocation();
   const [pagina, setPagina] = useState(1);
   const filtrosIniciais: Filtros = filtroStatusInicial
     ? { ...FILTROS_VAZIOS, status: [filtroStatusInicial] }
+    : filtroInvestidorIdInicial
+    ? { ...FILTROS_VAZIOS, investidorId: String(filtroInvestidorIdInicial) }
     : FILTROS_VAZIOS;
   const [filtros, setFiltros] = useState<Filtros>(filtrosIniciais);
   const [filtrosAplicados, setFiltrosAplicados] = useState<Filtros>(filtrosIniciais);

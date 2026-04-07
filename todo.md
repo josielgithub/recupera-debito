@@ -351,3 +351,8 @@
 - [x] Backend: aplicar filtro LIKE por advogado na query listAllProcessos
 - [x] Backend: adicionar `advogado` ao input da procedure admin.processos no routers.ts
 - [x] Frontend: adicionar campo de texto "Advogado" no painel de filtros avançados do AdminProcessos
+
+## Dashboard - Processos por Investidor
+- [x] Adicionar seção "Processos por Investidor" no dashboard admin com cards por investidor
+- [x] Exibir métricas por investidor: total de processos, ganhos, em andamento, perdidos
+- [x] Link direto para lista de processos filtrada por investidor

@@ -339,7 +339,76 @@ function GraficoStatusProcessos() {
 }
 
 // ─── Dashboard Principal ────────────────────────────────────────────────────
-function DashboardView({ onVerStatus }: { onVerStatus: (status: string) => void }) {
+function CardInvestidores({ onVerInvestidor }: { onVerInvestidor: (id: number) => void }) {
+  const { data, isLoading } = trpc.admin.dashboardInvestidores.useQuery();
+
+  if (isLoading) return (
+    <Card className="shadow-sm">
+      <CardContent className="p-6 flex items-center justify-center">
+        <div className="w-6 h-6 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+      </CardContent>
+    </Card>
+  );
+
+  if (!data || data.length === 0) return null;
+
+  return (
+    <Card className="shadow-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+          <Users className="w-4 h-4 text-primary" />
+          Processos por Investidor
+          <Badge variant="outline" className="ml-auto text-xs">{data.length} investidor{data.length !== 1 ? 'es' : ''}</Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {data.map((inv) => (
+            <button
+              key={inv.id}
+              onClick={() => onVerInvestidor(inv.id)}
+              className="flex flex-col gap-2 p-4 rounded-lg border border-border/60 bg-card hover:border-primary/50 hover:bg-primary/5 hover:shadow-sm cursor-pointer active:scale-[0.98] transition-all text-left w-full"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Users className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground leading-tight">{inv.nome}</p>
+                    {inv.percentualParticipacao != null && (
+                      <p className="text-[10px] text-muted-foreground">{inv.percentualParticipacao}% participação</p>
+                    )}
+                  </div>
+                </div>
+                <Badge variant="secondary" className="text-xs">{inv.total}</Badge>
+              </div>
+              <div className="grid grid-cols-3 gap-1.5 mt-1">
+                <div className="flex flex-col items-center p-1.5 rounded-md bg-green-50 dark:bg-green-950/30">
+                  <span className="text-sm font-bold text-green-700 dark:text-green-400">{inv.concluido_ganho}</span>
+                  <span className="text-[9px] text-green-600 dark:text-green-500 leading-tight text-center">Ganhos</span>
+                </div>
+                <div className="flex flex-col items-center p-1.5 rounded-md bg-yellow-50 dark:bg-yellow-950/30">
+                  <span className="text-sm font-bold text-yellow-700 dark:text-yellow-400">{inv.em_andamento}</span>
+                  <span className="text-[9px] text-yellow-600 dark:text-yellow-500 leading-tight text-center">Andamento</span>
+                </div>
+                <div className="flex flex-col items-center p-1.5 rounded-md bg-red-50 dark:bg-red-950/30">
+                  <span className="text-sm font-bold text-red-700 dark:text-red-400">{inv.concluido_perdido}</span>
+                  <span className="text-[9px] text-red-600 dark:text-red-500 leading-tight text-center">Perdidos</span>
+                </div>
+              </div>
+              <p className="text-[10px] text-primary/70 flex items-center gap-0.5 mt-0.5">
+                <ChevronRight className="w-2.5 h-2.5" /> Ver processos
+              </p>
+            </button>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DashboardView({ onVerStatus, onVerInvestidor }: { onVerStatus: (status: string) => void; onVerInvestidor: (id: number) => void }) {
   const { data, isLoading, refetch } = trpc.admin.dashboard.useQuery();
   const rotinaMutation = trpc.admin.rodarRotina7dias.useMutation({
     onSuccess: (r) => {
@@ -474,6 +543,9 @@ function DashboardView({ onVerStatus }: { onVerStatus: (status: string) => void 
           destaque
         />
       </div>
+
+      {/* Processos por Investidor */}
+      <CardInvestidores onVerInvestidor={onVerInvestidor} />
     </div>
   );
 }
@@ -813,9 +885,17 @@ export default function Admin() {
   const { user, loading, isAuthenticated, logout } = useAuth();
   const [abaAtiva, setAbaAtiva] = useState("dashboard");
   const [filtroStatusProcessos, setFiltroStatusProcessos] = useState<string | undefined>(undefined);
+  const [filtroInvestidorId, setFiltroInvestidorId] = useState<number | undefined>(undefined);
 
   const handleVerStatus = useCallback((status: string) => {
     setFiltroStatusProcessos(status);
+    setFiltroInvestidorId(undefined);
+    setAbaAtiva("processos");
+  }, []);
+
+  const handleVerInvestidor = useCallback((id: number) => {
+    setFiltroInvestidorId(id);
+    setFiltroStatusProcessos(undefined);
     setAbaAtiva("processos");
   }, []);
 
@@ -922,7 +1002,7 @@ export default function Admin() {
 
       {/* Conteúdo */}
       <div className="container py-6">
-        <Tabs value={abaAtiva} onValueChange={(v) => { setAbaAtiva(v); if (v !== "processos") setFiltroStatusProcessos(undefined); }}>
+        <Tabs value={abaAtiva} onValueChange={(v) => { setAbaAtiva(v); if (v !== "processos") { setFiltroStatusProcessos(undefined); setFiltroInvestidorId(undefined); } }}>
           <TabsList className="mb-6 bg-white border border-border shadow-sm">
             <TabsTrigger value="dashboard" className="flex items-center gap-1.5 text-xs">
               <LayoutDashboard className="w-3.5 h-3.5" />
@@ -962,8 +1042,8 @@ export default function Admin() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="dashboard"><DashboardView onVerStatus={handleVerStatus} /></TabsContent>
-          <TabsContent value="processos"><AdminProcessos filtroStatusInicial={filtroStatusProcessos} key={filtroStatusProcessos ?? "all"} /></TabsContent>
+          <TabsContent value="dashboard"><DashboardView onVerStatus={handleVerStatus} onVerInvestidor={handleVerInvestidor} /></TabsContent>
+          <TabsContent value="processos"><AdminProcessos filtroStatusInicial={filtroStatusProcessos} filtroInvestidorIdInicial={filtroInvestidorId} key={`${filtroStatusProcessos ?? "all"}-${filtroInvestidorId ?? "none"}`} /></TabsContent>
           <TabsContent value="parceiros"><AdminParceiros /></TabsContent>
           <TabsContent value="importacao-simples"><AdminImportacaoSimples /></TabsContent>
           <TabsContent value="importacao"><ImportacaoView /></TabsContent>
