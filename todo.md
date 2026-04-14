@@ -356,3 +356,11 @@
 - [x] Adicionar seção "Processos por Investidor" no dashboard admin com cards por investidor
 - [x] Exibir métricas por investidor: total de processos, ganhos, em andamento, perdidos
 - [x] Link direto para lista de processos filtrada por investidor
+
+
+## Tarefas Críticas - Fase Atual
+- [x] Desativar dispararAtualizacaoBackground() em judit.ts
+- [x] Remover botão "Rotina 7 dias" do frontend (removida procedure rodarRotina7dias e menção em AdminConfig.tsx)
+- [x] Instalar @anthropic-ai/sdk (já estava instalado)
+- [x] Implementar rota tRPC analisarProcessoIA com Claude (já implementada)
+- [x] Atualizar ProcessoDetalhe.tsx para usar Claude (mutation atualizada)

@@ -819,11 +819,23 @@ function AnaliseIACard({
 
   const utils = trpc.useUtils();
 
-  // LLM interno: resposta síncrona, sem polling
-  const iniciarMutation = trpc.admin.processoAnaliseIAIniciar.useMutation({
+  // Claude IA: resposta sincrona com Claude Haiku
+  const iniciarMutation = trpc.admin.analisarProcessoIA.useMutation({
     onSuccess: (data) => {
-      if (data.summary) {
-        setSummary(data.summary);
+      if (data.analise) {
+        const analiseFormatada = `
+**Situacao Atual:** ${data.analise.situacaoAtual}
+
+**Ultima Movimentacao:** ${data.analise.ultimaMovimentacao}
+
+**Proximo Passo:** ${data.analise.proximoPasso}
+
+**Perspectiva:** ${data.analise.perspectiva}
+
+---
+*Custo estimado: ${data.custoEstimado}*
+        `.trim();
+        setSummary(analiseFormatada);
         setUpdatedAt(new Date().toISOString());
         setExpandido(true);
         setGerarError(null);

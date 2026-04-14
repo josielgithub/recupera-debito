@@ -68,15 +68,7 @@ const FLUXOS = [
       "O cliente poderá ver o status atualizado no portal público",
     ],
   },
-  {
-    titulo: "3. Rotina de monitoramento (7 dias)",
-    passos: [
-      "A rotina roda automaticamente a cada 24 horas",
-      "Processos sem atualização há mais de 7 dias são marcados",
-      'Eles aparecem no card "Sem atualização há 7 dias" no dashboard',
-      'Execute manualmente a qualquer momento clicando em "Rotina 7 dias"',
-    ],
-  },
+
   {
     titulo: "4. Consulta pública por CPF",
     passos: [

@@ -37,7 +37,6 @@ import {
   buscarMovimentacoesJudit,
   coletarResultadosPendentes,
   criarRequisicaoJudit,
-  dispararAtualizacaoBackground,
   iniciarAnaliseIA,
   verificarAnaliseIA,
 } from "./judit";
@@ -221,12 +220,6 @@ export const appRouter = router({
         return result.logs;
       }),
 
-    rodarRotina7dias: protectedProcedure.mutation(async ({ ctx }) => {
-      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
-      const afetados = await marcarProcessosSemAtualizacao();
-      return { afetados };
-    }),
-
     // Atualizar status de processo manualmente
     atualizarStatusProcesso: protectedProcedure
       .input(z.object({
@@ -371,11 +364,7 @@ export const appRouter = router({
           // Se solicitado, dispara atualização via Judit para cada processo
           let atualizacaoInfo: string | null = null;
           if (input.atualizarViaJudit && processosCliente.length > 0) {
-            const ids = processosCliente.map(p => p.id);
-            dispararAtualizacaoBackground(ids).catch(err =>
-              console.error("[Judit] Erro ao disparar atualização por CPF:", err)
-            );
-            atualizacaoInfo = `Disparando atualização para ${ids.length} processo(s) via Judit em background.`;
+            atualizacaoInfo = `Atualização via Judit desativada nesta versão.`;
           }
 
           return {
@@ -440,15 +429,7 @@ export const appRouter = router({
       const { processos: todosProcessos } = await listAllProcessos(1, 10000);
       const ids = todosProcessos.map((p: { id: number }) => p.id);
 
-      // Executa em background
-      ;(async () => {
-        try {
-          const { criadas, erros } = await dispararAtualizacaoBackground(ids);
-          console.log(`[Judit] Background: ${criadas} requisições criadas, ${erros} erros.`);
-        } catch (err) {
-          console.error("[Judit] Erro no background:", err);
-        }
-      })();
+      // Executa em background (desativado nesta versao)
 
       return {
         total: ids.length,
@@ -844,6 +825,40 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
       const buf = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
       return { base64: buf as string, filename: "modelo_importacao_recupera_debito.xlsx" };
     }),
+
+    // Análise IA com Claude Haiku
+    analisarProcessoIA: protectedProcedure
+      .input(z.object({ cnj: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+
+        const processo = await getProcessoByCnj(input.cnj);
+        if (!processo) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+
+        try {
+          const Anthropic = (await import("@anthropic-ai/sdk")).default;
+          const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+          const prompt = `Você é um assistente jurídico especializado. Analise os dados do processo abaixo e responda EXCLUSIVAMENTE em JSON com as chaves: situacaoAtual, ultimaMovimentacao, proximoPasso, perspectiva. Linguagem simples, sem juridiquês, máximo 2 frases por campo.
+
+DADOS DO PROCESSO:
+${JSON.stringify(processo, null, 2)}`;
+
+          const message = await client.messages.create({
+            model: "claude-3-5-haiku-20241022",
+            max_tokens: 512,
+            messages: [{ role: "user", content: prompt }],
+          });
+
+          const texto = (message.content[0] as { type: string; text: string }).text;
+          const analise = JSON.parse(texto);
+
+          return { analise, custoEstimado: "R$ 0,01" };
+        } catch (error) {
+          console.error("[Claude] Erro na análise:", error);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao analisar com Claude" });
+        }
+      }),
   }),
 });
 

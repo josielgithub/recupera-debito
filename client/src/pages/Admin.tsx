@@ -410,13 +410,6 @@ function CardInvestidores({ onVerInvestidor }: { onVerInvestidor: (id: number) =
 
 function DashboardView({ onVerStatus, onVerInvestidor }: { onVerStatus: (status: string) => void; onVerInvestidor: (id: number) => void }) {
   const { data, isLoading, refetch } = trpc.admin.dashboard.useQuery();
-  const rotinaMutation = trpc.admin.rodarRotina7dias.useMutation({
-    onSuccess: (r) => {
-      toast.success(`Rotina executada: ${r.afetados} processo(s) marcado(s).`);
-      refetch();
-    },
-    onError: (err) => toast.error(`Erro: ${err.message}`),
-  });
 
   if (isLoading) {
     return (
@@ -456,22 +449,10 @@ function DashboardView({ onVerStatus, onVerInvestidor }: { onVerStatus: (status:
       {/* Cards por status */}
       <Card className="shadow-sm">
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-primary" />
-              Distribuição por status
-            </CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => rotinaMutation.mutate()}
-              disabled={rotinaMutation.isPending}
-              className="text-xs h-8"
-            >
-              <RefreshCw className={`w-3 h-3 mr-1 ${rotinaMutation.isPending ? "animate-spin" : ""}`} />
-              Rotina 7 dias
-            </Button>
-          </div>
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-primary" />
+            Distribuição por status
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">

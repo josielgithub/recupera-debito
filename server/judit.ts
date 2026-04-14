@@ -392,50 +392,6 @@ export async function coletarResultadosPendentes(): Promise<{
   return { atualizados, semAlteracao, erros };
 }
 
-// ─── Disparar atualização em lote (background) ────────────────────────────
-export async function dispararAtualizacaoBackground(processoIds?: number[]): Promise<{
-  criadas: number;
-  erros: number;
-}> {
-  // Buscar processos sem atualização recente ou os especificados
-  let lista: { id: number; cnj: string }[];
-
-  if (processoIds && processoIds.length > 0) {
-    const { getDb } = await import("./db");
-    const { processos } = await import("../drizzle/schema");
-    const { inArray } = await import("drizzle-orm");
-    const db = await getDb();
-    if (!db) return { criadas: 0, erros: 0 };
-    lista = await db
-      .select({ id: processos.id, cnj: processos.cnj })
-      .from(processos)
-      .where(inArray(processos.id, processoIds));
-  } else {
-    const rows = await listProcessosSemAtualizacaoJudit(7);
-    lista = rows.slice(0, BATCH_SIZE).map((p) => ({ id: p.id, cnj: p.cnj }));
-  }
-
-  let criadas = 0;
-  let erros = 0;
-
-  console.log(`[Judit] Disparando requisições para ${lista.length} processos...`);
-
-  for (const { id, cnj } of lista) {
-    try {
-      await criarRequisicaoJudit(cnj, id);
-      criadas++;
-    } catch (error) {
-      console.error(`[Judit] Erro ao criar requisição para CNJ ${cnj}:`, error);
-      erros++;
-    }
-    // Pequena pausa para evitar rate limiting
-    await sleep(200);
-  }
-
-  console.log(`[Judit] Background concluído: ${criadas} criadas, ${erros} erros.`);
-  return { criadas, erros };
-}
-
 
 // ─── Buscar movimentações completas de um processo ────────────────────────
 export interface JuditStep {
