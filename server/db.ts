@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, sql } from "drizzle-
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   Cliente,
+  Convite,
   InsertCliente,
   InsertJuditRequest,
   InsertLogConsulta,
@@ -11,15 +12,21 @@ import {
   InsertUser,
   Investidor,
   JuditRequest,
+  Lote,
+  LoteInvestidor,
   Parceiro,
   Processo,
   StatusResumido,
+  User,
   clientes,
+  convites,
   investidores,
   juditRequests,
   logsConsulta,
   importJobs,
   logsImportacao,
+  loteInvestidores,
+  lotes,
   parceiros,
   processos,
   rateLimits,
@@ -1052,4 +1059,391 @@ export async function getProcessosSemInvestidor(limit = 100) {
     .from(processos)
     .where(isNull(processos.investidorId))
     .limit(limit);
+}
+
+// ─── Convites ──────────────────────────────────────────────────────────────────
+export async function criarConvite(data: {
+  token: string;
+  roleConvite: "advogado" | "investidor" | "advogado_investidor";
+  geradoPor: number;
+  expiradoEm?: Date | null;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(convites).values({
+    token: data.token,
+    roleConvite: data.roleConvite,
+    geradoPor: data.geradoPor,
+    expiradoEm: data.expiradoEm ?? null,
+    ativo: true,
+  });
+  return (result as unknown as { insertId: number }).insertId;
+}
+
+export async function getConviteByToken(token: string): Promise<Convite | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(convites).where(eq(convites.token, token)).limit(1);
+  return result[0];
+}
+
+export async function usarConvite(token: string, userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(convites)
+    .set({ usadoEm: new Date(), usadoPor: userId, ativo: false })
+    .where(eq(convites.token, token));
+}
+
+export async function revogarConvite(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(convites).set({ ativo: false }).where(eq(convites.id, id));
+}
+
+export async function listConvites(opts?: { ativo?: boolean }) {
+  const db = await getDb();
+  if (!db) return [];
+  const conds: ReturnType<typeof and>[] = [];
+  if (opts?.ativo !== undefined) conds.push(eq(convites.ativo, opts.ativo));
+  const q = db.select().from(convites).orderBy(desc(convites.geradoEm));
+  return conds.length > 0 ? q.where(and(...conds)) : q;
+}
+
+// ─── Users: funções adicionais ─────────────────────────────────────────────────
+export async function getUserById(id: number): Promise<User | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return result[0];
+}
+
+export async function listUsers(opts?: { ativo?: boolean }) {
+  const db = await getDb();
+  if (!db) return [];
+  const conds: ReturnType<typeof and>[] = [];
+  if (opts?.ativo !== undefined) conds.push(eq(users.ativo, opts.ativo));
+  const q = db.select().from(users).orderBy(desc(users.createdAt));
+  return conds.length > 0 ? q.where(and(...conds)) : q;
+}
+
+export async function updateUserAtivo(id: number, ativo: boolean): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ ativo }).where(eq(users.id, id));
+}
+
+export async function setUserExtraRoles(userId: number, extraRoles: string[], conviteId?: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({
+    extraRoles,
+    ...(conviteId !== undefined ? { conviteId } : {}),
+  }).where(eq(users.id, userId));
+}
+
+// ─── Lotes ──────────────────────────────────────────────────────────────────────
+export async function criarLote(data: {
+  nome: string;
+  descricao?: string | null;
+  advogadoId?: number | null;
+  percentualEmpresa?: number;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(lotes).values({
+    nome: data.nome,
+    descricao: data.descricao ?? null,
+    advogadoId: data.advogadoId ?? null,
+    percentualEmpresa: data.percentualEmpresa !== undefined ? String(data.percentualEmpresa) : "0",
+    ativo: true,
+  });
+  return (result as unknown as { insertId: number }).insertId;
+}
+
+export async function getLoteById(id: number): Promise<Lote | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(lotes).where(eq(lotes.id, id)).limit(1);
+  return result[0];
+}
+
+export async function listLotes(opts?: { ativo?: boolean }) {
+  const db = await getDb();
+  if (!db) return [];
+  const conds: ReturnType<typeof and>[] = [];
+  if (opts?.ativo !== undefined) conds.push(eq(lotes.ativo, opts.ativo));
+  const q = db.select().from(lotes).orderBy(desc(lotes.createdAt));
+  return conds.length > 0 ? q.where(and(...conds)) : q;
+}
+
+export async function editarLote(id: number, data: Partial<{
+  nome: string;
+  descricao: string | null;
+  advogadoId: number | null;
+  percentualEmpresa: number;
+  ativo: boolean;
+}>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const set: Record<string, unknown> = {};
+  if (data.nome !== undefined) set.nome = data.nome;
+  if (data.descricao !== undefined) set.descricao = data.descricao;
+  if (data.advogadoId !== undefined) set.advogadoId = data.advogadoId;
+  if (data.percentualEmpresa !== undefined) set.percentualEmpresa = String(data.percentualEmpresa);
+  if (data.ativo !== undefined) set.ativo = data.ativo;
+  if (Object.keys(set).length === 0) return;
+  await db.update(lotes).set(set).where(eq(lotes.id, id));
+}
+
+export async function adicionarInvestidorLote(loteId: number, investidorId: number, percentual: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  // Upsert: remover existente e reinserir
+  await db.delete(loteInvestidores).where(
+    and(eq(loteInvestidores.loteId, loteId), eq(loteInvestidores.investidorId, investidorId))
+  );
+  await db.insert(loteInvestidores).values({ loteId, investidorId, percentual: String(percentual) });
+}
+
+export async function listInvestidoresDoLote(loteId: number): Promise<LoteInvestidor[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(loteInvestidores).where(eq(loteInvestidores.loteId, loteId));
+}
+
+export async function vincularProcessoAoLote(processoId: number, loteId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(processos).set({ loteId }).where(eq(processos.id, processoId));
+}
+
+// ─── Advogado: processos ────────────────────────────────────────────────────────
+export async function listProcessosDoAdvogado(advogadoId: number, page = 1, pageSize = 20) {
+  const db = await getDb();
+  if (!db) return { processos: [], total: 0 };
+  const offset = (page - 1) * pageSize;
+  const [rows, countRows] = await Promise.all([
+    db
+      .select({
+        id: processos.id,
+        cnj: processos.cnj,
+        statusResumido: processos.statusResumido,
+        statusOriginal: processos.statusOriginal,
+        statusJudit: processos.statusJudit,
+        clienteNome: clientes.nome,
+        clienteCpf: clientes.cpf,
+        valorObtido: processos.valorObtido,
+        clientePago: processos.clientePago,
+        createdAt: processos.createdAt,
+        updatedAt: processos.updatedAt,
+      })
+      .from(processos)
+      .leftJoin(clientes, eq(processos.clienteId, clientes.id))
+      .where(eq(processos.advogadoId, advogadoId))
+      .orderBy(desc(processos.createdAt))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(processos)
+      .where(eq(processos.advogadoId, advogadoId)),
+  ]);
+  return { processos: rows, total: Number(countRows[0]?.count ?? 0) };
+}
+
+export async function metricsAdvogado(advogadoId: number) {
+  const db = await getDb();
+  if (!db) return { total: 0, emAndamento: 0, concluidoGanho: 0, concluidoPerdido: 0, aguardandoJudit: 0, emAnalise: 0 };
+  const rows = await db
+    .select({ statusResumido: processos.statusResumido, statusJudit: processos.statusJudit })
+    .from(processos)
+    .where(eq(processos.advogadoId, advogadoId));
+
+  const m = { total: rows.length, emAndamento: 0, concluidoGanho: 0, concluidoPerdido: 0, aguardandoJudit: 0, emAnalise: 0 };
+  for (const r of rows) {
+    if (r.statusJudit === "aguardando_aprovacao_judit") m.aguardandoJudit++;
+    if (r.statusResumido === "em_analise_inicial") m.emAnalise++;
+    if (["em_andamento", "protocolado", "aguardando_audiencia", "aguardando_sentenca", "em_recurso", "cumprimento_de_sentenca"].includes(r.statusResumido)) m.emAndamento++;
+    if (r.statusResumido === "concluido_ganho") m.concluidoGanho++;
+    if (r.statusResumido === "concluido_perdido") m.concluidoPerdido++;
+  }
+  return m;
+}
+
+export async function registrarResultadoProcesso(processoId: number, data: {
+  valorObtido: number | null;
+  clientePago: boolean;
+  dataPagamentoCliente: Date | null;
+  valorPagoCliente: number | null;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(processos).set({
+    valorObtido: data.valorObtido !== null ? String(data.valorObtido) : null,
+    valorObtidoUpdatedAt: new Date(),
+    clientePago: data.clientePago,
+    dataPagamentoCliente: data.dataPagamentoCliente,
+    valorPagoCliente: data.valorPagoCliente !== null ? String(data.valorPagoCliente) : null,
+  }).where(eq(processos.id, processoId));
+}
+
+export async function declinarProcesso(processoId: number, motivo: string | null): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(processos).set({
+    statusResumido: "arquivado_encerrado",
+    motivoDeclinado: motivo,
+  }).where(eq(processos.id, processoId));
+}
+
+// ─── Fila Judit (admin) ────────────────────────────────────────────────────────
+export async function listFilaJudit(page = 1, pageSize = 50) {
+  const db = await getDb();
+  if (!db) return { processos: [], total: 0 };
+  const offset = (page - 1) * pageSize;
+  const [rows, countRows] = await Promise.all([
+    db
+      .select({
+        id: processos.id,
+        cnj: processos.cnj,
+        statusResumido: processos.statusResumido,
+        statusJudit: processos.statusJudit,
+        clienteNome: clientes.nome,
+        clienteCpf: clientes.cpf,
+        advogadoId: processos.advogadoId,
+        createdAt: processos.createdAt,
+      })
+      .from(processos)
+      .leftJoin(clientes, eq(processos.clienteId, clientes.id))
+      .where(eq(processos.statusJudit, "aguardando_aprovacao_judit"))
+      .orderBy(asc(processos.createdAt))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(processos)
+      .where(eq(processos.statusJudit, "aguardando_aprovacao_judit")),
+  ]);
+  return { processos: rows, total: Number(countRows[0]?.count ?? 0) };
+}
+
+export async function aprovarProcessoJudit(processoId: number, adminId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(processos).set({
+    statusJudit: "consultado",
+    aprovadoParaJuditEm: new Date(),
+    aprovadoParaJuditPor: adminId,
+  }).where(eq(processos.id, processoId));
+}
+
+export async function marcarProcessoNaoEncontradoJudit(processoId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(processos).set({
+    statusJudit: "nao_encontrado",
+    statusResumido: "em_analise_inicial",
+  }).where(eq(processos.id, processoId));
+}
+
+// ─── Investidor: processos dos lotes ────────────────────────────────────────────
+export async function listProcessosDoInvestidor(investidorUserId: number, page = 1, pageSize = 50) {
+  const db = await getDb();
+  if (!db) return { processos: [], total: 0, projecaoTotal: 0, percentualMedio: 0 };
+
+  // Buscar lotes onde o investidor está vinculado
+  const lotesInv = await db
+    .select({ loteId: loteInvestidores.loteId, percentual: loteInvestidores.percentual })
+    .from(loteInvestidores)
+    .where(eq(loteInvestidores.investidorId, investidorUserId));
+
+  if (lotesInv.length === 0) return { processos: [], total: 0, projecaoTotal: 0, percentualMedio: 0 };
+
+  const loteIds = lotesInv.map(l => l.loteId);
+  const percentualMap = new Map(lotesInv.map(l => [l.loteId, Number(l.percentual)]));
+
+  const offset = (page - 1) * pageSize;
+
+  // Buscar processos dos lotes
+  const [rows, countRows] = await Promise.all([
+    db
+      .select({
+        id: processos.id,
+        cnj: processos.cnj,
+        statusResumido: processos.statusResumido,
+        clienteNome: clientes.nome,
+        clienteCpf: clientes.cpf,
+        loteId: processos.loteId,
+        valorObtido: processos.valorObtido,
+        clientePago: processos.clientePago,
+        valorPagoCliente: processos.valorPagoCliente,
+        updatedAt: processos.updatedAt,
+      })
+      .from(processos)
+      .leftJoin(clientes, eq(processos.clienteId, clientes.id))
+      .where(inArray(processos.loteId, loteIds))
+      .orderBy(desc(processos.updatedAt))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(processos)
+      .where(inArray(processos.loteId, loteIds)),
+  ]);
+
+  // Calcular projeção
+  let projecaoTotal = 0;
+  let somaPercentual = 0;
+  let countPercentual = 0;
+
+  const processosComPercentual = rows.map(p => {
+    const percentual = p.loteId ? (percentualMap.get(p.loteId) ?? 0) : 0;
+    const valorObtido = p.valorObtido ? Number(p.valorObtido) : 0;
+    const valorProjetado = valorObtido * (percentual / 100);
+    const valorRecebido = p.clientePago && p.valorPagoCliente ? Number(p.valorPagoCliente) * (percentual / 100) : 0;
+    if (percentual > 0) { somaPercentual += percentual; countPercentual++; }
+    projecaoTotal += valorProjetado;
+    return { ...p, percentual, valorProjetado, valorRecebido };
+  });
+
+  return {
+    processos: processosComPercentual,
+    total: Number(countRows[0]?.count ?? 0),
+    projecaoTotal,
+    percentualMedio: countPercentual > 0 ? somaPercentual / countPercentual : 0,
+  };
+}
+
+export async function metricsInvestidor(investidorUserId: number) {
+  const db = await getDb();
+  if (!db) return { total: 0, emAndamento: 0, ganhos: 0, perdidos: 0, valorTotalDisputa: 0, valorProjetado: 0 };
+
+  const lotesInv = await db
+    .select({ loteId: loteInvestidores.loteId, percentual: loteInvestidores.percentual })
+    .from(loteInvestidores)
+    .where(eq(loteInvestidores.investidorId, investidorUserId));
+
+  if (lotesInv.length === 0) return { total: 0, emAndamento: 0, ganhos: 0, perdidos: 0, valorTotalDisputa: 0, valorProjetado: 0 };
+
+  const loteIds = lotesInv.map(l => l.loteId);
+  const percentualMap = new Map(lotesInv.map(l => [l.loteId, Number(l.percentual)]));
+
+  const rows = await db
+    .select({ statusResumido: processos.statusResumido, loteId: processos.loteId, valorObtido: processos.valorObtido })
+    .from(processos)
+    .where(inArray(processos.loteId, loteIds));
+
+  const m = { total: rows.length, emAndamento: 0, ganhos: 0, perdidos: 0, valorTotalDisputa: 0, valorProjetado: 0 };
+  for (const r of rows) {
+    const percentual = r.loteId ? (percentualMap.get(r.loteId) ?? 0) : 0;
+    const valor = r.valorObtido ? Number(r.valorObtido) : 0;
+    m.valorTotalDisputa += valor;
+    m.valorProjetado += valor * (percentual / 100);
+    if (["em_andamento", "protocolado", "aguardando_audiencia", "aguardando_sentenca", "em_recurso", "cumprimento_de_sentenca"].includes(r.statusResumido)) m.emAndamento++;
+    if (r.statusResumido === "concluido_ganho") m.ganhos++;
+    if (r.statusResumido === "concluido_perdido") m.perdidos++;
+  }
+  return m;
 }

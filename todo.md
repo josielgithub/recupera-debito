@@ -364,3 +364,62 @@
 - [x] Instalar @anthropic-ai/sdk (já estava instalado)
 - [x] Implementar rota tRPC analisarProcessoIA com Claude (já implementada)
 - [x] Atualizar ProcessoDetalhe.tsx para usar Claude (mutation atualizada)
+
+## Sistema de Convites, Advogados e Investidores (Nova Fase)
+
+### Schema e Banco
+- [x] Adicionar enum roles ao users: advogado, investidor, advogado_investidor (campo extra_roles JSON)
+- [x] Criar tabela convites (token, role, geradoPor, usadoEm, usadoPor, ativo, expiradoEm)
+- [x] Criar tabela lotes (nome, descricao, advogadoId, percentualEmpresa, ativo)
+- [x] Criar tabela lote_investidores (loteId, investidorId, percentual)
+- [x] Adicionar colunas na tabela processos: advogadoId, loteId, statusJudit, aprovadoParaJuditEm, aprovadoParaJuditPor, clientePago, dataPagamentoCliente, valorPagoCliente, motivoDeclinado
+- [x] Aplicar migrações SQL
+
+### Backend - Convites
+- [x] Rota admin.gerarConvite (role, expiradoEm)
+- [x] Rota admin.listarConvites
+- [x] Rota admin.revogarConvite (id)
+- [x] Rota convite.verificar (token) — retorna role e status
+- [x] Rota convite.vincularAoUsuario — vincula convite ao usuário logado
+
+### Backend - Advogado
+- [x] Rota advogado.meusDados
+- [x] Rota advogado.meusProcessos
+- [x] Rota advogado.cadastrarProcesso (cnj, cpfCliente) — NUNCA aciona Judit
+- [x] Rota advogado.registrarResultado (processoId, valorObtido, clientePago, dataPagamento, valorPagoCliente)
+- [x] Rota advogado.declinarProcesso (processoId, motivo)
+
+### Backend - Investidor
+- [x] Rota investidor.meusDados
+- [x] Rota investidor.meusProcessos
+
+### Backend - Admin (Lotes e Fila Judit)
+- [x] Rota admin.criarLote
+- [x] Rota admin.editarLote
+- [x] Rota admin.listarLotes
+- [x] Rota admin.listarUsuarios
+- [x] Rota admin.desativarUsuario
+- [x] Rota admin.filaJudit — lista processos com statusJudit = aguardando_aprovacao_judit
+- [x] Rota admin.aprovarFilaJudit (processoIds[]) — dispara Judit e atualiza statusJudit
+
+### Segurança
+- [x] Verificar role === admin em TODAS as rotas que acessam Judit (FORBIDDEN em todas as rotas admin)
+
+### Frontend - Convite
+- [x] Página /convite/[token] com boas-vindas e botão OAuth
+- [x] Após OAuth: vincular convite e redirecionar para dashboard correto
+
+### Frontend - Advogado
+- [x] Portal com header, cards de métricas, tabela de processos
+- [x] Formulário cadastrar processo (modal)
+- [x] Registrar resultado financeiro (modal)
+- [x] Declinar processo
+
+### Frontend - Investidor
+- [x] Portal com header, cards de métricas financeiras, tabela de processos com percentuais
+- [x] Projeção financeira por processo e total
+
+### Frontend - Admin (novas funcionalidades)
+- [x] Aba gestão de usuários: lista + gerar convite + revogar
+- [x] Aba Fila Judit com seleção múltipla e confirmação
+- [x] Aba Lotes com criação e gestão

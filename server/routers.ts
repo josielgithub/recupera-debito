@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { randomUUID } from "crypto";
 import { COOKIE_NAME } from "@shared/const";
 import { STATUS_RESUMIDO, StatusResumido } from "../drizzle/schema";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -28,6 +29,37 @@ import {
   updateProcessoStatus,
   upsertParceiro,
   listAllJuditRequestsByCnj,
+  // Convites
+  criarConvite,
+  getConviteByToken,
+  usarConvite,
+  revogarConvite,
+  listConvites,
+  // Users
+  getUserById,
+  listUsers,
+  updateUserAtivo,
+  setUserExtraRoles,
+  // Lotes
+  criarLote,
+  getLoteById,
+  listLotes,
+  editarLote,
+  adicionarInvestidorLote,
+  listInvestidoresDoLote,
+  vincularProcessoAoLote,
+  // Advogado
+  listProcessosDoAdvogado,
+  metricsAdvogado,
+  registrarResultadoProcesso,
+  declinarProcesso,
+  // Fila Judit
+  listFilaJudit,
+  aprovarProcessoJudit,
+  marcarProcessoNaoEncontradoJudit,
+  // Investidor
+  listProcessosDoInvestidor,
+  metricsInvestidor,
 } from "./db";
 import { processarPlanilha } from "./importacao";
 import { importarPlanilhaSimples, conciliarComJuditBackground } from "./importacaoSimples";
@@ -43,6 +75,7 @@ import {
 import { updateAiSummary, updateValorObtido, getImportJob, listImportJobs,
   listInvestidores, upsertInvestidor, vincularInvestidorAoProcesso,
   vincularInvestidorEmLote, getDashboardInvestidores, getProcessosSemInvestidor,
+  upsertProcesso, upsertCliente,
 } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { createHash } from "crypto";
@@ -826,6 +859,147 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
       return { base64: buf as string, filename: "modelo_importacao_recupera_debito.xlsx" };
     }),
 
+    // ─── Convites ────────────────────────────────────────────────────────────
+    gerarConvite: protectedProcedure
+      .input(z.object({
+        roleConvite: z.enum(["advogado", "investidor", "advogado_investidor"]),
+        expiradoEm: z.string().optional(), // ISO date string
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const token = randomUUID().replace(/-/g, "").slice(0, 16);
+        const id = await criarConvite({
+          token,
+          roleConvite: input.roleConvite,
+          geradoPor: ctx.user.id,
+          expiradoEm: input.expiradoEm ? new Date(input.expiradoEm) : null,
+        });
+        const link = `${process.env.VITE_FRONTEND_FORGE_API_URL ? "" : ""}/convite/${token}`;
+        return { id, token, link };
+      }),
+
+    listarConvites: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return listConvites();
+    }),
+
+    revogarConvite: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        await revogarConvite(input.id);
+        return { ok: true };
+      }),
+
+    // ─── Gestão de Usuários ────────────────────────────────────────────────────
+    listarUsuarios: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return listUsers();
+    }),
+
+    desativarUsuario: protectedProcedure
+      .input(z.object({ id: z.number(), ativo: z.boolean() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        await updateUserAtivo(input.id, input.ativo);
+        return { ok: true };
+      }),
+
+    // ─── Lotes ────────────────────────────────────────────────────────────────
+    criarLote: protectedProcedure
+      .input(z.object({
+        nome: z.string().min(1),
+        descricao: z.string().optional(),
+        advogadoId: z.number().optional(),
+        percentualEmpresa: z.number().min(0).max(100).default(0),
+        investidores: z.array(z.object({ usuarioId: z.number(), percentual: z.number() })).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const id = await criarLote({
+          nome: input.nome,
+          descricao: input.descricao,
+          advogadoId: input.advogadoId,
+          percentualEmpresa: input.percentualEmpresa,
+        });
+        if (input.investidores) {
+          for (const inv of input.investidores) {
+            await adicionarInvestidorLote(id, inv.usuarioId, inv.percentual);
+          }
+        }
+        return { id };
+      }),
+
+    editarLote: protectedProcedure
+      .input(z.object({
+        loteId: z.number(),
+        nome: z.string().optional(),
+        descricao: z.string().optional(),
+        advogadoId: z.number().optional(),
+        percentualEmpresa: z.number().optional(),
+        ativo: z.boolean().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { loteId, ...data } = input;
+        await editarLote(loteId, data);
+        return { ok: true };
+      }),
+
+    vincularProcessoLote: protectedProcedure
+      .input(z.object({ processoId: z.number(), loteId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        await vincularProcessoAoLote(input.processoId, input.loteId);
+        return { ok: true };
+      }),
+
+    listarLotes: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      const todos = await listLotes();
+      const resultado = [];
+      for (const lote of todos) {
+        const investidores = await listInvestidoresDoLote(lote.id);
+        resultado.push({ ...lote, investidores });
+      }
+      return resultado;
+    }),
+
+    // ─── Fila Judit (admin) ────────────────────────────────────────────────────
+    filaJudit: protectedProcedure
+      .input(z.object({ page: z.number().default(1), pageSize: z.number().default(50) }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        return listFilaJudit(input.page, input.pageSize);
+      }),
+
+    aprovarFilaJudit: protectedProcedure
+      .input(z.object({ processoIds: z.array(z.number()) }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const resultados = [];
+        for (const processoId of input.processoIds) {
+          try {
+            // Buscar o processo para obter o CNJ
+            const procs = await listFilaJudit(1, 1000);
+            const proc = procs.processos.find(p => p.id === processoId);
+            if (!proc) { resultados.push({ processoId, ok: false, erro: "Não encontrado" }); continue; }
+            // Disparar consulta Judit
+            const resultado = await buscarESalvarProcessoJudit(proc.cnj);
+            if (resultado.notFound) {
+              await marcarProcessoNaoEncontradoJudit(processoId);
+              resultados.push({ processoId, ok: true, notFound: true });
+            } else {
+              await aprovarProcessoJudit(processoId, ctx.user.id);
+              resultados.push({ processoId, ok: true, notFound: false });
+            }
+          } catch (err) {
+            resultados.push({ processoId, ok: false, erro: String(err) });
+          }
+        }
+        return { resultados };
+      }),
+
     // Análise IA com Claude Haiku
     analisarProcessoIA: protectedProcedure
       .input(z.object({ cnj: z.string() }))
@@ -858,6 +1032,156 @@ ${JSON.stringify(processo, null, 2)}`;
           console.error("[Claude] Erro na análise:", error);
           throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao analisar com Claude" });
         }
+      }),
+  }),
+
+  // ─── Convite Público ────────────────────────────────────────────────────────────────
+  convite: router({
+    verificar: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const convite = await getConviteByToken(input.token);
+        if (!convite) return { valido: false, motivo: "Link de convite inválido ou expirado. Solicite um novo ao administrador." };
+        if (!convite.ativo) return { valido: false, motivo: "Este convite já foi utilizado ou foi revogado." };
+        if (convite.usadoPor) return { valido: false, motivo: "Este convite já foi utilizado." };
+        if (convite.expiradoEm && new Date() > new Date(convite.expiradoEm)) return { valido: false, motivo: "Link de convite inválido ou expirado. Solicite um novo ao administrador." };
+        return { valido: true, roleConvite: convite.roleConvite, token: convite.token };
+      }),
+
+    // Após OAuth: vincular convite ao usuário logado
+    vincularAoUsuario: protectedProcedure
+      .input(z.object({ token: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const convite = await getConviteByToken(input.token);
+        if (!convite) throw new TRPCError({ code: "NOT_FOUND", message: "Convite não encontrado" });
+        if (!convite.ativo || convite.usadoPor) throw new TRPCError({ code: "BAD_REQUEST", message: "Convite já utilizado" });
+        if (convite.expiradoEm && new Date() > new Date(convite.expiradoEm)) throw new TRPCError({ code: "BAD_REQUEST", message: "Convite expirado" });
+
+        // Definir extra_roles baseado no roleConvite
+        const extraRoles = convite.roleConvite === "advogado_investidor"
+          ? ["advogado", "investidor"]
+          : [convite.roleConvite];
+
+        await setUserExtraRoles(ctx.user.id, extraRoles, convite.id);
+        await usarConvite(input.token, ctx.user.id);
+
+        return { ok: true, extraRoles };
+      }),
+  }),
+
+  // ─── Advogado ─────────────────────────────────────────────────────────────────────────────
+  advogado: router({
+    meusDados: protectedProcedure.query(async ({ ctx }) => {
+      const roles: string[] = (ctx.user.extraRoles as string[] | null) ?? [];
+      if (!roles.includes("advogado") && !roles.includes("advogado_investidor") && ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      const metrics = await metricsAdvogado(ctx.user.id);
+      return { user: ctx.user, metrics };
+    }),
+
+    meusProcessos: protectedProcedure
+      .input(z.object({ page: z.number().default(1), pageSize: z.number().default(20) }))
+      .query(async ({ input, ctx }) => {
+        const roles: string[] = (ctx.user.extraRoles as string[] | null) ?? [];
+        if (!roles.includes("advogado") && !roles.includes("advogado_investidor") && ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        return listProcessosDoAdvogado(ctx.user.id, input.page, input.pageSize);
+      }),
+
+    cadastrarProcesso: protectedProcedure
+      .input(z.object({
+        cnj: z.string().min(1),
+        cpfCliente: z.string().min(1),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const roles: string[] = (ctx.user.extraRoles as string[] | null) ?? [];
+        if (!roles.includes("advogado") && !roles.includes("advogado_investidor") && ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        // Normalizar CPF
+        const cpfLimpo = input.cpfCliente.replace(/\D/g, "");
+        const cpfFormatado = cpfLimpo.length === 11
+          ? `${cpfLimpo.slice(0,3)}.${cpfLimpo.slice(3,6)}.${cpfLimpo.slice(6,9)}-${cpfLimpo.slice(9)}`
+          : cpfLimpo;
+
+        // Buscar ou criar cliente
+        let cliente = await getClienteByCpf(cpfFormatado);
+        let clienteId: number;
+        if (!cliente) {
+          clienteId = await upsertCliente({ nome: "A identificar", cpf: cpfFormatado });
+        } else {
+          clienteId = cliente.id;
+        }
+
+        // Criar processo localmente — NUNCA aciona Judit
+        await upsertProcesso({
+          cnj: input.cnj,
+          clienteId,
+          advogadoId: ctx.user.id,
+          statusResumido: "em_analise_inicial",
+          statusJudit: "aguardando_aprovacao_judit",
+          fonteAtualizacao: "judit",
+        } as Parameters<typeof upsertProcesso>[0]);
+
+        return { ok: true, mensagem: "Processo cadastrado com sucesso. O administrador será notificado para consultar na Judit." };
+      }),
+
+    registrarResultado: protectedProcedure
+      .input(z.object({
+        processoId: z.number(),
+        valorObtido: z.number().nullable(),
+        clientePago: z.boolean(),
+        dataPagamento: z.string().nullable(), // ISO date
+        valorPagoCliente: z.number().nullable(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const roles: string[] = (ctx.user.extraRoles as string[] | null) ?? [];
+        if (!roles.includes("advogado") && !roles.includes("advogado_investidor") && ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        await registrarResultadoProcesso(input.processoId, {
+          valorObtido: input.valorObtido,
+          clientePago: input.clientePago,
+          dataPagamentoCliente: input.dataPagamento ? new Date(input.dataPagamento) : null,
+          valorPagoCliente: input.valorPagoCliente,
+        });
+        return { ok: true };
+      }),
+
+    declinarProcesso: protectedProcedure
+      .input(z.object({ processoId: z.number(), motivo: z.string().nullable() }))
+      .mutation(async ({ input, ctx }) => {
+        const roles: string[] = (ctx.user.extraRoles as string[] | null) ?? [];
+        if (!roles.includes("advogado") && !roles.includes("advogado_investidor") && ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        await declinarProcesso(input.processoId, input.motivo);
+        return { ok: true };
+      }),
+  }),
+
+  // ─── Investidor ───────────────────────────────────────────────────────────────────────────
+  investidor: router({
+    meusDados: protectedProcedure.query(async ({ ctx }) => {
+      const roles: string[] = (ctx.user.extraRoles as string[] | null) ?? [];
+      if (!roles.includes("investidor") && !roles.includes("advogado_investidor") && ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      const metrics = await metricsInvestidor(ctx.user.id);
+      return { user: ctx.user, metrics };
+    }),
+
+    meusProcessos: protectedProcedure
+      .input(z.object({ page: z.number().default(1), pageSize: z.number().default(50) }))
+      .query(async ({ input, ctx }) => {
+        const roles: string[] = (ctx.user.extraRoles as string[] | null) ?? [];
+        if (!roles.includes("investidor") && !roles.includes("advogado_investidor") && ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        return listProcessosDoInvestidor(ctx.user.id, input.page, input.pageSize);
       }),
   }),
 });

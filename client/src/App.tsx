@@ -10,6 +10,12 @@ import ProcessoDetalhe from "./pages/ProcessoDetalhe";
 import AdminInvestidores from "./pages/AdminInvestidores";
 import { useEffect } from "react";
 import { trpc } from "@/lib/trpc";
+import Convite from "./pages/Convite";
+import AdvogadoPortal from "./pages/AdvogadoPortal";
+import InvestidorPortal from "./pages/InvestidorPortal";
+import AdminUsuarios from "./pages/AdminUsuarios";
+import AdminFilaJudit from "./pages/AdminFilaJudit";
+import AdminLotes from "./pages/AdminLotes";
 
 // Handles post-OAuth redirect: if the user just logged in and there's a stored returnPath,
 // do a full page navigation to ensure the session cookie is properly read.
@@ -41,6 +47,12 @@ function Router() {
       <Route path="/admin" component={Admin} />
       <Route path="/admin/processo/:cnj" component={ProcessoDetalhe} />
       <Route path="/admin/investidores" component={AdminInvestidores} />
+      <Route path="/admin/usuarios" component={AdminUsuarios} />
+      <Route path="/admin/fila-judit" component={AdminFilaJudit} />
+      <Route path="/admin/lotes" component={AdminLotes} />
+      <Route path="/convite/:token" component={Convite} />
+      <Route path="/advogado" component={AdvogadoPortal} />
+      <Route path="/investidor" component={InvestidorPortal} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

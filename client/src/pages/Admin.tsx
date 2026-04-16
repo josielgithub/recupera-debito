@@ -47,6 +47,9 @@ import AdminHistorico from "./AdminHistorico";
 import AdminJudit from "./AdminJudit";
 import AdminImportacaoSimples from "./AdminImportacaoSimples";
 import AdminInvestidores from "./AdminInvestidores";
+import AdminUsuarios from "./AdminUsuarios";
+import AdminLotes from "./AdminLotes";
+import AdminFilaJudit from "./AdminFilaJudit";
 
 import {
   BarChart,
@@ -1021,6 +1024,18 @@ export default function Admin() {
               <Settings className="w-3.5 h-3.5" />
               Config
             </TabsTrigger>
+            <TabsTrigger value="fila-judit" className="flex items-center gap-1.5 text-xs">
+              <Clock className="w-3.5 h-3.5" />
+              Fila Judit
+            </TabsTrigger>
+            <TabsTrigger value="lotes" className="flex items-center gap-1.5 text-xs">
+              <FileText className="w-3.5 h-3.5" />
+              Lotes
+            </TabsTrigger>
+            <TabsTrigger value="usuarios" className="flex items-center gap-1.5 text-xs">
+              <Users className="w-3.5 h-3.5" />
+              Usuários
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="dashboard"><DashboardView onVerStatus={handleVerStatus} onVerInvestidor={handleVerInvestidor} /></TabsContent>
@@ -1032,6 +1047,9 @@ export default function Admin() {
           <TabsContent value="judit"><AdminJudit /></TabsContent>
           <TabsContent value="investidores"><AdminInvestidores /></TabsContent>
           <TabsContent value="config"><AdminConfig /></TabsContent>
+          <TabsContent value="fila-judit"><AdminFilaJudit /></TabsContent>
+          <TabsContent value="lotes"><AdminLotes /></TabsContent>
+          <TabsContent value="usuarios"><AdminUsuarios /></TabsContent>
         </Tabs>
       </div>
     </div>

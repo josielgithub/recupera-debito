@@ -57,6 +57,13 @@
       "when": 1775189403377,
       "tag": "0007_spicy_doctor_strange",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1776373091047,
+      "tag": "0008_shallow_toxin",
+      "breakpoints": true
     }
   ]
 }
