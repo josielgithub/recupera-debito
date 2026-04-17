@@ -4,11 +4,13 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Plus, Copy, CheckCircle, XCircle, Users, Link, Trash2 } from "lucide-react";
+import { Loader2, Plus, Copy, CheckCircle, XCircle, Users, Link, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
@@ -18,6 +20,144 @@ const ROLE_LABELS: Record<string, string> = {
   advogado_investidor: "Advogado & Investidor",
 };
 
+/** Aplica máscara de telefone: (00) 00000-0000 ou (00) 0000-0000 */
+function mascaraTelefone(valor: string): string {
+  const digits = valor.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 10) {
+    return digits
+      .replace(/^(\d{2})(\d)/, "($1) $2")
+      .replace(/(\d{4})(\d)/, "$1-$2");
+  }
+  return digits
+    .replace(/^(\d{2})(\d)/, "($1) $2")
+    .replace(/(\d{5})(\d)/, "$1-$2");
+}
+
+// ─── Dialog de Edição de Usuário ────────────────────────────────────────────
+interface EditarUsuarioDialogProps {
+  usuario: { id: number; name: string | null; email: string | null; telefone?: string | null };
+  onSuccess: () => void;
+}
+
+function EditarUsuarioDialog({ usuario, onSuccess }: EditarUsuarioDialogProps) {
+  const [open, setOpen] = useState(false);
+  const [nome, setNome] = useState(usuario.name ?? "");
+  const [telefone, setTelefone] = useState(
+    usuario.telefone ? mascaraTelefone(usuario.telefone) : ""
+  );
+
+  const editar = trpc.admin.editarUsuario.useMutation({
+    onSuccess: () => {
+      toast.success("Dados atualizados com sucesso");
+      setOpen(false);
+      onSuccess();
+    },
+    onError: (err) => toast.error(err.message || "Erro ao atualizar usuário"),
+  });
+
+  const handleOpen = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (isOpen) {
+      // Resetar campos ao abrir
+      setNome(usuario.name ?? "");
+      setTelefone(usuario.telefone ? mascaraTelefone(usuario.telefone) : "");
+    }
+  };
+
+  const handleSalvar = () => {
+    const nomeTrimmed = nome.trim();
+    if (nomeTrimmed.length < 2) {
+      toast.error("Nome deve ter pelo menos 2 caracteres");
+      return;
+    }
+    if (nomeTrimmed.length > 100) {
+      toast.error("Nome deve ter no máximo 100 caracteres");
+      return;
+    }
+    const telefoneLimpo = telefone.replace(/\D/g, "");
+    if (telefoneLimpo && (telefoneLimpo.length < 10 || telefoneLimpo.length > 11)) {
+      toast.error("Telefone deve ter 10 ou 11 dígitos");
+      return;
+    }
+    editar.mutate({
+      usuarioId: usuario.id,
+      nome: nomeTrimmed,
+      telefone: telefoneLimpo || null,
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpen}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="sm" title="Editar dados do usuário">
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Editar Usuário</DialogTitle>
+          <DialogDescription>
+            Atualize o nome e telefone do usuário. O e-mail não pode ser alterado pois vem do OAuth.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* Email (somente leitura) */}
+          <div className="space-y-1.5">
+            <Label className="text-sm">E-mail (somente leitura)</Label>
+            <Input
+              value={usuario.email ?? "—"}
+              disabled
+              className="bg-muted text-muted-foreground cursor-not-allowed"
+            />
+          </div>
+
+          {/* Nome */}
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-nome" className="text-sm">
+              Nome completo <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="edit-nome"
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              placeholder="Nome completo"
+              maxLength={100}
+            />
+          </div>
+
+          {/* Telefone */}
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-telefone" className="text-sm">
+              Telefone / WhatsApp
+            </Label>
+            <Input
+              id="edit-telefone"
+              value={telefone}
+              onChange={(e) => setTelefone(mascaraTelefone(e.target.value))}
+              placeholder="(00) 00000-0000"
+              inputMode="numeric"
+              maxLength={15}
+            />
+            <p className="text-xs text-muted-foreground">Opcional. Apenas números serão salvos.</p>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)} disabled={editar.isPending}>
+            Cancelar
+          </Button>
+          <Button onClick={handleSalvar} disabled={editar.isPending}>
+            {editar.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+            Salvar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Dialog de Gerar Convite ─────────────────────────────────────────────────
 function GerarConviteDialog({ onSuccess }: { onSuccess: () => void }) {
   const [open, setOpen] = useState(false);
   const [roleConvite, setRoleConvite] = useState<"advogado" | "investidor" | "advogado_investidor">("advogado");
@@ -110,6 +250,7 @@ function GerarConviteDialog({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
+// ─── Página Principal ─────────────────────────────────────────────────────────
 export default function AdminUsuarios() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -289,6 +430,7 @@ export default function AdminUsuarios() {
                     <TableRow>
                       <TableHead>Nome</TableHead>
                       <TableHead>Email</TableHead>
+                      <TableHead>Telefone</TableHead>
                       <TableHead>Role</TableHead>
                       <TableHead>Acesso Extra</TableHead>
                       <TableHead>Status</TableHead>
@@ -298,10 +440,16 @@ export default function AdminUsuarios() {
                   <TableBody>
                     {usuarios.map((u) => {
                       const extraRoles = (u.extraRoles as string[] | null) ?? [];
+                      const telefoneFormatado = (u as { telefone?: string | null }).telefone
+                        ? mascaraTelefone((u as { telefone: string }).telefone)
+                        : null;
                       return (
                         <TableRow key={u.id}>
                           <TableCell className="text-sm font-medium">{u.name || "—"}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{u.email || "—"}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {telefoneFormatado ?? <span className="text-xs text-muted-foreground/50">—</span>}
+                          </TableCell>
                           <TableCell>
                             <Badge variant={u.role === "admin" ? "default" : "secondary"} className="text-xs">
                               {u.role === "admin" ? "Admin" : "Usuário"}
@@ -330,16 +478,29 @@ export default function AdminUsuarios() {
                             )}
                           </TableCell>
                           <TableCell className="text-right">
-                            {u.role !== "admin" && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => desativar.mutate({ id: u.id, ativo: !u.ativo })}
-                                disabled={desativar.isPending}
-                              >
-                                {u.ativo ? "Desativar" : "Ativar"}
-                              </Button>
-                            )}
+                            <div className="flex items-center justify-end gap-1">
+                              {/* Botão de edição — disponível para todos os usuários */}
+                              <EditarUsuarioDialog
+                                usuario={{
+                                  id: u.id,
+                                  name: u.name,
+                                  email: u.email,
+                                  telefone: (u as { telefone?: string | null }).telefone,
+                                }}
+                                onSuccess={() => utils.admin.listarUsuarios.invalidate()}
+                              />
+                              {/* Botão de ativar/desativar — apenas para não-admins */}
+                              {u.role !== "admin" && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => desativar.mutate({ id: u.id, ativo: !u.ativo })}
+                                  disabled={desativar.isPending}
+                                >
+                                  {u.ativo ? "Desativar" : "Ativar"}
+                                </Button>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       );

@@ -1148,6 +1148,12 @@ export async function updateUserAtivo(id: number, ativo: boolean): Promise<void>
   await db.update(users).set({ ativo }).where(eq(users.id, id));
 }
 
+export async function updateUsuarioDados(id: number, nome: string, telefone: string | null): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ name: nome, telefone: telefone ?? null }).where(eq(users.id, id));
+}
+
 export async function setUserExtraRoles(userId: number, extraRoles: string[], conviteId?: number): Promise<void> {
   const db = await getDb();
   if (!db) return;

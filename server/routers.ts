@@ -39,6 +39,7 @@ import {
   getUserById,
   listUsers,
   updateUserAtivo,
+  updateUsuarioDados,
   setUserExtraRoles,
   // Lotes
   criarLote,
@@ -915,14 +916,28 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
       return listUsers();
     }),
 
-    desativarUsuario: protectedProcedure
+     desativarUsuario: protectedProcedure
       .input(z.object({ id: z.number(), ativo: z.boolean() }))
       .mutation(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
         await updateUserAtivo(input.id, input.ativo);
         return { ok: true };
       }),
-
+    editarUsuario: protectedProcedure
+      .input(z.object({
+        usuarioId: z.number(),
+        nome: z.string().min(2, "Nome deve ter pelo menos 2 caracteres").max(100, "Nome deve ter no máximo 100 caracteres"),
+        telefone: z.string().nullable().optional().refine(
+          (v) => !v || (v.replace(/\D/g, "").length >= 10 && v.replace(/\D/g, "").length <= 11),
+          { message: "Telefone deve ter 10 ou 11 dígitos" }
+        ),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const telefoneLimpo = input.telefone ? input.telefone.replace(/\D/g, "") || null : null;
+        await updateUsuarioDados(input.usuarioId, input.nome, telefoneLimpo);
+        return { ok: true };
+      }),
     // ─── Lotes ────────────────────────────────────────────────────────────────
     criarLote: protectedProcedure
       .input(z.object({

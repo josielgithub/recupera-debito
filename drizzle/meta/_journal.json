@@ -64,6 +64,13 @@
       "when": 1776373091047,
       "tag": "0008_shallow_toxin",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1776399107893,
+      "tag": "0009_bitter_hulk",
+      "breakpoints": true
     }
   ]
 }

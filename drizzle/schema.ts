@@ -23,6 +23,7 @@ export const users = mysqlTable("users", {
   extraRoles: json("extra_roles").$type<string[]>(),
   conviteId: int("convite_id"),
   ativo: boolean("ativo").default(true).notNull(),
+  telefone: varchar("telefone", { length: 20 }),              // telefone/WhatsApp do usuário
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),

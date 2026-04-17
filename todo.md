@@ -434,3 +434,30 @@
 - [x] Atualizar dropdown de vinculação de investidor para buscar na tabela usuarios
 - [x] Implementar Dialog de percentual ao vincular investidor (validação 1-49%)
 - [x] Trocar coluna Escritório por coluna Advogado na tabela de processos
+
+## Edição de Usuários na Gestão Admin
+
+- [ ] Schema: adicionar coluna `telefone` (varchar nullable) na tabela `users`
+- [ ] Migração SQL aplicada
+- [ ] Backend: função `updateUsuario(id, nome, telefone)` no db.ts
+- [ ] Backend: procedure `admin.editarUsuario(usuarioId, nome, telefone)` com validação Zod
+- [ ] Frontend: botão de lápis em cada linha da tabela de usuários (AdminUsuarios.tsx)
+- [ ] Frontend: Dialog com campos Nome e Telefone (máscara (00) 00000-0000)
+- [ ] Frontend: toast de sucesso "Dados atualizados com sucesso" via Sonner
+- [ ] Frontend: invalidate da query após salvar (sem reload)
+
+## Edição de Usuários na Gestão Admin
+
+- [x] Adicionar coluna telefone (varchar nullable) na tabela users no schema Drizzle
+- [x] Gerar migração Drizzle (0009_bitter_hulk.sql) e aplicar via SQL
+- [x] Função db.updateUsuarioDados(id, nome, telefone) no server/db.ts
+- [x] Procedure admin.editarUsuario com validação Zod (nome 2-100 chars, telefone 10-11 dígitos)
+- [x] Verificação role === "admin" na procedure
+- [x] Dialog de edição no AdminUsuarios.tsx com campo Nome, Telefone (máscara), Email somente leitura
+- [x] Máscara de telefone (00) 00000-0000 aplicada no frontend
+- [x] Toast de sucesso "Dados atualizados com sucesso" via Sonner
+- [x] Fechar Dialog automaticamente após salvar
+- [x] Invalidar cache React Query (utils.admin.listarUsuarios.invalidate())
+- [x] Botão lápis (Pencil) em cada linha da tabela de usuários
+- [x] Coluna Telefone adicionada na tabela de usuários
+- [x] Não permite editar email (somente leitura) nem role
