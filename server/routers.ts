@@ -76,6 +76,7 @@ import { updateAiSummary, updateValorObtido, getImportJob, listImportJobs,
   listInvestidores, upsertInvestidor, vincularInvestidorAoProcesso,
   vincularInvestidorEmLote, getDashboardInvestidores, getProcessosSemInvestidor,
   upsertProcesso, upsertCliente,
+  listAdvogadosUsuarios, listInvestidoresUsuarios,
 } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { createHash } from "crypto";
@@ -192,7 +193,9 @@ export const appRouter = router({
         orderBy: z.enum(["cnj", "statusResumido", "clienteNome", "parceiroNome", "updatedAt"]).optional(),
         orderDir: z.enum(["asc", "desc"]).optional(),
         investidorId: z.number().optional(),
+        semInvestidor: z.boolean().optional(),
         advogado: z.string().optional(),
+        advogadoId: z.number().nullable().optional(),
       }))
       .query(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
@@ -204,7 +207,9 @@ export const appRouter = router({
           orderBy: input.orderBy,
           orderDir: input.orderDir,
           investidorId: input.investidorId,
+          semInvestidor: input.semInvestidor,
           advogado: input.advogado,
+          advogadoId: input.advogadoId,
         });
       }),
 
@@ -784,8 +789,17 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
       const buf = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
       return { base64: buf as string, filename: "modelo_importacao_simples.xlsx" };
     }),
-
-    // ─── Investidores ──────────────────────────────────────────────────────────────────────
+    // ─── Investidores ──────────────────────────────────────────────────────────────────────────────────────
+    // Lista investidores da tabela usuarios (com extra_roles)
+    listarInvestidoresUsuarios: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return listInvestidoresUsuarios();
+    }),
+    // Lista advogados da tabela usuarios (com extra_roles)
+    listarAdvogadosUsuarios: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return listAdvogadosUsuarios();
+    }),
     listInvestidores: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
       return listInvestidores();
@@ -811,10 +825,14 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
       }),
 
     vincularInvestidorEmLote: protectedProcedure
-      .input(z.object({ cnjs: z.array(z.string()), investidorId: z.number() }))
+      .input(z.object({
+        cnjs: z.array(z.string()),
+        investidorId: z.number(),
+        percentual: z.number().min(1).max(49).optional(),
+      }))
       .mutation(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
-        const count = await vincularInvestidorEmLote(input.cnjs, input.investidorId);
+        const count = await vincularInvestidorEmLote(input.cnjs, input.investidorId, input.percentual);
         return { count };
       }),
 

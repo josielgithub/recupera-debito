@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -71,6 +71,8 @@ interface ProcessoRow {
   statusResumido: string;
   statusOriginal: string | null;
   advogado: string | null;
+  advogadoId: number | null;
+  advogadoNome: string | null;
   updatedAt: Date | string;
   clienteNome: string | null;
   clienteCpf: string | null;
@@ -82,11 +84,11 @@ interface Filtros {
   dataInicio: string;
   dataFim: string;
   busca: string;
-  investidorId: string;
-  advogado: string;
+  investidorId: string; // "" = todos, "_sem" = sem investidor, "123" = id específico
+  advogadoId: string;   // "" = todos, "_sem" = sem advogado, "123" = id específico
 }
 
-const FILTROS_VAZIOS: Filtros = { status: [], dataInicio: "", dataFim: "", busca: "", investidorId: "", advogado: "" };
+const FILTROS_VAZIOS: Filtros = { status: [], dataInicio: "", dataFim: "", busca: "", investidorId: "", advogadoId: "" };
 
 const STATUS_OPTIONS = Object.entries(STATUS_RESUMIDO_LABELS);
 
@@ -251,6 +253,9 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
     : FILTROS_VAZIOS;
   const [filtros, setFiltros] = useState<Filtros>(filtrosIniciais);
   const [filtrosAplicados, setFiltrosAplicados] = useState<Filtros>(filtrosIniciais);
+  // Busca com debounce
+  const [buscaImediata, setBuscaImediata] = useState(filtrosIniciais.busca);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [filtroAberto, setFiltroAberto] = useState(false);
   const [editando, setEditando] = useState<ProcessoRow | null>(null);
   const [novoStatus, setNovoStatus] = useState("");
@@ -259,12 +264,28 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [statusLote, setStatusLote] = useState("");
   const [investidorLote, setInvestidorLote] = useState("");
-  const { data: investidoresData } = trpc.admin.listInvestidores.useQuery();
-  const investidores = investidoresData ?? [];
+  // Dialog de percentual
+  const [dialogPercentual, setDialogPercentual] = useState(false);
+  const [percentualVinculacao, setPercentualVinculacao] = useState<number>(10);
+  // Listas dinâmicas de advogados e investidores da tabela users
+  const { data: investidoresUsuariosData } = trpc.admin.listarInvestidoresUsuarios.useQuery();
+  const investidoresUsuarios = investidoresUsuariosData ?? [];
+  const { data: advogadosUsuariosData } = trpc.admin.listarAdvogadosUsuarios.useQuery();
+  const advogadosUsuarios = advogadosUsuariosData ?? [];
   const [ordenacao, setOrdenacao] = useState<{ col: OrderByColuna; dir: OrderDir }>({
     col: "updatedAt",
     dir: "desc",
   });
+
+  // Debounce: atualizar busca nos filtros aplicados 400ms após o usuário parar de digitar
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setFiltrosAplicados((prev) => ({ ...prev, busca: buscaImediata }));
+      setPagina(1);
+    }, 400);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [buscaImediata]);
 
   function handleSort(col: OrderByColuna) {
     setOrdenacao((prev) => ({
@@ -281,7 +302,7 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
     !!filtrosAplicados.dataFim,
     !!filtrosAplicados.busca,
     !!filtrosAplicados.investidorId,
-    !!filtrosAplicados.advogado,
+    !!filtrosAplicados.advogadoId,
   ].filter(Boolean).length;
 
   const vincularInvestidorLoteMutation = trpc.admin.vincularInvestidorEmLote.useMutation({
@@ -289,6 +310,8 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
       toast.success(`${res.count} processo${res.count !== 1 ? 's' : ''} vinculado${res.count !== 1 ? 's' : ''} ao investidor!`);
       setSelecionados(new Set());
       setInvestidorLote("");
+      setDialogPercentual(false);
+      setPercentualVinculacao(10);
       refetch();
     },
     onError: (err) => toast.error(`Erro: ${err.message}`),
@@ -302,8 +325,15 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
     busca: filtrosAplicados.busca || undefined,
     orderBy: ordenacao.col,
     orderDir: ordenacao.dir,
-    investidorId: filtrosAplicados.investidorId ? parseInt(filtrosAplicados.investidorId) : undefined,
-    advogado: filtrosAplicados.advogado || undefined,
+    investidorId: filtrosAplicados.investidorId && filtrosAplicados.investidorId !== "_sem"
+      ? parseInt(filtrosAplicados.investidorId)
+      : undefined,
+    semInvestidor: filtrosAplicados.investidorId === "_sem" ? true : undefined,
+    advogadoId: filtrosAplicados.advogadoId === "_sem"
+      ? null
+      : filtrosAplicados.advogadoId
+      ? parseInt(filtrosAplicados.advogadoId)
+      : undefined,
   });
 
   const atualizarLoteMutation = trpc.admin.atualizarStatusEmLote.useMutation({
@@ -367,18 +397,32 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
   }
   function aplicarInvestidorLote() {
     if (!investidorLote || selecionados.size === 0) return;
-    vincularInvestidorLoteMutation.mutate({ cnjs: Array.from(selecionados), investidorId: parseInt(investidorLote) });
+    setDialogPercentual(true);
+  }
+
+  function confirmarVinculacaoComPercentual() {
+    if (!investidorLote || selecionados.size === 0) return;
+    if (percentualVinculacao < 1 || percentualVinculacao > 49) {
+      toast.error("O percentual deve ser entre 1% e 49%");
+      return;
+    }
+    vincularInvestidorLoteMutation.mutate({
+      cnjs: Array.from(selecionados),
+      investidorId: parseInt(investidorLote),
+      percentual: percentualVinculacao,
+    });
   }
 
   const aplicarFiltros = useCallback(() => {
     setPagina(1);
-    setFiltrosAplicados({ ...filtros });
+    setFiltrosAplicados({ ...filtros, busca: buscaImediata });
     setFiltroAberto(false);
-  }, [filtros]);
+  }, [filtros, buscaImediata]);
 
   const limparFiltros = useCallback(() => {
     setFiltros(FILTROS_VAZIOS);
     setFiltrosAplicados(FILTROS_VAZIOS);
+    setBuscaImediata("");
     setPagina(1);
     setFiltroAberto(false);
   }, []);
@@ -387,6 +431,7 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
     const novos = { ...filtrosAplicados };
     if (campo === "status") novos.status = [];
     else novos[campo] = "";
+    if (campo === "busca") setBuscaImediata("");
     setFiltros(novos);
     setFiltrosAplicados(novos);
     setPagina(1);
@@ -457,15 +502,15 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {/* Busca textual */}
+                {/* Busca textual com debounce */}
                 <div className="space-y-1.5 lg:col-span-1">
                   <label className="text-xs font-medium text-muted-foreground">Busca</label>
                   <div className="relative">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                     <Input
                       placeholder="CNJ, nome, CPF..."
-                      value={filtros.busca}
-                      onChange={(e) => setFiltros((f) => ({ ...f, busca: e.target.value }))}
+                      value={buscaImediata}
+                      onChange={(e) => setBuscaImediata(e.target.value)}
                       className="pl-8 h-9 text-xs"
                     />
                   </div>
@@ -508,43 +553,51 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
                   />
                 </div>
 
-                {/* Filtro por advogado */}
+                {/* Filtro por advogado - Select dinâmico */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
                     <Users className="w-3 h-3" />
                     Advogado
                   </label>
-                  <Input
-                    placeholder="Nome do advogado..."
-                    value={filtros.advogado}
-                    onChange={(e) => setFiltros((f) => ({ ...f, advogado: e.target.value }))}
-                    className="h-9 text-xs"
-                  />
+                  <Select
+                    value={filtros.advogadoId || "_todos"}
+                    onValueChange={(v) => setFiltros((f) => ({ ...f, advogadoId: v === "_todos" ? "" : v }))}
+                  >
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue placeholder="Todos os advogados" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_todos" className="text-xs">Todos os advogados</SelectItem>
+                      <SelectItem value="_sem" className="text-xs text-muted-foreground">Sem advogado vinculado</SelectItem>
+                      {(advogadosUsuarios as any[]).map((adv) => (
+                        <SelectItem key={adv.id} value={String(adv.id)} className="text-xs">{adv.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                {/* Filtro por investidor */}
-                {investidores.length > 0 && (
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                      <Users className="w-3 h-3" />
-                      Investidor
-                    </label>
-                    <Select
-                      value={filtros.investidorId || "_todos"}
-                      onValueChange={(v) => setFiltros((f) => ({ ...f, investidorId: v === "_todos" ? "" : v }))}
-                    >
-                      <SelectTrigger className="h-9 text-xs">
-                        <SelectValue placeholder="Todos os investidores" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="_todos" className="text-xs">Todos os investidores</SelectItem>
-                        {(investidores as any[]).map((inv) => (
-                          <SelectItem key={inv.id} value={String(inv.id)} className="text-xs">{inv.nome}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
+                {/* Filtro por investidor - Select dinâmico */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                    <Users className="w-3 h-3" />
+                    Investidor
+                  </label>
+                  <Select
+                    value={filtros.investidorId || "_todos"}
+                    onValueChange={(v) => setFiltros((f) => ({ ...f, investidorId: v === "_todos" ? "" : v }))}
+                  >
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue placeholder="Todos os investidores" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_todos" className="text-xs">Todos os investidores</SelectItem>
+                      <SelectItem value="_sem" className="text-xs text-muted-foreground">Sem investidor vinculado</SelectItem>
+                      {(investidoresUsuarios as any[]).map((inv) => (
+                        <SelectItem key={inv.id} value={String(inv.id)} className="text-xs">{inv.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div className="flex items-center gap-2 pt-1">
@@ -598,6 +651,26 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
                 <Badge variant="secondary" className="text-xs gap-1 pr-1">
                   Até {formatarDataCurta(filtrosAplicados.dataFim)}
                   <button onClick={() => removerFiltro("dataFim")} className="ml-0.5 hover:text-destructive">
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              )}
+              {filtrosAplicados.advogadoId && (
+                <Badge variant="secondary" className="text-xs gap-1 pr-1">
+                  Advogado: {filtrosAplicados.advogadoId === "_sem"
+                    ? "Sem advogado"
+                    : (advogadosUsuarios as any[]).find((a) => String(a.id) === filtrosAplicados.advogadoId)?.name ?? filtrosAplicados.advogadoId}
+                  <button onClick={() => removerFiltro("advogadoId")} className="ml-0.5 hover:text-destructive">
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              )}
+              {filtrosAplicados.investidorId && (
+                <Badge variant="secondary" className="text-xs gap-1 pr-1">
+                  Investidor: {filtrosAplicados.investidorId === "_sem"
+                    ? "Sem investidor"
+                    : (investidoresUsuarios as any[]).find((i) => String(i.id) === filtrosAplicados.investidorId)?.name ?? filtrosAplicados.investidorId}
+                  <button onClick={() => removerFiltro("investidorId")} className="ml-0.5 hover:text-destructive">
                     <X className="w-3 h-3" />
                   </button>
                 </Badge>
@@ -680,15 +753,15 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
                       )}
                     </Button>
                     {/* Ação: vincular investidor em lote */}
-                    {investidores.length > 0 && (
+                    {investidoresUsuarios.length > 0 && (
                       <>
                         <Select value={investidorLote} onValueChange={setInvestidorLote}>
                           <SelectTrigger className="h-7 text-xs w-44">
                             <SelectValue placeholder="Vincular investidor..." />
                           </SelectTrigger>
                           <SelectContent>
-                            {(investidores as any[]).map((inv) => (
-                              <SelectItem key={inv.id} value={String(inv.id)} className="text-xs">{inv.nome}</SelectItem>
+                            {(investidoresUsuarios as any[]).map((inv) => (
+                              <SelectItem key={inv.id} value={String(inv.id)} className="text-xs">{inv.name}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -717,7 +790,7 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
                       variant="ghost"
                       size="sm"
                       className="h-7 text-xs text-muted-foreground"
-                      onClick={() => { setSelecionados(new Set()); setStatusLote(""); setInvestidorLote(""); }}
+                      onClick={() => { setSelecionados(new Set()); setStatusLote(""); setInvestidorLote(""); setDialogPercentual(false); }}
                     >
                       <X className="w-3.5 h-3.5 mr-1" />
                       Cancelar
@@ -741,7 +814,7 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
                     </TableHead>
                     <SortableHead coluna="cnj" label="CNJ" ordenacao={ordenacao} onSort={handleSort} />
                     <SortableHead coluna="clienteNome" label="Cliente" ordenacao={ordenacao} onSort={handleSort} />
-                    <SortableHead coluna="parceiroNome" label="Escritório" ordenacao={ordenacao} onSort={handleSort} />
+                    <TableHead className="text-xs font-semibold">Advogado</TableHead>
                     <SortableHead coluna="statusResumido" label="Status" ordenacao={ordenacao} onSort={handleSort} />
                     <SortableHead coluna="updatedAt" label="Atualizado" ordenacao={ordenacao} onSort={handleSort} />
                     <TableHead className="text-xs font-semibold w-16">Ação</TableHead>
@@ -773,7 +846,7 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
                         </div>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">
-                        {p.parceiroNome ?? "—"}
+                        {(p as any).advogadoNome ?? "—"}
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={p.statusResumido} />
@@ -875,6 +948,70 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
           )}
         </CardContent>
       </Card>
+
+      {/* Dialog de percentual de vinculação de investidor */}
+      <Dialog open={dialogPercentual} onOpenChange={(open) => { if (!open) { setDialogPercentual(false); setInvestidorLote(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm flex items-center gap-2">
+              <Users className="w-4 h-4 text-primary" />
+              Vincular investidor com percentual
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {/* Informações do investidor selecionado */}
+            <div className="p-3 bg-muted/40 rounded-lg text-xs space-y-1">
+              <p className="font-medium text-foreground">
+                {(investidoresUsuarios as any[]).find((i) => String(i.id) === investidorLote)?.name ?? investidorLote}
+              </p>
+              <p className="text-muted-foreground">
+                {selecionados.size} processo{selecionados.size !== 1 ? "s" : ""} selecionado{selecionados.size !== 1 ? "s" : ""}
+              </p>
+            </div>
+            {/* Campo de percentual */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">Percentual de participação (%)</label>
+              <Input
+                type="number"
+                min={1}
+                max={49}
+                value={percentualVinculacao}
+                onChange={(e) => setPercentualVinculacao(Math.min(49, Math.max(1, Number(e.target.value))))}
+                className="h-9 text-xs"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                O cliente sempre recebe 51%. O percentual informado será do investidor dentro dos 49% restantes.
+              </p>
+            </div>
+            {/* Validação visual */}
+            {(percentualVinculacao < 1 || percentualVinculacao > 49) && (
+              <p className="text-xs text-destructive">O percentual deve ser entre 1% e 49%.</p>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => { setDialogPercentual(false); setInvestidorLote(""); }}>
+              Cancelar
+            </Button>
+            <Button
+              size="sm"
+              onClick={confirmarVinculacaoComPercentual}
+              disabled={vincularInvestidorLoteMutation.isPending || percentualVinculacao < 1 || percentualVinculacao > 49}
+            >
+              {vincularInvestidorLoteMutation.isPending ? (
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Vinculando...
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5" />
+                  Confirmar vinculação
+                </span>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog de edição de status */}
       <Dialog open={!!editando} onOpenChange={(open) => !open && setEditando(null)}>

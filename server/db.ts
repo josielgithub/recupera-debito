@@ -306,7 +306,9 @@ interface FiltrosProcessos {
   orderBy?: OrderByColuna;
   orderDir?: "asc" | "desc";
   investidorId?: number;
+  semInvestidor?: boolean;
   advogado?: string;
+  advogadoId?: number | null; // null = sem advogado vinculado
 }
 
 export async function listAllProcessos(page = 1, pageSize = 50, filtros?: FiltrosProcessos) {
@@ -327,10 +329,17 @@ export async function listAllProcessos(page = 1, pageSize = 50, filtros?: Filtro
     fim.setHours(23, 59, 59, 999);
     condicoes.push(lte(processos.updatedAt, fim));
   }
-  if (filtros?.investidorId) {
+  if (filtros?.semInvestidor) {
+    condicoes.push(isNull(processos.investidorId));
+  } else if (filtros?.investidorId) {
     condicoes.push(eq(processos.investidorId, filtros.investidorId));
   }
-  if (filtros?.advogado && filtros.advogado.trim()) {
+  if (filtros?.advogadoId === null) {
+    // Filtrar processos sem advogado vinculado
+    condicoes.push(isNull(processos.advogadoId));
+  } else if (filtros?.advogadoId !== undefined) {
+    condicoes.push(eq(processos.advogadoId, filtros.advogadoId));
+  } else if (filtros?.advogado && filtros.advogado.trim()) {
     condicoes.push(sql`${processos.advogado} LIKE ${'%' + filtros.advogado.trim() + '%'}`);
   }
 
@@ -358,6 +367,8 @@ export async function listAllProcessos(page = 1, pageSize = 50, filtros?: Filtro
       statusResumido: processos.statusResumido,
       statusOriginal: processos.statusOriginal,
       advogado: processos.advogado,
+      advogadoId: processos.advogadoId,
+      advogadoNome: users.name,
       updatedAt: processos.updatedAt,
       semAtualizacao7dias: processos.semAtualizacao7dias,
       clienteNome: clientes.nome,
@@ -366,7 +377,8 @@ export async function listAllProcessos(page = 1, pageSize = 50, filtros?: Filtro
     })
     .from(processos)
     .leftJoin(clientes, eq(processos.clienteId, clientes.id))
-    .leftJoin(parceiros, eq(processos.parceiroId, parceiros.id));
+    .leftJoin(parceiros, eq(processos.parceiroId, parceiros.id))
+    .leftJoin(users, eq(processos.advogadoId, users.id));
 
   const countQuery = db
     .select({ count: sql<number>`count(*)` })
@@ -990,12 +1002,14 @@ export async function vincularInvestidorAoProcesso(cnj: string, investidorId: nu
   await db.update(processos).set({ investidorId }).where(eq(processos.cnj, cnj));
 }
 
-export async function vincularInvestidorEmLote(cnjs: string[], investidorId: number): Promise<number> {
+export async function vincularInvestidorEmLote(cnjs: string[], investidorId: number, percentual?: number): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
   let count = 0;
   for (const cnj of cnjs) {
-    await db.update(processos).set({ investidorId }).where(eq(processos.cnj, cnj));
+    const updateData: Record<string, unknown> = { investidorId };
+    if (percentual !== undefined) updateData.percentualInvestidor = String(percentual);
+    await db.update(processos).set(updateData as any).where(eq(processos.cnj, cnj));
     count++;
   }
   return count;
@@ -1446,4 +1460,37 @@ export async function metricsInvestidor(investidorUserId: number) {
     if (r.statusResumido === "concluido_perdido") m.perdidos++;
   }
   return m;
+}
+
+// ─── Advogados e Investidores por extra_roles ────────────────────────────────
+export async function listAdvogadosUsuarios() {
+  const db = await getDb();
+  if (!db) return [];
+  const all = await db.select({
+    id: users.id,
+    name: users.name,
+    email: users.email,
+    extraRoles: users.extraRoles,
+    ativo: users.ativo,
+  }).from(users).where(eq(users.ativo, true));
+  return all.filter((u) => {
+    const roles: string[] = Array.isArray(u.extraRoles) ? (u.extraRoles as string[]) : [];
+    return roles.includes("advogado") || roles.includes("advogado_investidor");
+  });
+}
+
+export async function listInvestidoresUsuarios() {
+  const db = await getDb();
+  if (!db) return [];
+  const all = await db.select({
+    id: users.id,
+    name: users.name,
+    email: users.email,
+    extraRoles: users.extraRoles,
+    ativo: users.ativo,
+  }).from(users).where(eq(users.ativo, true));
+  return all.filter((u) => {
+    const roles: string[] = Array.isArray(u.extraRoles) ? (u.extraRoles as string[]) : [];
+    return roles.includes("investidor") || roles.includes("advogado_investidor");
+  });
 }

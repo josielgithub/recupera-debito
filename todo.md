@@ -423,3 +423,14 @@
 - [x] Aba gestão de usuários: lista + gerar convite + revogar
 - [x] Aba Fila Judit com seleção múltipla e confirmação
 - [x] Aba Lotes com criação e gestão
+
+## Correções AdminProcessos (Fase 5)
+
+- [x] Corrigir query de investidores: buscar na tabela usuarios com role investidor/advogado_investidor
+- [x] Backend: nova procedure admin.listarInvestidoresUsuarios
+- [x] Backend: nova procedure admin.listarAdvogadosUsuarios
+- [x] Implementar busca com debounce 400ms em tempo real (CNJ, nome, CPF)
+- [x] Substituir filtro de advogado por Select dinâmico com lista de advogados cadastrados
+- [x] Atualizar dropdown de vinculação de investidor para buscar na tabela usuarios
+- [x] Implementar Dialog de percentual ao vincular investidor (validação 1-49%)
+- [x] Trocar coluna Escritório por coluna Advogado na tabela de processos
