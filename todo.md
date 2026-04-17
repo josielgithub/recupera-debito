@@ -461,3 +461,17 @@
 - [x] Botão lápis (Pencil) em cada linha da tabela de usuários
 - [x] Coluna Telefone adicionada na tabela de usuários
 - [x] Não permite editar email (somente leitura) nem role
+
+## Remoção de Escritórios e Perfil do Advogado
+
+- [ ] Adicionar colunas oab, whatsapp, bio na tabela users (schema Drizzle)
+- [ ] Gerar e aplicar migração SQL
+- [ ] Atualizar procedure admin.editarUsuario com oab, whatsapp, bio (Zod + db)
+- [ ] Atualizar Dialog de edição: mostrar campos oab/whatsapp/bio apenas para advogado/advogado_investidor
+- [ ] Query portal do cliente: JOIN com users pelo advogadoId, retornar nome/whatsapp/oab do advogado
+- [ ] Portal do cliente: substituir bloco "Escritório" por dados do advogado + botão WhatsApp
+- [ ] Remover item "Escritórios" do menu de navegação admin
+- [ ] Remover arquivo AdminParceiros.tsx (ou equivalente)
+- [ ] Remover rota correspondente no App.tsx
+- [ ] Remover rotas tRPC de escritórios não usadas
+- [ ] Verificar referências a escritório em AdminProcessos.tsx, ProcessoDetalhe.tsx e Dashboard

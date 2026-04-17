@@ -24,6 +24,9 @@ export const users = mysqlTable("users", {
   conviteId: int("convite_id"),
   ativo: boolean("ativo").default(true).notNull(),
   telefone: varchar("telefone", { length: 20 }),              // telefone/WhatsApp do usuário
+  oab: varchar("oab", { length: 30 }),                        // número OAB do advogado (ex: OAB/MT 12345)
+  whatsappSuporte: varchar("whatsapp_suporte", { length: 20 }), // WhatsApp de suporte do advogado
+  bio: text("bio"),                                          // bio/apresentação do advogado
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),

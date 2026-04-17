@@ -158,6 +158,8 @@ export const appRouter = router({
             indice: idx + 1,
             statusResumido: p.statusResumido,
             ultimaAtualizacao: p.ultimaAtualizacaoApi ?? p.updatedAt,
+            // Dados do advogado vinculado ao processo (prioridade) ou parceiro legado
+            advogado: p.advogadoInfo ?? null,
             parceiro: p.parceiro
               ? { nome: p.parceiro.nomeEscritorio, whatsapp: p.parceiro.whatsapp, email: p.parceiro.email }
               : null,
@@ -931,11 +933,25 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
           (v) => !v || (v.replace(/\D/g, "").length >= 10 && v.replace(/\D/g, "").length <= 11),
           { message: "Telefone deve ter 10 ou 11 dígitos" }
         ),
+        oab: z.string().max(30).nullable().optional(),
+        whatsappSuporte: z.string().nullable().optional().refine(
+          (v) => !v || (v.replace(/\D/g, "").length >= 10 && v.replace(/\D/g, "").length <= 11),
+          { message: "WhatsApp deve ter 10 ou 11 dígitos" }
+        ),
+        bio: z.string().max(500).nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
         const telefoneLimpo = input.telefone ? input.telefone.replace(/\D/g, "") || null : null;
-        await updateUsuarioDados(input.usuarioId, input.nome, telefoneLimpo);
+        const whatsappLimpo = input.whatsappSuporte ? input.whatsappSuporte.replace(/\D/g, "") || null : null;
+        await updateUsuarioDados(
+          input.usuarioId,
+          input.nome,
+          telefoneLimpo,
+          input.oab !== undefined ? (input.oab ?? null) : undefined,
+          whatsappLimpo !== undefined ? whatsappLimpo : undefined,
+          input.bio !== undefined ? (input.bio ?? null) : undefined,
+        );
         return { ok: true };
       }),
     // ─── Lotes ────────────────────────────────────────────────────────────────

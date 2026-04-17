@@ -161,7 +161,7 @@ export async function listParceiros(): Promise<Parceiro[]> {
 }
 
 // ─── Processos ─────────────────────────────────────────────────────────────
-export async function getProcessosByCpf(cpf: string): Promise<(Processo & { parceiro: Parceiro | null })[]> {
+export async function getProcessosByCpf(cpf: string): Promise<(Processo & { parceiro: Parceiro | null; advogadoInfo: { nome: string | null; whatsapp: string | null; oab: string | null } | null })[]> {
   const db = await getDb();
   if (!db) return [];
   const cliente = await getClienteByCpf(cpf);
@@ -174,10 +174,23 @@ export async function getProcessosByCpf(cpf: string): Promise<(Processo & { parc
     .orderBy(processos.createdAt);
 
   const result = await Promise.all(
-    rows.map(async (p) => ({
-      ...p,
-      parceiro: p.parceiroId ? (await getParceiroById(p.parceiroId)) ?? null : null,
-    }))
+    rows.map(async (p) => {
+      // Buscar parceiro (legado)
+      const parceiro = p.parceiroId ? (await getParceiroById(p.parceiroId)) ?? null : null;
+      // Buscar advogado vinculado ao processo
+      let advogadoInfo: { nome: string | null; whatsapp: string | null; oab: string | null } | null = null;
+      if (p.advogadoId) {
+        const adv = await db
+          .select({ nome: users.name, whatsapp: users.whatsappSuporte, oab: users.oab })
+          .from(users)
+          .where(eq(users.id, p.advogadoId))
+          .limit(1);
+        if (adv[0]) {
+          advogadoInfo = { nome: adv[0].nome, whatsapp: adv[0].whatsapp, oab: adv[0].oab };
+        }
+      }
+      return { ...p, parceiro, advogadoInfo };
+    })
   );
   return result;
 }
@@ -1148,10 +1161,23 @@ export async function updateUserAtivo(id: number, ativo: boolean): Promise<void>
   await db.update(users).set({ ativo }).where(eq(users.id, id));
 }
 
-export async function updateUsuarioDados(id: number, nome: string, telefone: string | null): Promise<void> {
+export async function updateUsuarioDados(
+  id: number,
+  nome: string,
+  telefone: string | null,
+  oab?: string | null,
+  whatsappSuporte?: string | null,
+  bio?: string | null,
+): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  await db.update(users).set({ name: nome, telefone: telefone ?? null }).where(eq(users.id, id));
+  await db.update(users).set({
+    name: nome,
+    telefone: telefone ?? null,
+    oab: oab !== undefined ? (oab ?? null) : undefined,
+    whatsappSuporte: whatsappSuporte !== undefined ? (whatsappSuporte ?? null) : undefined,
+    bio: bio !== undefined ? (bio ?? null) : undefined,
+  }).where(eq(users.id, id));
 }
 
 export async function setUserExtraRoles(userId: number, extraRoles: string[], conviteId?: number): Promise<void> {

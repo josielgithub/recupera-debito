@@ -146,6 +146,13 @@ interface ProcessoResultado {
   indice: number;
   statusResumido: string;
   ultimaAtualizacao: Date | string | null;
+  // Advogado vinculado ao processo (novo sistema)
+  advogado: {
+    nome: string | null;
+    whatsapp: string | null;
+    oab: string | null;
+  } | null;
+  // Parceiro legado (mantido para compatibilidade)
   parceiro: {
     nome: string;
     whatsapp: string | null;
@@ -200,44 +207,62 @@ function CardProcesso({ processo, total }: { processo: ProcessoResultado; total:
 
           <Separator />
 
-          {/* Contato do escritório */}
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-              Escritório responsável
-            </p>
-            {processo.parceiro ? (
-              <div className="space-y-2">
-                <p className="font-semibold text-sm text-foreground">{processo.parceiro.nome}</p>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  {processo.parceiro.whatsapp && (
+          {/* Contato do advogado responsável */}
+          {(processo.advogado || processo.parceiro) && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                Advogado responsável
+              </p>
+              {processo.advogado ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-sm text-foreground">{processo.advogado.nome ?? "Advogado"}</p>
+                    {processo.advogado.oab && (
+                      <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{processo.advogado.oab}</span>
+                    )}
+                  </div>
+                  {processo.advogado.whatsapp && (
                     <a
-                      href={`https://wa.me/${processo.parceiro.whatsapp.replace(/\D/g, "")}`}
+                      href={`https://wa.me/55${processo.advogado.whatsapp.replace(/\D/g, "")}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-2 text-sm text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-md transition-colors"
                     >
                       <Phone className="w-3.5 h-3.5" />
-                      WhatsApp: {processo.parceiro.whatsapp}
-                    </a>
-                  )}
-                  {processo.parceiro.email && (
-                    <a
-                      href={`mailto:${processo.parceiro.email}`}
-                      className="inline-flex items-center gap-2 text-sm text-white bg-primary hover:bg-primary/90 px-3 py-1.5 rounded-md transition-colors"
-                    >
-                      <Mail className="w-3.5 h-3.5" />
-                      {processo.parceiro.email}
+                      Falar com advogado
                     </a>
                   )}
                 </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground p-3 bg-muted/40 rounded-lg">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <span>Contato do escritório não disponível no momento. Aguarde atualização.</span>
-              </div>
-            )}
-          </div>
+              ) : processo.parceiro ? (
+                // Fallback legado: mostrar parceiro se não houver advogado vinculado
+                <div className="space-y-2">
+                  <p className="font-semibold text-sm text-foreground">{processo.parceiro.nome}</p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    {processo.parceiro.whatsapp && (
+                      <a
+                        href={`https://wa.me/${processo.parceiro.whatsapp.replace(/\D/g, "")}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 text-sm text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-md transition-colors"
+                      >
+                        <Phone className="w-3.5 h-3.5" />
+                        WhatsApp: {processo.parceiro.whatsapp}
+                      </a>
+                    )}
+                    {processo.parceiro.email && (
+                      <a
+                        href={`mailto:${processo.parceiro.email}`}
+                        className="inline-flex items-center gap-2 text-sm text-white bg-primary hover:bg-primary/90 px-3 py-1.5 rounded-md transition-colors"
+                      >
+                        <Mail className="w-3.5 h-3.5" />
+                        {processo.parceiro.email}
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
       </CollapsibleContent>
     </Collapsible>

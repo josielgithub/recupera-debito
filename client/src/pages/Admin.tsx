@@ -35,13 +35,11 @@ import {
   FileText,
   AlertCircle,
   Download,
-  Building2,
   Settings,
 } from "lucide-react";
 import { STATUS_RESUMIDO_LABELS, STATUS_CORES } from "@shared/const";
 import { toast } from "sonner";
 import AdminProcessos from "./AdminProcessos";
-import AdminParceiros from "./AdminParceiros";
 import AdminConfig from "./AdminConfig";
 import AdminHistorico from "./AdminHistorico";
 import AdminJudit from "./AdminJudit";
@@ -651,7 +649,7 @@ function ImportacaoView() {
           <div className="p-3 bg-muted/30 rounded-lg border border-border/40 text-xs">
             <p className="font-semibold text-foreground mb-2">Colunas esperadas na planilha:</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
-              {["cpf", "nome", "cnj", "status_interno", "advogado", "nome_escritorio", "whatsapp_escritorio", "email_escritorio"].map((col) => (
+              {["cpf", "nome", "cnj", "status_interno", "advogado"].map((col) => (
                 <code key={col} className="bg-muted px-1.5 py-0.5 rounded text-foreground font-mono">
                   {col}
                 </code>
@@ -996,10 +994,6 @@ export default function Admin() {
               <FileText className="w-3.5 h-3.5" />
               Processos
             </TabsTrigger>
-            <TabsTrigger value="parceiros" className="flex items-center gap-1.5 text-xs">
-              <Building2 className="w-3.5 h-3.5" />
-              Escritórios
-            </TabsTrigger>
             <TabsTrigger value="importacao-simples" className="flex items-center gap-1.5 text-xs">
               <Zap className="w-3.5 h-3.5" />
               Importar + Judit
@@ -1040,7 +1034,6 @@ export default function Admin() {
 
           <TabsContent value="dashboard"><DashboardView onVerStatus={handleVerStatus} onVerInvestidor={handleVerInvestidor} /></TabsContent>
           <TabsContent value="processos"><AdminProcessos filtroStatusInicial={filtroStatusProcessos} filtroInvestidorIdInicial={filtroInvestidorId} key={`${filtroStatusProcessos ?? "all"}-${filtroInvestidorId ?? "none"}`} /></TabsContent>
-          <TabsContent value="parceiros"><AdminParceiros /></TabsContent>
           <TabsContent value="importacao-simples"><AdminImportacaoSimples /></TabsContent>
           <TabsContent value="importacao"><ImportacaoView /></TabsContent>
           <TabsContent value="logs"><AdminHistorico /></TabsContent>

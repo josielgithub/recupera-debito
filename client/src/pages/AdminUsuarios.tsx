@@ -35,7 +35,16 @@ function mascaraTelefone(valor: string): string {
 
 // ─── Dialog de Edição de Usuário ────────────────────────────────────────────
 interface EditarUsuarioDialogProps {
-  usuario: { id: number; name: string | null; email: string | null; telefone?: string | null };
+  usuario: {
+    id: number;
+    name: string | null;
+    email: string | null;
+    telefone?: string | null;
+    oab?: string | null;
+    whatsappSuporte?: string | null;
+    bio?: string | null;
+    extraRoles?: string[] | null;
+  };
   onSuccess: () => void;
 }
 
@@ -45,6 +54,15 @@ function EditarUsuarioDialog({ usuario, onSuccess }: EditarUsuarioDialogProps) {
   const [telefone, setTelefone] = useState(
     usuario.telefone ? mascaraTelefone(usuario.telefone) : ""
   );
+  const [oab, setOab] = useState(usuario.oab ?? "");
+  const [whatsappSuporte, setWhatsappSuporte] = useState(
+    usuario.whatsappSuporte ? mascaraTelefone(usuario.whatsappSuporte) : ""
+  );
+  const [bio, setBio] = useState(usuario.bio ?? "");
+
+  // Verifica se o usuário é advogado (para mostrar campos extras)
+  const extraRoles = usuario.extraRoles ?? [];
+  const isAdvogado = extraRoles.includes("advogado") || extraRoles.includes("advogado_investidor");
 
   const editar = trpc.admin.editarUsuario.useMutation({
     onSuccess: () => {
@@ -58,9 +76,11 @@ function EditarUsuarioDialog({ usuario, onSuccess }: EditarUsuarioDialogProps) {
   const handleOpen = (isOpen: boolean) => {
     setOpen(isOpen);
     if (isOpen) {
-      // Resetar campos ao abrir
       setNome(usuario.name ?? "");
       setTelefone(usuario.telefone ? mascaraTelefone(usuario.telefone) : "");
+      setOab(usuario.oab ?? "");
+      setWhatsappSuporte(usuario.whatsappSuporte ? mascaraTelefone(usuario.whatsappSuporte) : "");
+      setBio(usuario.bio ?? "");
     }
   };
 
@@ -79,10 +99,20 @@ function EditarUsuarioDialog({ usuario, onSuccess }: EditarUsuarioDialogProps) {
       toast.error("Telefone deve ter 10 ou 11 dígitos");
       return;
     }
+    const whatsappLimpo = whatsappSuporte.replace(/\D/g, "");
+    if (whatsappLimpo && (whatsappLimpo.length < 10 || whatsappLimpo.length > 11)) {
+      toast.error("WhatsApp de suporte deve ter 10 ou 11 dígitos");
+      return;
+    }
     editar.mutate({
       usuarioId: usuario.id,
       nome: nomeTrimmed,
       telefone: telefoneLimpo || null,
+      ...(isAdvogado && {
+        oab: oab.trim() || null,
+        whatsappSuporte: whatsappLimpo || null,
+        bio: bio.trim() || null,
+      }),
     });
   };
 
@@ -97,7 +127,7 @@ function EditarUsuarioDialog({ usuario, onSuccess }: EditarUsuarioDialogProps) {
         <DialogHeader>
           <DialogTitle>Editar Usuário</DialogTitle>
           <DialogDescription>
-            Atualize o nome e telefone do usuário. O e-mail não pode ser alterado pois vem do OAuth.
+            Atualize os dados do usuário. O e-mail não pode ser alterado pois vem do OAuth.
           </DialogDescription>
         </DialogHeader>
 
@@ -141,6 +171,58 @@ function EditarUsuarioDialog({ usuario, onSuccess }: EditarUsuarioDialogProps) {
             />
             <p className="text-xs text-muted-foreground">Opcional. Apenas números serão salvos.</p>
           </div>
+
+          {/* Campos exclusivos de advogado */}
+          {isAdvogado && (
+            <>
+              <div className="border-t pt-3">
+                <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">Dados do Advogado</p>
+              </div>
+
+              {/* OAB */}
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-oab" className="text-sm">OAB</Label>
+                <Input
+                  id="edit-oab"
+                  value={oab}
+                  onChange={(e) => setOab(e.target.value)}
+                  placeholder="Ex: OAB/MT 12345"
+                  maxLength={30}
+                />
+              </div>
+
+              {/* WhatsApp de suporte */}
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-whatsapp-suporte" className="text-sm">
+                  WhatsApp de suporte
+                </Label>
+                <Input
+                  id="edit-whatsapp-suporte"
+                  value={whatsappSuporte}
+                  onChange={(e) => setWhatsappSuporte(mascaraTelefone(e.target.value))}
+                  placeholder="(00) 00000-0000"
+                  inputMode="numeric"
+                  maxLength={15}
+                />
+                <p className="text-xs text-muted-foreground">Número exibido no portal do cliente.</p>
+              </div>
+
+              {/* Bio */}
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-bio" className="text-sm">Bio / Apresentação</Label>
+                <textarea
+                  id="edit-bio"
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  placeholder="Ex: Especialista em direito do consumidor"
+                  maxLength={500}
+                  rows={3}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
+                />
+                <p className="text-xs text-muted-foreground">{bio.length}/500 caracteres</p>
+              </div>
+            </>
+          )}
         </div>
 
         <DialogFooter>
@@ -486,6 +568,10 @@ export default function AdminUsuarios() {
                                   name: u.name,
                                   email: u.email,
                                   telefone: (u as { telefone?: string | null }).telefone,
+                                  oab: (u as { oab?: string | null }).oab,
+                                  whatsappSuporte: (u as { whatsappSuporte?: string | null }).whatsappSuporte,
+                                  bio: (u as { bio?: string | null }).bio,
+                                  extraRoles: (u.extraRoles as string[] | null),
                                 }}
                                 onSuccess={() => utils.admin.listarUsuarios.invalidate()}
                               />
