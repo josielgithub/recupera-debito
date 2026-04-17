@@ -41,14 +41,23 @@ import {
   updateUserAtivo,
   updateUsuarioDados,
   setUserExtraRoles,
-  // Lotes
-  criarLote,
+  // Lotes (funções simples legadas)
+  criarLoteSimples,
   getLoteById,
   listLotes,
-  editarLote,
+  editarLoteSimples,
   adicionarInvestidorLote,
   listInvestidoresDoLote,
   vincularProcessoAoLote,
+  // Lotes (funções completas com validação de percentuais)
+  listarLotes,
+  criarLoteCompleto,
+  editarLoteCompleto,
+  importarProcessosLote,
+  listarProcessosLote,
+  desvincularProcessoLote,
+  listarErrosLote,
+  resolverErroLote,
   // Advogado
   listProcessosDoAdvogado,
   metricsAdvogado,
@@ -1086,7 +1095,7 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
       }))
       .mutation(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
-        const id = await criarLote({
+        const id = await criarLoteSimples({
           nome: input.nome,
           descricao: input.descricao,
           advogadoId: input.advogadoId,
@@ -1112,7 +1121,7 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
       .mutation(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
         const { loteId, ...data } = input;
-        await editarLote(loteId, data);
+        await editarLoteSimples(loteId, data);
         return { ok: true };
       }),
 
@@ -1124,16 +1133,113 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         return { ok: true };
       }),
 
+    // ─── Lotes completos (com validação de percentuais) ─────────────────────────
     listarLotes: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
-      const todos = await listLotes();
-      const resultado = [];
-      for (const lote of todos) {
-        const investidores = await listInvestidoresDoLote(lote.id);
-        resultado.push({ ...lote, investidores });
-      }
-      return resultado;
+      return listarLotes();
     }),
+
+    novoLote: protectedProcedure
+      .input(z.object({
+        nome: z.string().min(1, "Nome obrigatório"),
+        descricao: z.string().optional().nullable(),
+        advogadoId: z.number().optional().nullable(),
+        percentualEmpresa: z.number().min(0).max(49),
+        percentualAdvogado: z.number().min(0).max(49),
+        investidores: z.array(z.object({
+          usuarioId: z.number(),
+          percentual: z.number().min(0).max(49),
+        })).default([]),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        try {
+          const id = await criarLoteCompleto({
+            nome: input.nome,
+            descricao: input.descricao,
+            advogadoId: input.advogadoId,
+            percentualEmpresa: input.percentualEmpresa,
+            percentualAdvogado: input.percentualAdvogado,
+            criadoPor: ctx.user.id,
+            investidores: input.investidores,
+          });
+          return { id };
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : "Erro ao criar lote";
+          throw new TRPCError({ code: "BAD_REQUEST", message: msg });
+        }
+      }),
+
+    atualizarLote: protectedProcedure
+      .input(z.object({
+        loteId: z.number(),
+        nome: z.string().optional(),
+        descricao: z.string().optional().nullable(),
+        advogadoId: z.number().optional().nullable(),
+        percentualEmpresa: z.number().min(0).max(49).optional(),
+        percentualAdvogado: z.number().min(0).max(49).optional(),
+        investidores: z.array(z.object({
+          usuarioId: z.number(),
+          percentual: z.number().min(0).max(49),
+        })).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        try {
+          await editarLoteCompleto(input);
+          return { ok: true };
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : "Erro ao editar lote";
+          throw new TRPCError({ code: "BAD_REQUEST", message: msg });
+        }
+      }),
+
+    importarProcessosLote: protectedProcedure
+      .input(z.object({
+        loteId: z.number(),
+        cnjs: z.array(z.string()).min(1),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        return importarProcessosLote(input.loteId, input.cnjs);
+      }),
+
+    processosDoLote: protectedProcedure
+      .input(z.object({
+        loteId: z.number(),
+        page: z.number().default(1),
+        pageSize: z.number().default(50),
+      }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        return listarProcessosLote(input.loteId, input.page, input.pageSize);
+      }),
+
+    desvincularProcessoLote: protectedProcedure
+      .input(z.object({ processoId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        await desvincularProcessoLote(input.processoId);
+        return { ok: true };
+      }),
+
+    errosDoLote: protectedProcedure
+      .input(z.object({ loteId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        return listarErrosLote(input.loteId);
+      }),
+
+    resolverErroLote: protectedProcedure
+      .input(z.object({
+        erroId: z.number(),
+        observacao: z.string().optional().nullable(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        await resolverErroLote(input.erroId, input.observacao ?? null);
+        return { ok: true };
+      }),
 
     // ─── Fila Judit (admin) ────────────────────────────────────────────────────
     metricsJudit: protectedProcedure.query(async ({ ctx }) => {

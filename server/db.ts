@@ -46,6 +46,10 @@ import {
   juditProblemas,
   JuditProblema,
   InsertJuditProblema,
+  loteImportacaoErros,
+  LoteImportacaoErro,
+  InsertLoteImportacaoErro,
+  LOTE_IMPORTACAO_ERRO_MOTIVO,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -1209,7 +1213,7 @@ export async function setUserExtraRoles(userId: number, extraRoles: string[], co
 }
 
 // ─── Lotes ──────────────────────────────────────────────────────────────────────
-export async function criarLote(data: {
+export async function criarLoteSimples(data: {
   nome: string;
   descricao?: string | null;
   advogadoId?: number | null;
@@ -1222,6 +1226,7 @@ export async function criarLote(data: {
     descricao: data.descricao ?? null,
     advogadoId: data.advogadoId ?? null,
     percentualEmpresa: data.percentualEmpresa !== undefined ? String(data.percentualEmpresa) : "0",
+    percentualAdvogado: "0",
     ativo: true,
   });
   return (result as unknown as { insertId: number }).insertId;
@@ -1243,7 +1248,7 @@ export async function listLotes(opts?: { ativo?: boolean }) {
   return conds.length > 0 ? q.where(and(...conds)) : q;
 }
 
-export async function editarLote(id: number, data: Partial<{
+export async function editarLoteSimples(id: number, data: Partial<{
   nome: string;
   descricao: string | null;
   advogadoId: number | null;
@@ -2013,4 +2018,309 @@ export async function resetStatusJuditParaFila(cnj: string): Promise<void> {
     .update(processos)
     .set({ statusJudit: "aguardando_aprovacao_judit" })
     .where(eq(processos.cnj, cnj));
+}
+
+// ─── Sistema de Lotes ──────────────────────────────────────────────────────────
+
+export interface LoteComMetricas extends Lote {
+  advogadoNome: string | null;
+  criadoPorNome: string | null;
+  totalInvestidores: number;
+  totalProcessos: number;
+  errosNaoResolvidos: number;
+  investidores: Array<{ investidorId: number; investidorNome: string | null; percentual: string }>;
+}
+
+export async function listarLotes(): Promise<LoteComMetricas[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db
+    .select({
+      id: lotes.id,
+      nome: lotes.nome,
+      descricao: lotes.descricao,
+      advogadoId: lotes.advogadoId,
+      percentualEmpresa: lotes.percentualEmpresa,
+      percentualAdvogado: lotes.percentualAdvogado,
+      criadoPor: lotes.criadoPor,
+      ativo: lotes.ativo,
+      createdAt: lotes.createdAt,
+      updatedAt: lotes.updatedAt,
+      advogadoNome: sql<string | null>`adv.name`,
+      criadoPorNome: sql<string | null>`criador.name`,
+    })
+    .from(lotes)
+    .leftJoin(sql`users adv`, sql`adv.id = ${lotes.advogadoId}`)
+    .leftJoin(sql`users criador`, sql`criador.id = ${lotes.criadoPor}`)
+    .orderBy(desc(lotes.createdAt));
+
+  // Para cada lote, buscar investidores, contagem de processos e erros
+  const result: LoteComMetricas[] = [];
+  for (const row of rows) {
+    const [investidoresRows, processosCount, errosCount] = await Promise.all([
+      db
+        .select({
+          investidorId: loteInvestidores.investidorId,
+          percentual: loteInvestidores.percentual,
+          investidorNome: sql<string | null>`u.name`,
+        })
+        .from(loteInvestidores)
+        .leftJoin(sql`users u`, sql`u.id = ${loteInvestidores.investidorId}`)
+        .where(eq(loteInvestidores.loteId, row.id)),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(processos)
+        .where(eq(processos.loteId, row.id)),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(loteImportacaoErros)
+        .where(and(eq(loteImportacaoErros.loteId, row.id), eq(loteImportacaoErros.resolvido, false))),
+    ]);
+
+    result.push({
+      ...row,
+      totalInvestidores: investidoresRows.length,
+      totalProcessos: Number(processosCount[0]?.count ?? 0),
+      errosNaoResolvidos: Number(errosCount[0]?.count ?? 0),
+      investidores: investidoresRows.map(i => ({
+        investidorId: i.investidorId,
+        investidorNome: i.investidorNome,
+        percentual: i.percentual,
+      })),
+    });
+  }
+  return result;
+}
+
+export interface CriarLoteInput {
+  nome: string;
+  descricao?: string | null;
+  advogadoId?: number | null;
+  percentualEmpresa: number;
+  percentualAdvogado: number;
+  criadoPor: number;
+  investidores: Array<{ usuarioId: number; percentual: number }>;
+}
+
+function validarSomaPercentuais(percentualEmpresa: number, percentualAdvogado: number, investidores: Array<{ percentual: number }>): void {
+  const soma = percentualEmpresa + percentualAdvogado + investidores.reduce((acc, i) => acc + i.percentual, 0);
+  if (soma > 49) {
+    throw new Error(`A soma dos percentuais não pode ultrapassar 49%. Total atual: ${soma.toFixed(2)}%`);
+  }
+}
+
+export async function criarLoteCompleto(input: CriarLoteInput): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  validarSomaPercentuais(input.percentualEmpresa, input.percentualAdvogado, input.investidores);
+
+  const [result] = await db.insert(lotes).values({
+    nome: input.nome,
+    descricao: input.descricao ?? null,
+    advogadoId: input.advogadoId ?? null,
+    percentualEmpresa: String(input.percentualEmpresa),
+    percentualAdvogado: String(input.percentualAdvogado),
+    criadoPor: input.criadoPor,
+    ativo: true,
+  });
+
+  const loteId = (result as { insertId: number }).insertId;
+
+  if (input.investidores.length > 0) {
+    await db.insert(loteInvestidores).values(
+      input.investidores.map(inv => ({
+        loteId,
+        investidorId: inv.usuarioId,
+        percentual: String(inv.percentual),
+      }))
+    );
+  }
+
+  return loteId;
+}
+
+export interface EditarLoteInput {
+  loteId: number;
+  nome?: string;
+  descricao?: string | null;
+  advogadoId?: number | null;
+  percentualEmpresa?: number;
+  percentualAdvogado?: number;
+  investidores?: Array<{ usuarioId: number; percentual: number }>;
+}
+
+export async function editarLoteCompleto(input: EditarLoteInput): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  // Buscar lote atual para validar soma
+  const [loteAtual] = await db.select().from(lotes).where(eq(lotes.id, input.loteId)).limit(1);
+  if (!loteAtual) throw new Error("Lote não encontrado");
+
+  const pEmpresa = input.percentualEmpresa ?? Number(loteAtual.percentualEmpresa);
+  const pAdvogado = input.percentualAdvogado ?? Number(loteAtual.percentualAdvogado);
+
+  let investidoresFinal: Array<{ percentual: number }>;
+  if (input.investidores !== undefined) {
+    investidoresFinal = input.investidores;
+  } else {
+    const existentes = await db.select({ percentual: loteInvestidores.percentual }).from(loteInvestidores).where(eq(loteInvestidores.loteId, input.loteId));
+    investidoresFinal = existentes.map(e => ({ percentual: Number(e.percentual) }));
+  }
+
+  validarSomaPercentuais(pEmpresa, pAdvogado, investidoresFinal);
+
+  await db.update(lotes).set({
+    ...(input.nome !== undefined && { nome: input.nome }),
+    ...(input.descricao !== undefined && { descricao: input.descricao }),
+    ...(input.advogadoId !== undefined && { advogadoId: input.advogadoId }),
+    ...(input.percentualEmpresa !== undefined && { percentualEmpresa: String(input.percentualEmpresa) }),
+    ...(input.percentualAdvogado !== undefined && { percentualAdvogado: String(input.percentualAdvogado) }),
+  }).where(eq(lotes.id, input.loteId));
+
+  if (input.investidores !== undefined) {
+    await db.delete(loteInvestidores).where(eq(loteInvestidores.loteId, input.loteId));
+    if (input.investidores.length > 0) {
+      await db.insert(loteInvestidores).values(
+        input.investidores.map(inv => ({
+          loteId: input.loteId,
+          investidorId: inv.usuarioId,
+          percentual: String(inv.percentual),
+        }))
+      );
+    }
+  }
+}
+
+export interface ImportarProcessosLoteResult {
+  vinculados: number;
+  erros: number;
+  detalhes: Array<{ cnj: string; status: "vinculado" | "erro"; motivo?: string }>;
+}
+
+export async function importarProcessosLote(loteId: number, cnjs: string[]): Promise<ImportarProcessosLoteResult> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  // Buscar nome do lote para mensagens de erro
+  const [loteAtual] = await db.select({ nome: lotes.nome }).from(lotes).where(eq(lotes.id, loteId)).limit(1);
+  if (!loteAtual) throw new Error("Lote não encontrado");
+
+  let vinculados = 0;
+  let erros = 0;
+  const detalhes: ImportarProcessosLoteResult["detalhes"] = [];
+
+  for (const cnj of cnjs) {
+    const cnjLimpo = cnj.trim();
+    if (!cnjLimpo) continue;
+
+    // Buscar processo no banco
+    const [processo] = await db
+      .select({ id: processos.id, loteId: processos.loteId })
+      .from(processos)
+      .where(eq(processos.cnj, cnjLimpo))
+      .limit(1);
+
+    if (!processo) {
+      // CNJ não encontrado no banco
+      await db.insert(loteImportacaoErros).values({
+        loteId,
+        cnj: cnjLimpo,
+        motivo: "nao_encontrado_banco",
+        loteAtualNome: null,
+      });
+      erros++;
+      detalhes.push({ cnj: cnjLimpo, status: "erro", motivo: "CNJ não encontrado no banco interno" });
+      continue;
+    }
+
+    if (processo.loteId !== null && processo.loteId !== loteId) {
+      // Processo já pertence a outro lote
+      const [loteExistente] = await db.select({ nome: lotes.nome }).from(lotes).where(eq(lotes.id, processo.loteId)).limit(1);
+      const nomeOutroLote = loteExistente?.nome ?? "desconhecido";
+      await db.insert(loteImportacaoErros).values({
+        loteId,
+        cnj: cnjLimpo,
+        motivo: "processo_ja_em_lote",
+        loteAtualNome: nomeOutroLote,
+      });
+      erros++;
+      detalhes.push({ cnj: cnjLimpo, status: "erro", motivo: `Processo já pertence ao lote "${nomeOutroLote}"` });
+      continue;
+    }
+
+    // Vincular ao lote
+    await db.update(processos).set({ loteId }).where(eq(processos.id, processo.id));
+    vinculados++;
+    detalhes.push({ cnj: cnjLimpo, status: "vinculado" });
+  }
+
+  return { vinculados, erros, detalhes };
+}
+
+export async function listarProcessosLote(loteId: number, page = 1, pageSize = 50) {
+  const db = await getDb();
+  if (!db) return { processos: [], total: 0, valorTotalDisputa: 0 };
+
+  const offset = (page - 1) * pageSize;
+  const [rows, countRows, valorRows] = await Promise.all([
+    db
+      .select({
+        id: processos.id,
+        cnj: processos.cnj,
+        statusResumido: processos.statusResumido,
+        valorObtido: processos.valorObtido,
+        clienteNome: clientes.nome,
+        clienteCpf: clientes.cpf,
+        updatedAt: processos.updatedAt,
+        ultimaAtualizacaoApi: processos.ultimaAtualizacaoApi,
+      })
+      .from(processos)
+      .leftJoin(clientes, eq(processos.clienteId, clientes.id))
+      .where(eq(processos.loteId, loteId))
+      .orderBy(desc(processos.updatedAt))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(processos)
+      .where(eq(processos.loteId, loteId)),
+    db
+      .select({ total: sql<string>`COALESCE(SUM(CAST(${processos.valorObtido} AS DECIMAL(15,2))), 0)` })
+      .from(processos)
+      .where(and(eq(processos.loteId, loteId), sql`${processos.valorObtido} IS NOT NULL`)),
+  ]);
+
+  return {
+    processos: rows,
+    total: Number(countRows[0]?.count ?? 0),
+    valorTotalDisputa: Number(valorRows[0]?.total ?? 0),
+  };
+}
+
+export async function desvincularProcessoLote(processoId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(processos).set({ loteId: null }).where(eq(processos.id, processoId));
+}
+
+export async function listarErrosLote(loteId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(loteImportacaoErros)
+    .where(eq(loteImportacaoErros.loteId, loteId))
+    .orderBy(desc(loteImportacaoErros.importadoEm));
+}
+
+export async function resolverErroLote(erroId: number, observacao: string | null): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(loteImportacaoErros)
+    .set({ resolvido: true, resolvidoEm: new Date(), observacao })
+    .where(eq(loteImportacaoErros.id, erroId));
 }

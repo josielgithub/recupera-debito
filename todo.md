@@ -558,3 +558,16 @@
 - [x] server/routers.ts: middleware impersonatedProcedure que bloqueia mutations quando isImpersonating=true (exceto auth.validarTokenImpersonacao e admin.encerrarImpersonacao)
 - [x] client/src/pages/AdvogadoPortal.tsx: desabilitar botão "Cadastrar Processo" com tooltip quando em modo de visualização
 - [x] Testes Vitest: validação do token de impersonação e bloqueio de mutations
+
+## Sistema de Lotes Completo
+
+- [x] Schema Drizzle: tabelas lotes, lote_investidores, lote_importacao_erros
+- [x] Schema Drizzle: coluna loteId na tabela processos
+- [x] Migration SQL aplicada via webdev_execute_sql
+- [x] Helpers DB: listarLotes, criarLote, editarLote, importarProcessosLote, listarProcessosLote, desvincularProcessoLote, listarErrosLote, resolverErroLote
+- [x] Rotas tRPC: admin.listarLotes, admin.criarLote, admin.editarLote, admin.importarProcessosLote, admin.listarProcessosLote, admin.desvincularProcessoLote, admin.listarErrosLote, admin.resolverErroLote
+- [x] Tela AdminLotes.tsx: lista de lotes, modal novo lote, importação de CNJs, detalhes do lote
+- [x] Seção "Processos vinculados" no detalhe do lote com projeção por participante
+- [x] Seção "Erros de importação" no detalhe do lote
+- [x] Item "Lotes" já presente como aba na tela Admin.tsx
+- [x] Testes Vitest: 13 testes cobrindo controle de acesso e validação de input das procedures de lotes

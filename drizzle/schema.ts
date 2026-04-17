@@ -69,8 +69,10 @@ export const lotes = mysqlTable("lotes", {
   id: int("id").autoincrement().primaryKey(),
   nome: varchar("nome", { length: 255 }).notNull(),
   descricao: text("descricao"),
-  advogadoId: int("advogado_id"), // FK users.id (usuário com role advogado)
+  advogadoId: int("advogado_id"),           // FK users.id (usuário com role advogado)
   percentualEmpresa: decimal("percentual_empresa", { precision: 5, scale: 2 }).default("0").notNull(),
+  percentualAdvogado: decimal("percentual_advogado", { precision: 5, scale: 2 }).default("0").notNull(),
+  criadoPor: int("criado_por"),              // FK users.id (admin que criou)
   ativo: boolean("ativo").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
@@ -78,6 +80,25 @@ export const lotes = mysqlTable("lotes", {
 
 export type Lote = typeof lotes.$inferSelect;
 export type InsertLote = typeof lotes.$inferInsert;
+
+// ─── Erros de importação de processos por lote ────────────────────────────────
+export const LOTE_IMPORTACAO_ERRO_MOTIVO = ["nao_encontrado_banco", "processo_ja_em_lote", "cnj_invalido"] as const;
+export type LoteImportacaoErroMotivo = typeof LOTE_IMPORTACAO_ERRO_MOTIVO[number];
+
+export const loteImportacaoErros = mysqlTable("lote_importacao_erros", {
+  id: int("id").autoincrement().primaryKey(),
+  loteId: int("lote_id").notNull(),
+  cnj: varchar("cnj", { length: 50 }).notNull(),
+  motivo: mysqlEnum("motivo", LOTE_IMPORTACAO_ERRO_MOTIVO).notNull(),
+  loteAtualNome: varchar("lote_atual_nome", { length: 255 }),  // nome do lote que já tem o processo
+  importadoEm: timestamp("importado_em").defaultNow().notNull(),
+  resolvido: boolean("resolvido").default(false).notNull(),
+  resolvidoEm: timestamp("resolvido_em"),
+  observacao: text("observacao"),
+});
+
+export type LoteImportacaoErro = typeof loteImportacaoErros.$inferSelect;
+export type InsertLoteImportacaoErro = typeof loteImportacaoErros.$inferInsert;
 
 // ─── Lote Investidores (relação N:N lotes ↔ investidores com percentual) ────
 export const loteInvestidores = mysqlTable("lote_investidores", {
