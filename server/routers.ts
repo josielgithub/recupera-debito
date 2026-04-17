@@ -1242,6 +1242,7 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
       .input(z.object({
         fileBase64: z.string(),
         nomeArquivo: z.string(),
+        advogadoId: z.number().int().positive().nullable().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
@@ -1253,12 +1254,13 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: null });
         let importadas = 0, atualizadas = 0, erros = 0;
         const detalhes: { linha: number; cnj: string; status: string; erro?: string }[] = [];
+        // advogadoId vem do frontend (selecionado pelo admin antes do upload)
+        const advogadoIdImportacao: number | undefined = input.advogadoId ?? undefined;
         for (let i = 0; i < rows.length; i++) {
           const row = rows[i]!;
           const cnj = String(row["cnj"] ?? row["CNJ"] ?? "").trim();
           const cpf = String(row["cpf"] ?? row["CPF"] ?? "").trim();
           const nomeCliente = String(row["nome_cliente"] ?? row["Nome Cliente"] ?? row["nome"] ?? "").trim();
-          const advogadoEmail = String(row["advogado_email"] ?? row["Advogado Email"] ?? "").trim();
           if (!cnj) { erros++; detalhes.push({ linha: i + 2, cnj: cnj || "(vazio)", status: "erro", erro: "CNJ ausente" }); continue; }
           try {
             // Buscar ou criar cliente
@@ -1274,13 +1276,6 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
             } else {
               erros++; detalhes.push({ linha: i + 2, cnj, status: "erro", erro: "CPF e nome ausentes" }); continue;
             }
-            // Buscar advogado por email se informado
-            let advogadoId: number | undefined;
-            if (advogadoEmail) {
-              const advs = await listAdvogadosUsuarios();
-              const adv = advs.find(a => a.email?.toLowerCase() === advogadoEmail.toLowerCase());
-              if (adv) advogadoId = adv.id;
-            }
             // Verificar se processo já existe
             const existente = await getProcessoByCnj(cnj);
             if (existente) {
@@ -1290,7 +1285,7 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
               await upsertProcesso({
                 cnj,
                 clienteId,
-                advogadoId,
+                advogadoId: advogadoIdImportacao,
                 statusResumido: "em_analise_inicial",
                 statusJudit: "aguardando_aprovacao_judit",
                 fonteAtualizacao: "judit",
@@ -1317,19 +1312,13 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
 
     gerarModeloImportacao: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
-      // Aba 1: Processos
+      // Apenas aba Processos — sem coluna advogado_email e sem aba Advogados
       const wsProcessos = XLSX.utils.aoa_to_sheet([
-        ["cnj", "cpf", "nome_cliente", "advogado_email"],
-        ["0000000-00.0000.0.00.0000", "000.000.000-00", "Nome do Cliente", "advogado@exemplo.com"],
+        ["cnj", "cpf", "nome_cliente"],
+        ["0000000-00.0000.0.00.0000", "000.000.000-00", "Nome do Cliente"],
       ]);
-      // Aba 2: Advogados cadastrados
-      const advogados = await listAdvogadosUsuarios();
-      const advRows: unknown[][] = [["id", "nome", "email"]];
-      for (const a of advogados) advRows.push([a.id, a.name ?? "", a.email ?? ""]);
-      const wsAdvogados = XLSX.utils.aoa_to_sheet(advRows);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, wsProcessos, "Processos");
-      XLSX.utils.book_append_sheet(wb, wsAdvogados, "Advogados");
       const buf = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
       return { fileBase64: buf, nomeArquivo: "modelo_importacao.xlsx" };
     }),

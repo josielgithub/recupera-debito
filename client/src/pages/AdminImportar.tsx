@@ -3,7 +3,15 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Upload,
   FileSpreadsheet,
@@ -13,6 +21,7 @@ import {
   RefreshCcw,
   Info,
   Clock,
+  User,
 } from "lucide-react";
 import {
   Table,
@@ -42,9 +51,11 @@ export default function AdminImportar() {
   const [dragging, setDragging] = useState(false);
   const [resultado, setResultado] = useState<ResultadoImportacao | null>(null);
   const [nomeArquivo, setNomeArquivo] = useState("");
+  const [advogadoSelecionado, setAdvogadoSelecionado] = useState<string>("");
 
   const modeloQuery = trpc.admin.gerarModeloImportacao.useQuery(undefined, { enabled: false });
   const historicoQuery = trpc.admin.historicoImportacoesUnificado.useQuery();
+  const advogadosQuery = trpc.admin.listarAdvogadosUsuarios.useQuery();
   const importarMutation = trpc.admin.importarProcessos.useMutation({
     onSuccess: (data) => {
       setResultado(data);
@@ -56,7 +67,19 @@ export default function AdminImportar() {
     },
   });
 
+  const advogadoIdNum = advogadoSelecionado === "sem_advogado"
+    ? null
+    : advogadoSelecionado
+      ? parseInt(advogadoSelecionado, 10)
+      : undefined;
+
+  const podeImportar = advogadoSelecionado !== "";
+
   const processarArquivo = async (file: File) => {
+    if (!podeImportar) {
+      toast.error("Selecione um advogado responsável antes de importar");
+      return;
+    }
     if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
       toast.error("Formato inválido. Use .xlsx, .xls ou .csv");
       return;
@@ -67,7 +90,11 @@ export default function AdminImportar() {
     reader.onload = (e) => {
       const base64 = (e.target?.result as string).split(",")[1];
       if (!base64) { toast.error("Erro ao ler arquivo"); return; }
-      importarMutation.mutate({ fileBase64: base64, nomeArquivo: file.name });
+      importarMutation.mutate({
+        fileBase64: base64,
+        nomeArquivo: file.name,
+        advogadoId: advogadoIdNum ?? null,
+      });
     };
     reader.readAsDataURL(file);
   };
@@ -105,6 +132,10 @@ export default function AdminImportar() {
     return <Badge variant="secondary">{status}</Badge>;
   };
 
+  const advogadoNome = advogadoSelecionado === "sem_advogado"
+    ? "Sem advogado"
+    : advogadosQuery.data?.find(a => String(a.id) === advogadoSelecionado)?.name ?? "";
+
   return (
     <div className="space-y-6">
       {/* Cabeçalho */}
@@ -127,25 +158,88 @@ export default function AdminImportar() {
         <div>
           <strong>Como funciona:</strong> A planilha importa processos sem acionar a Judit automaticamente.
           Após a importação, vá até a aba <strong>Fila Judit</strong> para aprovar quais processos devem ser consultados.
-          O modelo contém duas abas: <em>Processos</em> (para preencher) e <em>Advogados</em> (lista de advogados cadastrados para referência).
+          O modelo contém apenas a aba <em>Processos</em> com as colunas obrigatórias: <strong>cnj</strong>, <strong>cpf</strong> e <strong>nome_cliente</strong>.
         </div>
       </div>
+
+      {/* Seleção de advogado */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <User className="h-4 w-4" />
+            Advogado responsável
+          </CardTitle>
+          <CardDescription>
+            Selecione o advogado que será vinculado a todos os processos desta importação.
+            Este campo é obrigatório para habilitar o upload.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="max-w-sm space-y-2">
+            <Label htmlFor="advogado-select">
+              Advogado responsável pelos processos desta importação <span className="text-destructive">*</span>
+            </Label>
+            <Select
+              value={advogadoSelecionado}
+              onValueChange={setAdvogadoSelecionado}
+            >
+              <SelectTrigger id="advogado-select" className="w-full">
+                <SelectValue placeholder="Selecione um advogado..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="sem_advogado">
+                  <span className="text-muted-foreground italic">Sem advogado (definir depois)</span>
+                </SelectItem>
+                {advogadosQuery.isLoading && (
+                  <SelectItem value="_loading" disabled>Carregando...</SelectItem>
+                )}
+                {advogadosQuery.data?.map((adv) => (
+                  <SelectItem key={adv.id} value={String(adv.id)}>
+                    {adv.name ?? adv.email ?? `ID ${adv.id}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!podeImportar && (
+              <p className="text-xs text-amber-600 flex items-center gap-1">
+                <Info className="h-3 w-3" />
+                Selecione um advogado para habilitar o upload da planilha.
+              </p>
+            )}
+            {podeImportar && advogadoNome && (
+              <p className="text-xs text-green-700 flex items-center gap-1">
+                <CheckCircle2 className="h-3 w-3" />
+                Processos serão vinculados a: <strong>{advogadoNome}</strong>
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Área de upload */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Upload da Planilha</CardTitle>
-          <CardDescription>Formatos aceitos: .xlsx, .xls, .csv — Colunas: cnj, cpf, nome_cliente, advogado_email</CardDescription>
+          <CardDescription>
+            Formatos aceitos: .xlsx, .xls, .csv — Colunas obrigatórias:{" "}
+            <Badge variant="secondary" className="text-xs mx-0.5">cnj</Badge>
+            <Badge variant="secondary" className="text-xs mx-0.5">cpf</Badge>
+            <Badge variant="secondary" className="text-xs mx-0.5">nome_cliente</Badge>
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div
-            className={`border-2 border-dashed rounded-lg p-10 text-center transition-colors cursor-pointer ${
-              dragging ? "border-primary bg-primary/5" : "border-muted-foreground/30 hover:border-primary/50"
+            className={`border-2 border-dashed rounded-lg p-10 text-center transition-colors ${
+              !podeImportar
+                ? "border-muted-foreground/20 opacity-50 cursor-not-allowed"
+                : dragging
+                  ? "border-primary bg-primary/5 cursor-pointer"
+                  : "border-muted-foreground/30 hover:border-primary/50 cursor-pointer"
             }`}
-            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragOver={(e) => { if (!podeImportar) return; e.preventDefault(); setDragging(true); }}
             onDragLeave={() => setDragging(false)}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
+            onDrop={(e) => { if (!podeImportar) return; handleDrop(e); }}
+            onClick={() => { if (!podeImportar) { toast.error("Selecione um advogado antes de importar"); return; } fileInputRef.current?.click(); }}
           >
             <input
               ref={fileInputRef}
@@ -153,6 +247,7 @@ export default function AdminImportar() {
               accept=".xlsx,.xls,.csv"
               className="hidden"
               onChange={handleFileChange}
+              disabled={!podeImportar}
             />
             {importarMutation.isPending ? (
               <div className="flex flex-col items-center gap-3">
@@ -161,9 +256,13 @@ export default function AdminImportar() {
               </div>
             ) : (
               <div className="flex flex-col items-center gap-3">
-                <Upload className="h-10 w-10 text-muted-foreground" />
+                <Upload className={`h-10 w-10 ${podeImportar ? "text-muted-foreground" : "text-muted-foreground/40"}`} />
                 <div>
-                  <p className="font-medium">Arraste a planilha aqui ou clique para selecionar</p>
+                  <p className="font-medium">
+                    {podeImportar
+                      ? "Arraste a planilha aqui ou clique para selecionar"
+                      : "Selecione um advogado acima para habilitar o upload"}
+                  </p>
                   <p className="text-sm text-muted-foreground mt-1">.xlsx, .xls ou .csv</p>
                 </div>
               </div>
