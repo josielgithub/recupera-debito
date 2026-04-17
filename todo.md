@@ -506,3 +506,11 @@
 - [x] AdminJudit: 5º card "Análises IA geradas" com link para painel Manus
 - [x] AdminJudit: aba toggle "Consultas Judit" / "Análises IA" na seção Histórico
 - [x] Testes Vitest: inserção e consulta na tabela manus_llm_log (24 testes passando)
+
+## Correções de Log e StatusJudit
+
+- [x] Corrigir judit_consulta_log: registrar consultas em lote (tipo "consulta_lote") além das avulsas
+- [x] Corrigir importação: gravar statusJudit = "aguardando_aprovacao_judit" ao salvar cada processo (já estava correto)
+- [x] Verificar/criar coluna statusJudit na tabela processos via migration Drizzle (já existia)
+- [x] Atualizar processos existentes em_analise_inicial sem statusJudit para "aguardando_aprovacao_judit" (não necessário: 0 NULL, DEFAULT correto)
+- [x] Confirmar contagem final de processos por statusJudit: 238 aguardando, 11 consultado

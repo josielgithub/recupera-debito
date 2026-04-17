@@ -489,6 +489,7 @@ export async function buscarESalvarProcessoJudit(cnj: string): Promise<{
   criado: boolean;
   processo: Awaited<ReturnType<typeof getProcessoByCnj>>;
   notFound: boolean;
+  requestId: string | null;
 }> {
   try {
     const requestId = await criarRequisicaoJudit(cnj);
@@ -504,7 +505,7 @@ export async function buscarESalvarProcessoJudit(cnj: string): Promise<{
         if (!resultado) {
           await updateJuditRequestStatus(requestId, "completed");
           const processo = await getProcessoByCnj(cnj);
-          return { atualizado: false, criado: false, processo, notFound: true };
+          return { atualizado: false, criado: false, processo, notFound: true, requestId };
         }
 
         // Verificar se é um erro LAWSUIT_NOT_FOUND
@@ -512,7 +513,7 @@ export async function buscarESalvarProcessoJudit(cnj: string): Promise<{
         if (r.code === 2 || (typeof r.message === "string" && r.message.includes("NOT_FOUND"))) {
           await updateJuditRequestStatus(requestId, "completed");
           const processo = await getProcessoByCnj(cnj);
-          return { atualizado: false, criado: false, processo, notFound: true };
+          return { atualizado: false, criado: false, processo, notFound: true, requestId };
         }
 
         const { statusResumido, statusOriginal } = mapearStatusJudit(resultado);
@@ -527,23 +528,23 @@ export async function buscarESalvarProcessoJudit(cnj: string): Promise<{
         console.log(`[Judit] Processo ${cnj} ${criado ? "criado" : "atualizado"}: ${statusOriginal} → ${statusResumido}`);
 
         const processo = await getProcessoByCnj(cnj);
-        return { atualizado: true, criado, processo, notFound: false };
+        return { atualizado: true, criado, processo, notFound: false, requestId };
       }
 
       if (status === "error") {
         await updateJuditRequestStatus(requestId, "error");
         const processo = await getProcessoByCnj(cnj);
-        return { atualizado: false, criado: false, processo, notFound: false };
+        return { atualizado: false, criado: false, processo, notFound: false, requestId };
       }
     }
 
     // Timeout
     const processo = await getProcessoByCnj(cnj);
-    return { atualizado: false, criado: false, processo, notFound: false };
+    return { atualizado: false, criado: false, processo, notFound: false, requestId: null };
   } catch (error) {
     console.error(`[Judit] Erro ao buscar/salvar processo ${cnj}:`, error);
     const processo = await getProcessoByCnj(cnj);
-    return { atualizado: false, criado: false, processo, notFound: false };
+    return { atualizado: false, criado: false, processo, notFound: false, requestId: null };
   }
 }
 

@@ -1,0 +1,1 @@
+ALTER TABLE `judit_consulta_log` MODIFY COLUMN `tipo` enum('consulta_avulsa','importacao','consulta_lote') NOT NULL DEFAULT 'consulta_avulsa';

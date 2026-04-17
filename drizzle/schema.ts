@@ -272,7 +272,7 @@ export const juditConsultaLog = mysqlTable("judit_consulta_log", {
   id: int("id").autoincrement().primaryKey(),
   processoCnj: varchar("processo_cnj", { length: 30 }).notNull(),
   requestId: varchar("request_id", { length: 128 }),
-  tipo: mysqlEnum("tipo", ["consulta_avulsa", "importacao"]).default("consulta_avulsa").notNull(),
+  tipo: mysqlEnum("tipo", ["consulta_avulsa", "importacao", "consulta_lote"]).default("consulta_avulsa").notNull(),
   custo: decimal("custo", { precision: 10, scale: 2 }).default("0.25").notNull(),
   status: mysqlEnum("status", ["sucesso", "nao_encontrado", "erro"]).default("sucesso").notNull(),
   aprovadoPorId: int("aprovado_por_id"),

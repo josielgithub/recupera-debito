@@ -1080,12 +1080,43 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
             const resultado = await buscarESalvarProcessoJudit(proc.cnj);
             if (resultado.notFound) {
               await marcarProcessoNaoEncontradoJudit(processoId);
+              // Registrar log de consulta em lote
+              await insertJuditConsultaLog({
+                processoCnj: proc.cnj,
+                requestId: resultado.requestId ?? null,
+                tipo: "consulta_lote",
+                custo: "0.25",
+                status: "nao_encontrado",
+                aprovadoPorId: ctx.user.id,
+              });
               resultados.push({ processoId, ok: true, notFound: true });
             } else {
               await aprovarProcessoJudit(processoId, ctx.user.id);
+              // Registrar log de consulta em lote
+              await insertJuditConsultaLog({
+                processoCnj: proc.cnj,
+                requestId: resultado.requestId ?? null,
+                tipo: "consulta_lote",
+                custo: "0.25",
+                status: "sucesso",
+                aprovadoPorId: ctx.user.id,
+              });
               resultados.push({ processoId, ok: true, notFound: false });
             }
           } catch (err) {
+            // Registrar log de erro na consulta em lote
+            const procs2 = await listFilaJudit(1, 1000).catch(() => ({ processos: [] }));
+            const proc2 = procs2.processos.find((p: { id: number; cnj: string }) => p.id === processoId);
+            if (proc2) {
+              await insertJuditConsultaLog({
+                processoCnj: proc2.cnj,
+                requestId: null,
+                tipo: "consulta_lote",
+                custo: "0.25",
+                status: "erro",
+                aprovadoPorId: ctx.user.id,
+              }).catch(() => {});
+            }
             resultados.push({ processoId, ok: false, erro: String(err) });
           }
         }
