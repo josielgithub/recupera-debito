@@ -78,6 +78,8 @@ import { updateAiSummary, updateValorObtido, getImportJob, listImportJobs,
   vincularInvestidorEmLote, getDashboardInvestidores, getProcessosSemInvestidor,
   upsertProcesso, upsertCliente,
   listAdvogadosUsuarios, listInvestidoresUsuarios,
+  insertJuditConsultaLog, listJuditConsultaLog, countJuditConsultaLog,
+  insertLogImportacaoUnificado, listLogsImportacaoUnificado,
 } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { createHash } from "crypto";
@@ -1047,6 +1049,119 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
           }
         }
         return { resultados };
+      }),
+
+    // ─── Importação Unificada (sem Judit) ──────────────────────────────
+    importarProcessos: protectedProcedure
+      .input(z.object({
+        fileBase64: z.string(),
+        nomeArquivo: z.string(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const buffer = Buffer.from(input.fileBase64, "base64");
+        const wb = XLSX.read(buffer, { type: "buffer" });
+        const sheetName = wb.SheetNames[0];
+        if (!sheetName) throw new TRPCError({ code: "BAD_REQUEST", message: "Planilha vazia" });
+        const sheet = wb.Sheets[sheetName]!;
+        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: null });
+        let importadas = 0, atualizadas = 0, erros = 0;
+        const detalhes: { linha: number; cnj: string; status: string; erro?: string }[] = [];
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i]!;
+          const cnj = String(row["cnj"] ?? row["CNJ"] ?? "").trim();
+          const cpf = String(row["cpf"] ?? row["CPF"] ?? "").trim();
+          const nomeCliente = String(row["nome_cliente"] ?? row["Nome Cliente"] ?? row["nome"] ?? "").trim();
+          const advogadoEmail = String(row["advogado_email"] ?? row["Advogado Email"] ?? "").trim();
+          if (!cnj) { erros++; detalhes.push({ linha: i + 2, cnj: cnj || "(vazio)", status: "erro", erro: "CNJ ausente" }); continue; }
+          try {
+            // Buscar ou criar cliente
+            let clienteId: number;
+            if (cpf) {
+              const cpfLimpo = cpf.replace(/\D/g, "");
+              const cpfFormatado = cpfLimpo.length === 11
+                ? `${cpfLimpo.slice(0,3)}.${cpfLimpo.slice(3,6)}.${cpfLimpo.slice(6,9)}-${cpfLimpo.slice(9)}`
+                : cpfLimpo;
+              clienteId = await upsertCliente({ nome: nomeCliente || "A identificar", cpf: cpfFormatado });
+            } else if (nomeCliente) {
+              clienteId = await upsertCliente({ nome: nomeCliente });
+            } else {
+              erros++; detalhes.push({ linha: i + 2, cnj, status: "erro", erro: "CPF e nome ausentes" }); continue;
+            }
+            // Buscar advogado por email se informado
+            let advogadoId: number | undefined;
+            if (advogadoEmail) {
+              const advs = await listAdvogadosUsuarios();
+              const adv = advs.find(a => a.email?.toLowerCase() === advogadoEmail.toLowerCase());
+              if (adv) advogadoId = adv.id;
+            }
+            // Verificar se processo já existe
+            const existente = await getProcessoByCnj(cnj);
+            if (existente) {
+              atualizadas++;
+              detalhes.push({ linha: i + 2, cnj, status: "atualizado" });
+            } else {
+              await upsertProcesso({
+                cnj,
+                clienteId,
+                advogadoId,
+                statusResumido: "em_analise_inicial",
+                statusJudit: "aguardando_aprovacao_judit",
+                fonteAtualizacao: "judit",
+              } as Parameters<typeof upsertProcesso>[0]);
+              importadas++;
+              detalhes.push({ linha: i + 2, cnj, status: "importado" });
+            }
+          } catch (err) {
+            erros++;
+            detalhes.push({ linha: i + 2, cnj, status: "erro", erro: String(err) });
+          }
+        }
+        await insertLogImportacaoUnificado({
+          nomeArquivo: input.nomeArquivo,
+          totalLinhas: rows.length,
+          linhasImportadas: importadas,
+          linhasAtualizadas: atualizadas,
+          linhasErro: erros,
+          detalhes: detalhes as unknown as Record<string, unknown>[],
+          importadoPorId: ctx.user.id,
+        });
+        return { totalLinhas: rows.length, importadas, atualizadas, erros, detalhes };
+      }),
+
+    gerarModeloImportacao: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      // Aba 1: Processos
+      const wsProcessos = XLSX.utils.aoa_to_sheet([
+        ["cnj", "cpf", "nome_cliente", "advogado_email"],
+        ["0000000-00.0000.0.00.0000", "000.000.000-00", "Nome do Cliente", "advogado@exemplo.com"],
+      ]);
+      // Aba 2: Advogados cadastrados
+      const advogados = await listAdvogadosUsuarios();
+      const advRows: unknown[][] = [["id", "nome", "email"]];
+      for (const a of advogados) advRows.push([a.id, a.name ?? "", a.email ?? ""]);
+      const wsAdvogados = XLSX.utils.aoa_to_sheet(advRows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, wsProcessos, "Processos");
+      XLSX.utils.book_append_sheet(wb, wsAdvogados, "Advogados");
+      const buf = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+      return { fileBase64: buf, nomeArquivo: "modelo_importacao.xlsx" };
+    }),
+
+    historicoImportacoesUnificado: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return listLogsImportacaoUnificado(20);
+    }),
+
+    logJuditConsultas: protectedProcedure
+      .input(z.object({ limit: z.number().default(100) }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const [logs, stats] = await Promise.all([
+          listJuditConsultaLog(input.limit),
+          countJuditConsultaLog(),
+        ]);
+        return { logs, stats };
       }),
 
     // Análise IA com Claude Haiku

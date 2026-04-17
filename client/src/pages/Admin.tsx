@@ -48,6 +48,7 @@ import AdminInvestidores from "./AdminInvestidores";
 import AdminUsuarios from "./AdminUsuarios";
 import AdminLotes from "./AdminLotes";
 import AdminFilaJudit from "./AdminFilaJudit";
+import AdminImportar from "./AdminImportar";
 
 import {
   BarChart,
@@ -994,13 +995,9 @@ export default function Admin() {
               <FileText className="w-3.5 h-3.5" />
               Processos
             </TabsTrigger>
-            <TabsTrigger value="importacao-simples" className="flex items-center gap-1.5 text-xs">
-              <Zap className="w-3.5 h-3.5" />
-              Importar + Judit
-            </TabsTrigger>
-            <TabsTrigger value="importacao" className="flex items-center gap-1.5 text-xs">
+            <TabsTrigger value="importar" className="flex items-center gap-1.5 text-xs">
               <Upload className="w-3.5 h-3.5" />
-              Importação
+              Importar
             </TabsTrigger>
             <TabsTrigger value="logs" className="flex items-center gap-1.5 text-xs">
               <Activity className="w-3.5 h-3.5" />
@@ -1034,8 +1031,7 @@ export default function Admin() {
 
           <TabsContent value="dashboard"><DashboardView onVerStatus={handleVerStatus} onVerInvestidor={handleVerInvestidor} /></TabsContent>
           <TabsContent value="processos"><AdminProcessos filtroStatusInicial={filtroStatusProcessos} filtroInvestidorIdInicial={filtroInvestidorId} key={`${filtroStatusProcessos ?? "all"}-${filtroInvestidorId ?? "none"}`} /></TabsContent>
-          <TabsContent value="importacao-simples"><AdminImportacaoSimples /></TabsContent>
-          <TabsContent value="importacao"><ImportacaoView /></TabsContent>
+          <TabsContent value="importar"><AdminImportar /></TabsContent>
           <TabsContent value="logs"><AdminHistorico /></TabsContent>
           <TabsContent value="judit"><AdminJudit /></TabsContent>
           <TabsContent value="investidores"><AdminInvestidores /></TabsContent>

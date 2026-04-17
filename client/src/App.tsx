@@ -16,6 +16,7 @@ import InvestidorPortal from "./pages/InvestidorPortal";
 import AdminUsuarios from "./pages/AdminUsuarios";
 import AdminFilaJudit from "./pages/AdminFilaJudit";
 import AdminLotes from "./pages/AdminLotes";
+import AdminImportar from "./pages/AdminImportar";
 
 // Handles post-OAuth redirect: if the user just logged in and there's a stored returnPath,
 // do a full page navigation to ensure the session cookie is properly read.
@@ -50,6 +51,7 @@ function Router() {
       <Route path="/admin/usuarios" component={AdminUsuarios} />
       <Route path="/admin/fila-judit" component={AdminFilaJudit} />
       <Route path="/admin/lotes" component={AdminLotes} />
+      <Route path="/admin/importar" component={AdminImportar} />
       <Route path="/convite/:token" component={Convite} />
       <Route path="/advogado" component={AdvogadoPortal} />
       <Route path="/investidor" component={InvestidorPortal} />

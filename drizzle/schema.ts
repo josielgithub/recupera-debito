@@ -266,3 +266,32 @@ export const juditRequests = mysqlTable("judit_requests", {
 
 export type JuditRequest = typeof juditRequests.$inferSelect;
 export type InsertJuditRequest = typeof juditRequests.$inferInsert;
+
+// ─── Judit Consulta Log ────────────────────────────────────────────────────
+export const juditConsultaLog = mysqlTable("judit_consulta_log", {
+  id: int("id").autoincrement().primaryKey(),
+  processoCnj: varchar("processo_cnj", { length: 30 }).notNull(),
+  requestId: varchar("request_id", { length: 128 }),
+  tipo: mysqlEnum("tipo", ["consulta_avulsa", "importacao"]).default("consulta_avulsa").notNull(),
+  custo: decimal("custo", { precision: 10, scale: 2 }).default("0.25").notNull(),
+  status: mysqlEnum("status", ["sucesso", "nao_encontrado", "erro"]).default("sucesso").notNull(),
+  aprovadoPorId: int("aprovado_por_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type JuditConsultaLog = typeof juditConsultaLog.$inferSelect;
+export type InsertJuditConsultaLog = typeof juditConsultaLog.$inferInsert;
+
+// ─── Logs de Importação Unificados ─────────────────────────────────────────
+export const logsImportacaoUnificado = mysqlTable("logs_importacao_unificado", {
+  id: int("id").autoincrement().primaryKey(),
+  nomeArquivo: varchar("nome_arquivo", { length: 255 }),
+  totalLinhas: int("total_linhas").default(0).notNull(),
+  linhasImportadas: int("linhas_importadas").default(0).notNull(),
+  linhasAtualizadas: int("linhas_atualizadas").default(0).notNull(),
+  linhasErro: int("linhas_erro").default(0).notNull(),
+  detalhes: json("detalhes"),
+  importadoPorId: int("importado_por_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type LogImportacaoUnificado = typeof logsImportacaoUnificado.$inferSelect;
+export type InsertLogImportacaoUnificado = typeof logsImportacaoUnificado.$inferInsert;

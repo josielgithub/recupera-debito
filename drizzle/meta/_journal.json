@@ -78,6 +78,13 @@
       "when": 1776399493159,
       "tag": "0010_nasty_miss_america",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1776400373560,
+      "tag": "0011_dry_william_stryker",
+      "breakpoints": true
     }
   ]
 }

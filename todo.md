@@ -475,3 +475,14 @@
 - [ ] Remover rota correspondente no App.tsx
 - [ ] Remover rotas tRPC de escritórios não usadas
 - [ ] Verificar referências a escritório em AdminProcessos.tsx, ProcessoDetalhe.tsx e Dashboard
+
+## Unificação de Importação e Fila Judit
+
+- [ ] Criar tabela judit_consulta_log no schema Drizzle e aplicar migração
+- [ ] Criar rota tRPC admin.importarProcessos (sem Judit, com validação advogado_id)
+- [ ] Criar rota tRPC admin.gerarModeloImportacao com duas abas (Processos + Advogados)
+- [ ] Criar AdminImportar.tsx com upload drag-and-drop, modelo e histórico
+- [ ] Adicionar seção de fila Judit com custo estimado na AdminJudit
+- [ ] Atualizar menu: remover "Importar + Judit" e "Importação", adicionar "Importar"
+- [ ] Remover AdminImportacaoSimples.tsx e arquivo antigo de importação
+- [ ] Remover rotas tRPC antigas de importação não usadas

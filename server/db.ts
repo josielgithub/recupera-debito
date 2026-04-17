@@ -22,15 +22,19 @@ import {
   convites,
   investidores,
   juditRequests,
+  juditConsultaLog,
   logsConsulta,
   importJobs,
   logsImportacao,
+  logsImportacaoUnificado,
   loteInvestidores,
   lotes,
   parceiros,
   processos,
   rateLimits,
   users,
+  InsertJuditConsultaLog,
+  InsertLogImportacaoUnificado,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -1525,4 +1529,45 @@ export async function listInvestidoresUsuarios() {
     const roles: string[] = Array.isArray(u.extraRoles) ? (u.extraRoles as string[]) : [];
     return roles.includes("investidor") || roles.includes("advogado_investidor");
   });
+}
+
+// ─── Judit Consulta Log ────────────────────────────────────────────────────
+export async function insertJuditConsultaLog(data: InsertJuditConsultaLog): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(juditConsultaLog).values(data);
+}
+
+export async function listJuditConsultaLog(limit = 100) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(juditConsultaLog).orderBy(desc(juditConsultaLog.createdAt)).limit(limit);
+}
+
+export async function countJuditConsultaLog() {
+  const db = await getDb();
+  if (!db) return { total: 0, custoTotal: 0 };
+  const rows = await db
+    .select({ total: sql<number>`count(*)`, custo: sql<number>`sum(custo)` })
+    .from(juditConsultaLog);
+  return { total: Number(rows[0]?.total ?? 0), custoTotal: Number(rows[0]?.custo ?? 0) };
+}
+
+// ─── Logs Importação Unificado ─────────────────────────────────────────────
+export async function insertLogImportacaoUnificado(data: InsertLogImportacaoUnificado): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.insert(logsImportacaoUnificado).values(data);
+  const result = await db
+    .select({ id: logsImportacaoUnificado.id })
+    .from(logsImportacaoUnificado)
+    .orderBy(desc(logsImportacaoUnificado.createdAt))
+    .limit(1);
+  return result[0]?.id ?? 0;
+}
+
+export async function listLogsImportacaoUnificado(limit = 20) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(logsImportacaoUnificado).orderBy(desc(logsImportacaoUnificado.createdAt)).limit(limit);
 }
