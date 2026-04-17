@@ -514,3 +514,12 @@
 - [x] Verificar/criar coluna statusJudit na tabela processos via migration Drizzle (já existia)
 - [x] Atualizar processos existentes em_analise_inicial sem statusJudit para "aguardando_aprovacao_judit" (não necessário: 0 NULL, DEFAULT correto)
 - [x] Confirmar contagem final de processos por statusJudit: 238 aguardando, 11 consultado
+
+## Refatoração AdminConfig (Remoção Codilo + Nova Tela)
+
+- [x] Remover toda integração Codilo do backend (rotas, routers, index.ts, codilo.ts)
+- [x] Remover referências Codilo do frontend (AdminConfig.tsx, App.tsx, outros)
+- [x] Criar tabela configuracoes no Drizzle e aplicar migração
+- [x] Criar procedures tRPC: getConfiguracoes, salvarConfiguracoes, promoverAdmin, removerAdmin
+- [x] Criar nova tela AdminConfig.tsx com 4 seções (status integrações, config geral, segurança, admins)
+- [x] Confirmar que /api/judit/callback continua funcionando após remoção da Codilo (Codilo nunca estava no index.ts)

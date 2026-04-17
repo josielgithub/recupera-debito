@@ -82,6 +82,7 @@ import { updateAiSummary, updateValorObtido, getImportJob, listImportJobs,
   insertLogImportacaoUnificado, listLogsImportacaoUnificado,
   metricsJudit, listFilaJuditFiltrada, listHistoricoJudit, buscarProcessosPorCpfLocal,
   insertManusLlmLog, metricsAnalisesIA, listAnalisesIA,
+  getConfiguracoes, salvarConfiguracoes,
 } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { createHash } from "crypto";
@@ -958,6 +959,64 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         );
         return { ok: true };
       }),
+    // ─── Configurações do Sistema ─────────────────────────────────────────────
+    getConfiguracoes: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return getConfiguracoes();
+    }),
+
+    salvarConfiguracoes: protectedProcedure
+      .input(z.object({
+        nome_sistema: z.string().min(1).max(128).optional(),
+        email_contato: z.string().email().or(z.literal("")).optional(),
+        whatsapp_contato: z.string().max(20).optional(),
+        limite_orcamento_judit: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
+        alerta_orcamento_pct: z.string().regex(/^\d+$/).optional(),
+        alerta_critico_pct: z.string().regex(/^\d+$/).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const dados: Record<string, string> = {};
+        for (const [k, v] of Object.entries(input)) {
+          if (v !== undefined) dados[k] = v;
+        }
+        await salvarConfiguracoes(dados, ctx.user.id);
+        return { ok: true };
+      }),
+
+    // ─── Gestão de Admins ─────────────────────────────────────────────────────
+    promoverAdmin: protectedProcedure
+      .input(z.object({ usuarioId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const db = await (await import("./db")).getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const { users: usersTable } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+        await db.update(usersTable).set({ role: "admin" }).where(eq(usersTable.id, input.usuarioId));
+        return { ok: true };
+      }),
+
+    removerAdmin: protectedProcedure
+      .input(z.object({ usuarioId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        if (input.usuarioId === ctx.user.id) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Você não pode remover seu próprio acesso de admin." });
+        }
+        // Garantir que sempre exista pelo menos 1 admin
+        const db = await (await import("./db")).getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const { users: usersTable } = await import("../drizzle/schema");
+        const { eq, sql: sqlFn } = await import("drizzle-orm");
+        const [countRow] = await db.select({ total: sqlFn<number>`count(*)` }).from(usersTable).where(eq(usersTable.role, "admin"));
+        if (Number(countRow?.total ?? 0) <= 1) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Deve existir pelo menos 1 administrador no sistema." });
+        }
+        await db.update(usersTable).set({ role: "user" }).where(eq(usersTable.id, input.usuarioId));
+        return { ok: true };
+      }),
+
     // ─── Lotes ────────────────────────────────────────────────────────────────
     criarLote: protectedProcedure
       .input(z.object({

@@ -310,3 +310,14 @@ export const logsImportacaoUnificado = mysqlTable("logs_importacao_unificado", {
 });
 export type LogImportacaoUnificado = typeof logsImportacaoUnificado.$inferSelect;
 export type InsertLogImportacaoUnificado = typeof logsImportacaoUnificado.$inferInsert;
+
+// ─── Configurações do Sistema ──────────────────────────────────────────────
+export const configuracoes = mysqlTable("configuracoes", {
+  id: int("id").autoincrement().primaryKey(),
+  chave: varchar("chave", { length: 128 }).notNull().unique(),
+  valor: text("valor").notNull(),
+  atualizadoEm: timestamp("atualizado_em").defaultNow().onUpdateNow().notNull(),
+  atualizadoPor: int("atualizado_por"), // FK users.id (admin) — nullable
+});
+export type Configuracao = typeof configuracoes.$inferSelect;
+export type InsertConfiguracao = typeof configuracoes.$inferInsert;

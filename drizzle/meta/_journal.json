@@ -99,6 +99,13 @@
       "when": 1776408017459,
       "tag": "0013_wise_blue_marvel",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1776410399145,
+      "tag": "0014_tricky_william_stryker",
+      "breakpoints": true
     }
   ]
 }

@@ -37,6 +37,9 @@ import {
   InsertLogImportacaoUnificado,
   manusLlmLog,
   InsertManusLlmLog,
+  configuracoes,
+  Configuracao,
+  InsertConfiguracao,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -1817,4 +1820,30 @@ export async function buscarProcessosPorCpfLocal(cpf: string) {
     .leftJoin(clientes, eq(processos.clienteId, clientes.id))
     .where(eq(clientes.cpf, cpfLimpo));
   return rows;
+}
+
+// ─── Configurações do Sistema ──────────────────────────────────────────────
+export async function getConfiguracoes(): Promise<Record<string, string>> {
+  const db = await getDb();
+  if (!db) return {};
+  const rows = await db.select({ chave: configuracoes.chave, valor: configuracoes.valor }).from(configuracoes);
+  return Object.fromEntries(rows.map((r) => [r.chave, r.valor]));
+}
+
+export async function salvarConfiguracao(chave: string, valor: string, adminId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .insert(configuracoes)
+    .values({ chave, valor, atualizadoPor: adminId })
+    .onDuplicateKeyUpdate({ set: { valor, atualizadoPor: adminId } });
+}
+
+export async function salvarConfiguracoes(
+  dados: Record<string, string>,
+  adminId: number
+): Promise<void> {
+  for (const [chave, valor] of Object.entries(dados)) {
+    await salvarConfiguracao(chave, valor, adminId);
+  }
 }
