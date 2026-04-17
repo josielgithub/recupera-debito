@@ -281,6 +281,21 @@ export const juditConsultaLog = mysqlTable("judit_consulta_log", {
 export type JuditConsultaLog = typeof juditConsultaLog.$inferSelect;
 export type InsertJuditConsultaLog = typeof juditConsultaLog.$inferInsert;
 
+// ─── Manus LLM Log ────────────────────────────────────────────────────────
+export const manusLlmLog = mysqlTable("manus_llm_log", {
+  id: int("id").autoincrement().primaryKey(),
+  processoCnj: varchar("processo_cnj", { length: 30 }).notNull(),
+  solicitadoPor: int("solicitado_por").notNull(), // FK users.id (admin)
+  solicitadoEm: timestamp("solicitado_em").defaultNow().notNull(),
+  tokensEntrada: int("tokens_entrada"),           // nullable — se API retornar
+  tokensSaida: int("tokens_saida"),               // nullable — se API retornar
+  custoEstimado: decimal("custo_estimado", { precision: 10, scale: 6 }), // nullable
+  modelo: varchar("modelo", { length: 128 }),     // nullable — modelo usado
+  sucesso: boolean("sucesso").default(true).notNull(),
+});
+export type ManusLlmLog = typeof manusLlmLog.$inferSelect;
+export type InsertManusLlmLog = typeof manusLlmLog.$inferInsert;
+
 // ─── Logs de Importação Unificados ─────────────────────────────────────────
 export const logsImportacaoUnificado = mysqlTable("logs_importacao_unificado", {
   id: int("id").autoincrement().primaryKey(),

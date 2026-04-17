@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
   Search, CheckCircle, Clock, AlertTriangle, DollarSign,
-  RefreshCw, ListChecks, History, FileSearch, ChevronLeft, ChevronRight, Download
+  RefreshCw, ListChecks, History, FileSearch, ChevronLeft, ChevronRight, Download, Brain, ExternalLink
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -35,38 +35,14 @@ function SecaoMetricas() {
   const { data, isLoading, refetch } = trpc.admin.metricsJudit.useQuery(undefined, {
     refetchInterval: 60_000,
   });
+  const { data: dataIA } = trpc.admin.metricsAnalisesIA.useQuery(undefined, {
+    refetchInterval: 60_000,
+  });
 
   const creditoRestante = data?.creditoRestante ?? 0;
   const limiteMensal = data?.limiteMensal ?? 1000;
   const pct = limiteMensal > 0 ? (creditoRestante / limiteMensal) * 100 : 0;
   const creditoCor = pct > 20 ? "text-green-600" : pct > 10 ? "text-orange-500" : "text-red-600";
-
-  const cards = [
-    {
-      icon: <DollarSign className={`h-5 w-5 ${creditoCor}`} />,
-      label: "Crédito restante (mês)",
-      value: isLoading ? "…" : <span className={creditoCor}>R$ {creditoRestante.toFixed(2)}</span>,
-      sub: `de R$ ${limiteMensal.toFixed(2)}`,
-    },
-    {
-      icon: <CheckCircle className="h-5 w-5 text-blue-600" />,
-      label: "Consultas este mês",
-      value: isLoading ? "…" : String(data?.consultasMes ?? 0),
-      sub: `Custo: R$ ${(data?.custoMes ?? 0).toFixed(2)}`,
-    },
-    {
-      icon: <RefreshCw className="h-5 w-5 text-purple-600" />,
-      label: "Requisições processando",
-      value: isLoading ? "…" : String(data?.requisicaoProcessando ?? 0),
-      sub: "em andamento na Judit",
-    },
-    {
-      icon: <Clock className="h-5 w-5 text-yellow-600" />,
-      label: "Processos na fila",
-      value: isLoading ? "…" : String(data?.processosNaFila ?? 0),
-      sub: "aguardando aprovação",
-    },
-  ];
 
   return (
     <div className="space-y-3">
@@ -76,16 +52,77 @@ function SecaoMetricas() {
           <RefreshCw className="h-3 w-3 mr-1" /> Atualizar
         </Button>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {cards.map((c, i) => (
-          <Card key={i} className="border shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-2">{c.icon}<span className="text-xs text-muted-foreground">{c.label}</span></div>
-              <div className="text-2xl font-bold">{c.value}</div>
-              <div className="text-xs text-muted-foreground mt-1">{c.sub}</div>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        {/* Card 1: Crédito Judit */}
+        <Card className="border shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <DollarSign className={`h-5 w-5 ${creditoCor}`} />
+              <span className="text-xs text-muted-foreground">Crédito restante (mês)</span>
+            </div>
+            <div className="text-2xl font-bold">
+              {isLoading ? "…" : <span className={creditoCor}>R$ {creditoRestante.toFixed(2)}</span>}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">de R$ {limiteMensal.toFixed(2)}</div>
+          </CardContent>
+        </Card>
+        {/* Card 2: Consultas */}
+        <Card className="border shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <CheckCircle className="h-5 w-5 text-blue-600" />
+              <span className="text-xs text-muted-foreground">Consultas este mês</span>
+            </div>
+            <div className="text-2xl font-bold">{isLoading ? "…" : String(data?.consultasMes ?? 0)}</div>
+            <div className="text-xs text-muted-foreground mt-1">Custo: R$ {(data?.custoMes ?? 0).toFixed(2)}</div>
+          </CardContent>
+        </Card>
+        {/* Card 3: Processando */}
+        <Card className="border shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <RefreshCw className="h-5 w-5 text-purple-600" />
+              <span className="text-xs text-muted-foreground">Requisições processando</span>
+            </div>
+            <div className="text-2xl font-bold">{isLoading ? "…" : String(data?.requisicaoProcessando ?? 0)}</div>
+            <div className="text-xs text-muted-foreground mt-1">em andamento na Judit</div>
+          </CardContent>
+        </Card>
+        {/* Card 4: Fila */}
+        <Card className="border shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Clock className="h-5 w-5 text-yellow-600" />
+              <span className="text-xs text-muted-foreground">Processos na fila</span>
+            </div>
+            <div className="text-2xl font-bold">{isLoading ? "…" : String(data?.processosNaFila ?? 0)}</div>
+            <div className="text-xs text-muted-foreground mt-1">aguardando aprovação</div>
+          </CardContent>
+        </Card>
+        {/* Card 5: Análises IA */}
+        <Card className="border shadow-sm border-indigo-100 dark:border-indigo-900">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Brain className="h-5 w-5 text-indigo-600" />
+              <span className="text-xs text-muted-foreground">Análises IA geradas</span>
+            </div>
+            <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-400">
+              {isLoading ? "…" : String(dataIA?.totalMes ?? 0)}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+              Custo: verificar
+              <a
+                href="https://manus.im/app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center text-indigo-500 hover:text-indigo-700 underline"
+                title="manus.im/app → Configurações → Uso"
+              >
+                painel Manus <ExternalLink className="h-2.5 w-2.5 ml-0.5" />
+              </a>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
@@ -416,7 +453,7 @@ function SecaoBuscaCpf() {
 }
 
 // ─── Seção 4: Histórico ───────────────────────────────────────────────────────
-function SecaoHistorico() {
+function SecaoHistoricoJudit() {
   const [periodo, setPeriodo] = useState<"7d" | "30d" | "custom">("30d");
   const [page, setPage] = useState(1);
 
@@ -542,6 +579,130 @@ function SecaoHistorico() {
 }
 
 // ─── Componente Principal ─────────────────────────────────────────────────────
+function SecaoHistoricoIA() {
+  const [page, setPage] = useState(1);
+  const { data, isLoading } = trpc.admin.listAnalisesIA.useQuery({ page, pageSize: 50 });
+
+  const registros = data?.registros ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.ceil(total / 50);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-muted-foreground">
+          {total > 0 ? `${total} análise(s) registrada(s)` : ""}
+        </span>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Brain className="h-3.5 w-3.5 text-indigo-500" />
+          Custo: consulte
+          <a
+            href="https://manus.im/app"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-indigo-500 hover:text-indigo-700 underline inline-flex items-center gap-0.5"
+          >
+            manus.im/app <ExternalLink className="h-2.5 w-2.5" />
+          </a>
+          → Configurações → Uso
+        </div>
+      </div>
+
+      <div className="rounded-lg border overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50">
+            <tr>
+              <th className="p-3 text-left font-medium">CNJ</th>
+              <th className="p-3 text-left font-medium hidden md:table-cell">Solicitado por</th>
+              <th className="p-3 text-left font-medium hidden lg:table-cell">Tokens (entrada/saída)</th>
+              <th className="p-3 text-left font-medium hidden lg:table-cell">Modelo</th>
+              <th className="p-3 text-left font-medium">Status</th>
+              <th className="p-3 text-left font-medium">Data</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">Carregando...</td></tr>
+            ) : registros.length === 0 ? (
+              <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">
+                <div className="flex flex-col items-center gap-2">
+                  <Brain className="h-8 w-8 text-muted-foreground/50" />
+                  <span>Nenhuma análise IA registrada ainda</span>
+                </div>
+              </td></tr>
+            ) : registros.map(r => (
+              <tr key={r.id} className="border-t hover:bg-muted/30">
+                <td className="p-3 font-mono text-xs">{formatCnj(r.processoCnj)}</td>
+                <td className="p-3 hidden md:table-cell text-muted-foreground text-xs">{r.nomeUsuario ?? `#${r.solicitadoPor}`}</td>
+                <td className="p-3 hidden lg:table-cell text-muted-foreground text-xs">
+                  {r.tokensEntrada != null && r.tokensSaida != null
+                    ? `${r.tokensEntrada} / ${r.tokensSaida}`
+                    : "-"}
+                </td>
+                <td className="p-3 hidden lg:table-cell text-muted-foreground text-xs">
+                  {r.modelo ? <span className="font-mono">{r.modelo}</span> : "-"}
+                </td>
+                <td className="p-3">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                    r.sucesso ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                  }`}>
+                    {r.sucesso ? "Sucesso" : "Erro"}
+                  </span>
+                </td>
+                <td className="p-3 text-muted-foreground text-xs">
+                  {new Date(r.solicitadoEm).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">{total} registro(s)</span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm flex items-center px-2">{page}/{totalPages}</span>
+            <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SecaoHistorico() {
+  const [aba, setAba] = useState<"judit" | "ia">("judit");
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2 border-b pb-3">
+        <Button
+          variant={aba === "judit" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setAba("judit")}
+          className="flex items-center gap-1.5"
+        >
+          <History className="h-4 w-4" /> Consultas Judit
+        </Button>
+        <Button
+          variant={aba === "ia" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setAba("ia")}
+          className="flex items-center gap-1.5"
+        >
+          <Brain className="h-4 w-4" /> Análises IA
+        </Button>
+      </div>
+      {aba === "judit" ? <SecaoHistoricoJudit /> : <SecaoHistoricoIA />}
+    </div>
+  );
+}
+
 export default function AdminJudit() {
   return (
     <div className="space-y-6">

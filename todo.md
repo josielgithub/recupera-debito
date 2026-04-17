@@ -494,3 +494,15 @@
 - [ ] Reescrever AdminJudit.tsx com 4 seções: métricas, fila, busca CPF, histórico
 - [ ] Atualizar ordem do menu: Dashboard, Processos, Importar, Histórico, Judit, Usuários, Investidores, Config
 - [ ] Verificar TypeScript e testar fluxo completo
+
+## Controle de Custo LLM Manus (Análise IA)
+
+- [x] Reverter analisarProcessoIA para usar invokeLLM da Manus (remover integração @anthropic-ai/sdk)
+- [x] Criar tabela manus_llm_log (id, processo_cnj, solicitadoPor, solicitadoEm, tokens_entrada, tokens_saida, custo_estimado, modelo, sucesso)
+- [x] Aplicar migração Drizzle para manus_llm_log
+- [x] Registrar log após cada clique em "Gerar Análise IA" (sucesso e falha)
+- [x] Extrair tokens_entrada, tokens_saida e modelo da resposta da LLM Manus
+- [x] Procedures tRPC: metricsAnalisesIA e listAnalisesIA (somente admin)
+- [x] AdminJudit: 5º card "Análises IA geradas" com link para painel Manus
+- [x] AdminJudit: aba toggle "Consultas Judit" / "Análises IA" na seção Histórico
+- [x] Testes Vitest: inserção e consulta na tabela manus_llm_log (24 testes passando)

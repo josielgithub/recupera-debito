@@ -35,6 +35,8 @@ import {
   users,
   InsertJuditConsultaLog,
   InsertLogImportacaoUnificado,
+  manusLlmLog,
+  InsertManusLlmLog,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -1724,7 +1726,71 @@ export async function listHistoricoJudit(opts: {
   };
 }
 
-// ─── Judit: Buscar processos por CPF no banco local ────────────────────────
+/// ─── Manus LLM Log ────────────────────────────────────────────────────────
+export async function insertManusLlmLog(data: InsertManusLlmLog): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(manusLlmLog).values(data);
+}
+
+export async function metricsAnalisesIA() {
+  const db = await getDb();
+  if (!db) return { totalMes: 0, totalGeral: 0 };
+  const agora = new Date();
+  const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
+  const [totalMesRows, totalGeralRows] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(manusLlmLog)
+      .where(gte(manusLlmLog.solicitadoEm, inicioMes)),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(manusLlmLog),
+  ]);
+  return {
+    totalMes: Number(totalMesRows[0]?.count ?? 0),
+    totalGeral: Number(totalGeralRows[0]?.count ?? 0),
+  };
+}
+
+export async function listAnalisesIA(opts: {
+  page?: number;
+  pageSize?: number;
+}) {
+  const db = await getDb();
+  if (!db) return { registros: [], total: 0 };
+  const { page = 1, pageSize = 50 } = opts;
+  const offset = (page - 1) * pageSize;
+  const [rows, countRows] = await Promise.all([
+    db
+      .select({
+        id: manusLlmLog.id,
+        processoCnj: manusLlmLog.processoCnj,
+        solicitadoPor: manusLlmLog.solicitadoPor,
+        solicitadoEm: manusLlmLog.solicitadoEm,
+        tokensEntrada: manusLlmLog.tokensEntrada,
+        tokensSaida: manusLlmLog.tokensSaida,
+        custoEstimado: manusLlmLog.custoEstimado,
+        modelo: manusLlmLog.modelo,
+        sucesso: manusLlmLog.sucesso,
+        nomeUsuario: users.name,
+      })
+      .from(manusLlmLog)
+      .leftJoin(users, eq(manusLlmLog.solicitadoPor, users.id))
+      .orderBy(desc(manusLlmLog.solicitadoEm))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(manusLlmLog),
+  ]);
+  return {
+    registros: rows,
+    total: Number(countRows[0]?.count ?? 0),
+  };
+}
+
+// ─── Judit: Buscar processos por CPF no banco local ──────────────────────
 export async function buscarProcessosPorCpfLocal(cpf: string) {
   const db = await getDb();
   if (!db) return [];

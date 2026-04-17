@@ -81,6 +81,7 @@ import { updateAiSummary, updateValorObtido, getImportJob, listImportJobs,
   insertJuditConsultaLog, listJuditConsultaLog, countJuditConsultaLog,
   insertLogImportacaoUnificado, listLogsImportacaoUnificado,
   metricsJudit, listFilaJuditFiltrada, listHistoricoJudit, buscarProcessosPorCpfLocal,
+  insertManusLlmLog, metricsAnalisesIA, listAnalisesIA,
 } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { createHash } from "crypto";
@@ -1204,7 +1205,22 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         return { logs, stats };
       }),
 
-    // Análise IA com Claude Haiku
+    metricsAnalisesIA: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return metricsAnalisesIA();
+    }),
+
+    listAnalisesIA: protectedProcedure
+      .input(z.object({
+        page: z.number().default(1),
+        pageSize: z.number().default(50),
+      }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        return listAnalisesIA({ page: input.page, pageSize: input.pageSize });
+      }),
+
+    // Análise IA com LLM Manus
     analisarProcessoIA: protectedProcedure
       .input(z.object({ cnj: z.string() }))
       .mutation(async ({ input, ctx }) => {
@@ -1213,28 +1229,79 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         const processo = await getProcessoByCnj(input.cnj);
         if (!processo) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
 
-        try {
-          const Anthropic = (await import("@anthropic-ai/sdk")).default;
-          const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-          const prompt = `Você é um assistente jurídico especializado. Analise os dados do processo abaixo e responda EXCLUSIVAMENTE em JSON com as chaves: situacaoAtual, ultimaMovimentacao, proximoPasso, perspectiva. Linguagem simples, sem juridiquês, máximo 2 frases por campo.
+        const prompt = `Você é um assistente jurídico especializado. Analise os dados do processo abaixo e responda EXCLUSIVAMENTE em JSON com as chaves: situacaoAtual, ultimaMovimentacao, proximoPasso, perspectiva. Linguagem simples, sem juridiqês, máximo 2 frases por campo.
 
 DADOS DO PROCESSO:
 ${JSON.stringify(processo, null, 2)}`;
 
-          const message = await client.messages.create({
-            model: "claude-3-5-haiku-20241022",
-            max_tokens: 512,
-            messages: [{ role: "user", content: prompt }],
+        let sucesso = false;
+        let tokensEntrada: number | undefined;
+        let tokensSaida: number | undefined;
+        let modelo: string | undefined;
+
+        try {
+          const response = await invokeLLM({
+            messages: [
+              { role: "system", content: "Você é um assistente jurídico especializado. Responda sempre em JSON válido." },
+              { role: "user", content: prompt },
+            ],
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "analise_processo",
+                strict: true,
+                schema: {
+                  type: "object",
+                  properties: {
+                    situacaoAtual: { type: "string", description: "Situação atual do processo em linguagem simples" },
+                    ultimaMovimentacao: { type: "string", description: "Descrição da última movimentação" },
+                    proximoPasso: { type: "string", description: "Próximo passo esperado no processo" },
+                    perspectiva: { type: "string", description: "Perspectiva geral do processo" },
+                  },
+                  required: ["situacaoAtual", "ultimaMovimentacao", "proximoPasso", "perspectiva"],
+                  additionalProperties: false,
+                },
+              },
+            },
           });
 
-          const texto = (message.content[0] as { type: string; text: string }).text;
-          const analise = JSON.parse(texto);
+          // Extrair tokens e modelo se disponível
+          tokensEntrada = response.usage?.prompt_tokens;
+          tokensSaida = response.usage?.completion_tokens;
+          modelo = response.model;
 
-          return { analise, custoEstimado: "R$ 0,01" };
+          const texto = response.choices[0]?.message?.content;
+          if (!texto || typeof texto !== "string") {
+            throw new Error("Resposta vazia da LLM");
+          }
+          const analise = JSON.parse(texto);
+          sucesso = true;
+
+          // Registrar log
+          await insertManusLlmLog({
+            processoCnj: input.cnj,
+            solicitadoPor: ctx.user.id,
+            tokensEntrada: tokensEntrada ?? null,
+            tokensSaida: tokensSaida ?? null,
+            custoEstimado: null, // API Manus não retorna custo diretamente
+            modelo: modelo ?? null,
+            sucesso: true,
+          });
+
+          return { analise, custoEstimado: null, modelo: modelo ?? null };
         } catch (error) {
-          console.error("[Claude] Erro na análise:", error);
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao analisar com Claude" });
+          console.error("[LLM Manus] Erro na análise:", error);
+          // Registrar falha no log
+          await insertManusLlmLog({
+            processoCnj: input.cnj,
+            solicitadoPor: ctx.user.id,
+            tokensEntrada: tokensEntrada ?? null,
+            tokensSaida: tokensSaida ?? null,
+            custoEstimado: null,
+            modelo: modelo ?? null,
+            sucesso: false,
+          }).catch(() => {}); // Não deixar erro de log quebrar o fluxo
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao analisar processo com IA" });
         }
       }),
   }),
