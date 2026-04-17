@@ -43,3 +43,47 @@ export const adminProcedure = t.procedure.use(
     });
   }),
 );
+
+/**
+ * Middleware que bloqueia mutations quando a requisição está em modo de impersonacão.
+ * Procedures que DEVEM funcionar mesmo em impersonacão (queries e mutations de encerramento):
+ *   - auth.validarTokenImpersonacao (query pública)
+ *   - admin.encerrarImpersonacao (mutation de encerramento)
+ * Todas as demais mutations são bloqueadas com FORBIDDEN.
+ */
+const blockMutationsOnImpersonation = t.middleware(async opts => {
+  const { ctx, next, type, path } = opts;
+
+  // Permite mutations de encerramento de impersonacão mesmo durante a sessão
+  const ALLOWED_MUTATIONS_DURING_IMPERSONATION = [
+    "admin.encerrarImpersonacao",
+  ];
+
+  if (
+    ctx.isImpersonating &&
+    type === "mutation" &&
+    !ALLOWED_MUTATIONS_DURING_IMPERSONATION.includes(path)
+  ) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Ação não permitida em modo de visualização",
+    });
+  }
+
+  // Propagar ctx com user não-nulo (garantido pelo requireUser que vem antes)
+  return next({
+    ctx: {
+      ...ctx,
+      user: ctx.user!,
+    },
+  });
+});
+
+/**
+ * Procedure protegida que também bloqueia mutations durante impersonacão.
+ * Use este tipo para todas as procedures que não devem ser executadas
+ * por um admin impersonando outro usuário.
+ */
+export const protectedProcedureWithImpersonationGuard = t.procedure
+  .use(requireUser)
+  .use(blockMutationsOnImpersonation);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
@@ -9,9 +9,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Plus, Scale, FileText, CheckCircle, XCircle, Clock, TrendingUp, LogOut } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Loader2, Plus, Scale, FileText, CheckCircle, XCircle, Clock, TrendingUp, LogOut, Eye } from "lucide-react";
 import ImpersonacaoBanner from "@/components/ImpersonacaoBanner";
 import { toast } from "sonner";
+
+/** Hook que detecta se a página está sendo acessada em modo de impersonacão */
+function useIsImpersonating(): boolean {
+  const [isImpersonating, setIsImpersonating] = useState(false);
+  useEffect(() => {
+    const token = sessionStorage.getItem("impersonacao_token");
+    setIsImpersonating(!!token);
+  }, []);
+  return isImpersonating;
+}
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   em_analise_inicial: { label: "Em análise", color: "bg-yellow-100 text-yellow-800" },
@@ -195,6 +206,7 @@ export default function AdvogadoPortal() {
   const { user, loading: authLoading, logout } = useAuth();
   const [page, setPage] = useState(1);
   const utils = trpc.useUtils();
+  const isImpersonating = useIsImpersonating();
 
   const { data: dadosAdvogado, isLoading: loadingDados } = trpc.advogado.meusDados.useQuery(undefined, {
     enabled: !!user,
@@ -303,10 +315,28 @@ export default function AdvogadoPortal() {
                 {processosData?.total ?? 0} processo(s) cadastrado(s)
               </CardDescription>
             </div>
-            <CadastrarProcessoDialog onSuccess={() => {
-              utils.advogado.meusProcessos.invalidate();
-              utils.advogado.meusDados.invalidate();
-            }} />
+            {isImpersonating ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button size="sm" disabled className="opacity-50 cursor-not-allowed">
+                        <Eye className="h-4 w-4 mr-1" />
+                        Cadastrar Processo
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Indisponível em modo de visualização</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <CadastrarProcessoDialog onSuccess={() => {
+                utils.advogado.meusProcessos.invalidate();
+                utils.advogado.meusDados.invalidate();
+              }} />
+            )}
           </CardHeader>
           <CardContent>
             {loadingProcessos ? (
@@ -362,7 +392,7 @@ export default function AdvogadoPortal() {
                               <RegistrarResultadoDialog processoId={p.id} onSuccess={() => {
                                 utils.advogado.meusProcessos.invalidate();
                               }} />
-                              {p.statusResumido === "em_analise_inicial" && (
+                              {p.statusResumido === "em_analise_inicial" && !isImpersonating && (
                                 <Button
                                   variant="ghost"
                                   size="sm"

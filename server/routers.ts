@@ -5,7 +5,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { STATUS_RESUMIDO, StatusResumido } from "../drizzle/schema";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { protectedProcedure, protectedProcedureWithImpersonationGuard, publicProcedure, router } from "./_core/trpc";
 import {
   checkRateLimit,
   countJuditRequests,
@@ -1498,7 +1498,7 @@ ${JSON.stringify(processo, null, 2)}`;
         return listProcessosDoAdvogado(ctx.user.id, input.page, input.pageSize);
       }),
 
-    cadastrarProcesso: protectedProcedure
+    cadastrarProcesso: protectedProcedureWithImpersonationGuard
       .input(z.object({
         cnj: z.string().min(1),
         cpfCliente: z.string().min(1),
@@ -1537,7 +1537,7 @@ ${JSON.stringify(processo, null, 2)}`;
         return { ok: true, mensagem: "Processo cadastrado com sucesso. O administrador será notificado para consultar na Judit." };
       }),
 
-    registrarResultado: protectedProcedure
+    registrarResultado: protectedProcedureWithImpersonationGuard
       .input(z.object({
         processoId: z.number(),
         valorObtido: z.number().nullable(),
@@ -1559,7 +1559,7 @@ ${JSON.stringify(processo, null, 2)}`;
         return { ok: true };
       }),
 
-    declinarProcesso: protectedProcedure
+    declinarProcesso: protectedProcedureWithImpersonationGuard
       .input(z.object({ processoId: z.number(), motivo: z.string().nullable() }))
       .mutation(async ({ input, ctx }) => {
         const roles: string[] = (ctx.user.extraRoles as string[] | null) ?? [];

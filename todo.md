@@ -550,3 +550,11 @@
 - [x] AdminJudit: botões por linha — "Resolver", "Tentar novamente", "Editar observação"
 - [x] Verificação automática de timeouts via useEffect ao abrir a aba Problemas
 - [x] TypeScript sem erros, 24 testes passando
+
+## Correção do Modo de Impersonação (ctx.user substituído corretamente)
+
+- [x] client/src/lib/trpc.ts: injetar header x-impersonacao-token nas requisições quando token estiver no sessionStorage
+- [x] server/_core/context.ts: validar header x-impersonacao-token, substituir ctx.user pelo usuário visualizado, adicionar isImpersonating e adminId ao contexto
+- [x] server/routers.ts: middleware impersonatedProcedure que bloqueia mutations quando isImpersonating=true (exceto auth.validarTokenImpersonacao e admin.encerrarImpersonacao)
+- [x] client/src/pages/AdvogadoPortal.tsx: desabilitar botão "Cadastrar Processo" com tooltip quando em modo de visualização
+- [x] Testes Vitest: validação do token de impersonação e bloqueio de mutations
