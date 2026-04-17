@@ -38,6 +38,7 @@ import {
   manusLlmLog,
   InsertManusLlmLog,
   configuracoes,
+  operacoesIdempotentes,
   Configuracao,
   InsertConfiguracao,
   impersonacaoLog,
@@ -1726,6 +1727,7 @@ export async function listHistoricoJudit(opts: {
         status: juditConsultaLog.status,
         aprovadoPorId: juditConsultaLog.aprovadoPorId,
         createdAt: juditConsultaLog.createdAt,
+        isDuplicata: juditConsultaLog.isDuplicata, // C6: campo para indicar duplicata
       })
       .from(juditConsultaLog)
       .where(whereClause)
@@ -2323,4 +2325,81 @@ export async function resolverErroLote(erroId: number, observacao: string | null
     .update(loteImportacaoErros)
     .set({ resolvido: true, resolvidoEm: new Date(), observacao })
     .where(eq(loteImportacaoErros.id, erroId));
+}
+
+// ─── Idempotência de operações (anti-duplo envio) ────────────────────────────
+
+export async function getOperacaoIdempotente(requestKey: string): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db
+    .select({ resultado: operacoesIdempotentes.resultado })
+    .from(operacoesIdempotentes)
+    .where(
+      and(
+        eq(operacoesIdempotentes.requestKey, requestKey),
+        // TTL de 5 minutos
+        gte(operacoesIdempotentes.criadoEm, new Date(Date.now() - 5 * 60 * 1000))
+      )
+    )
+    .limit(1);
+  return row?.resultado ?? null;
+}
+
+export async function salvarOperacaoIdempotente(requestKey: string, resultado: unknown): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(operacoesIdempotentes).values({
+    requestKey,
+    resultado: JSON.stringify(resultado),
+  }).onDuplicateKeyUpdate({ set: { resultado: JSON.stringify(resultado) } });
+}
+
+export async function limparOperacoesExpiradas(): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .delete(operacoesIdempotentes)
+    .where(lt(operacoesIdempotentes.criadoEm, new Date(Date.now() - 60 * 60 * 1000)));
+}
+
+// ─── Cooldown 24h: verificar se CNJ foi consultado recentemente ──────────────
+
+export async function getConsultaRecentePorCnj(cnj: string, horasAtras = 24): Promise<{ requestId: string | null } | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const limite = new Date(Date.now() - horasAtras * 60 * 60 * 1000);
+  const [row] = await db
+    .select({ requestId: juditConsultaLog.requestId })
+    .from(juditConsultaLog)
+    .where(
+      and(
+        eq(juditConsultaLog.processoCnj, cnj),
+        eq(juditConsultaLog.status, "sucesso"),
+        eq(juditConsultaLog.isDuplicata, false),
+        gte(juditConsultaLog.createdAt, limite)
+      )
+    )
+    .orderBy(desc(juditConsultaLog.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
+// ─── Ajustar query de crédito restante (excluir duplicatas) ─────────────────
+
+export async function getCustoConsultasMes(excluirDuplicatas = true): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const inicioMes = new Date();
+  inicioMes.setDate(1);
+  inicioMes.setHours(0, 0, 0, 0);
+  const conditions = [gte(juditConsultaLog.createdAt, inicioMes)];
+  if (excluirDuplicatas) {
+    conditions.push(eq(juditConsultaLog.isDuplicata, false));
+  }
+  const [row] = await db
+    .select({ total: sql<number>`COALESCE(SUM(${juditConsultaLog.custo}), 0)` })
+    .from(juditConsultaLog)
+    .where(and(...conditions));
+  return Number(row?.total ?? 0);
 }

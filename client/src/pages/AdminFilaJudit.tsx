@@ -33,9 +33,9 @@ export default function AdminFilaJudit() {
 
   const aprovar = trpc.admin.aprovarFilaJudit.useMutation({
     onSuccess: (data) => {
-      const ok = data.resultados.filter(r => r.ok).length;
-      const err = data.resultados.filter(r => !r.ok).length;
-      const naoEncontrados = data.resultados.filter(r => r.ok && (r as { notFound?: boolean }).notFound).length;
+      const ok = data.resultados.filter((r: { ok: boolean }) => r.ok).length;
+      const err = data.resultados.filter((r: { ok: boolean }) => !r.ok).length;
+      const naoEncontrados = data.resultados.filter((r: { ok: boolean; notFound?: boolean }) => r.ok && r.notFound).length;
       if (ok > 0) toast.success(`${ok} processo(s) consultado(s) na Judit com sucesso. ${naoEncontrados > 0 ? `(${naoEncontrados} não encontrados)` : ""}`);
       if (err > 0) toast.error(`${err} processo(s) com erro.`);
       setSelecionados([]);

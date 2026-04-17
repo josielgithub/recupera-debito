@@ -127,6 +127,13 @@
       "when": 1776457651285,
       "tag": "0017_needy_wallop",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1776461233677,
+      "tag": "0018_right_owl",
+      "breakpoints": true
     }
   ]
 }

@@ -138,6 +138,8 @@ function SecaoFila() {
   const [selecionados, setSelecionados] = useState<number[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [progresso, setProgresso] = useState<{ atual: number; total: number } | null>(null);
+  // C1: requestKey para idempotência — gerado uma vez por sessão de aprovação
+  const [requestKey, setRequestKey] = useState<string>(() => crypto.randomUUID());
 
   const { data: advogados } = trpc.admin.listarAdvogadosUsuarios.useQuery();
   const { data: metrics } = trpc.admin.metricsJudit.useQuery();
@@ -149,9 +151,9 @@ function SecaoFila() {
   const utils = trpc.useUtils();
   const aprovar = trpc.admin.aprovarFilaJudit.useMutation({
     onSuccess: (res) => {
-      const ok = res.resultados.filter(r => r.ok).length;
-      const notFound = res.resultados.filter(r => r.ok && (r as { notFound?: boolean }).notFound).length;
-      const erro = res.resultados.filter(r => !r.ok).length;
+      const ok = res.resultados.filter((r: { ok: boolean }) => r.ok).length;
+      const notFound = res.resultados.filter((r: { ok: boolean; notFound?: boolean }) => r.ok && r.notFound).length;
+      const erro = res.resultados.filter((r: { ok: boolean }) => !r.ok).length;
       toast.success(`${ok} consultado(s) — ${ok - notFound} encontrado(s), ${notFound} não encontrado(s)${erro > 0 ? `, ${erro} erro(s)` : ""}`);
       setSelecionados([]);
       setConfirmOpen(false);
@@ -176,8 +178,15 @@ function SecaoFila() {
   };
 
   const handleConfirmar = () => {
+    if (aprovar.isPending) return; // C1: debounce — impede duplo clique
     setProgresso({ atual: 0, total: selecionados.length });
-    aprovar.mutate({ processoIds: selecionados });
+    aprovar.mutate({ processoIds: selecionados, requestKey });
+  };
+
+  const handleAbrirConfirm = () => {
+    // C1: gerar novo requestKey a cada abertura do dialog
+    setRequestKey(crypto.randomUUID());
+    setConfirmOpen(true);
   };
 
   return (
@@ -218,7 +227,7 @@ function SecaoFila() {
           <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
             {selecionados.length} selecionado(s) — custo estimado: <strong>R$ {custoEstimado}</strong>
           </span>
-          <Button size="sm" onClick={() => setConfirmOpen(true)} disabled={aprovar.isPending}>
+          <Button size="sm" onClick={handleAbrirConfirm} disabled={aprovar.isPending}>
             <CheckCircle className="h-4 w-4 mr-1" />
             Consultar na Judit
           </Button>
@@ -326,7 +335,7 @@ function SecaoFila() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancelar</Button>
-            <Button onClick={handleConfirmar} disabled={aprovar.isPending} variant={ultrapassaCredito ? "destructive" : "default"}>
+            <Button onClick={handleConfirmar} disabled={aprovar.isPending} variant={ultrapassaCredito ? "destructive" : "default"} type="button">
               {aprovar.isPending ? "Processando..." : `Confirmar (R$ ${custoEstimado})`}
             </Button>
           </DialogFooter>
@@ -472,14 +481,18 @@ function SecaoHistoricoJudit() {
     erro: { label: "Erro", color: "bg-red-100 text-red-800" },
   };
 
+  const duplicatas = registros.filter(r => r.isDuplicata);
+  const custoDuplicatas = duplicatas.reduce((acc, r) => acc + Number(r.custo), 0);
+
   const exportarCsv = () => {
     if (!registros.length) return;
-    const header = ["CNJ", "Tipo", "Custo", "Status", "Data"];
+    const header = ["CNJ", "Tipo", "Custo", "Status", "Duplicata", "Data"];
     const rows = registros.map(r => [
       r.processoCnj,
       r.tipo ?? "",
       Number(r.custo).toFixed(2),
       r.status,
+      r.isDuplicata ? "Sim" : "Não",
       new Date(r.createdAt).toLocaleString("pt-BR"),
     ]);
     const csv = [header, ...rows].map(row => row.join(";")).join("\n");
@@ -509,8 +522,16 @@ function SecaoHistoricoJudit() {
         </div>
         <div className="flex items-center gap-3">
           {total > 0 && (
-            <div className="text-sm text-muted-foreground">
-              {total} consulta(s) — custo total: <strong className="text-foreground">R$ {custoTotal.toFixed(2)}</strong>
+            <div className="flex flex-col items-end gap-1">
+              <div className="text-sm text-muted-foreground">
+                {total} consulta(s) — custo total: <strong className="text-foreground">R$ {custoTotal.toFixed(2)}</strong>
+              </div>
+              {duplicatas.length > 0 && (
+                <div className="flex items-center gap-1.5 text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded px-2 py-0.5">
+                  <AlertTriangle className="h-3 w-3" />
+                  {duplicatas.length} duplicata(s) — R$ {custoDuplicatas.toFixed(2)} gasto(s) desnecessariamente
+                </div>
+              )}
             </div>
           )}
           <Button variant="outline" size="sm" onClick={exportarCsv} disabled={!registros.length}>
@@ -527,6 +548,7 @@ function SecaoHistoricoJudit() {
               <th className="p-3 text-left font-medium hidden md:table-cell">Tipo</th>
               <th className="p-3 text-left font-medium">Status</th>
               <th className="p-3 text-left font-medium hidden lg:table-cell">Custo</th>
+              <th className="p-3 text-left font-medium hidden lg:table-cell">Duplicata</th>
               <th className="p-3 text-left font-medium">Data</th>
             </tr>
           </thead>
@@ -543,7 +565,7 @@ function SecaoHistoricoJudit() {
             ) : registros.map(r => {
               const statusInfo = STATUS_HIST[r.status] ?? { label: r.status, color: "bg-gray-100 text-gray-700" };
               return (
-                <tr key={r.id} className="border-t hover:bg-muted/30">
+                <tr key={r.id} className={`border-t hover:bg-muted/30 ${r.isDuplicata ? "bg-orange-50/40 dark:bg-orange-950/20" : ""}`}>
                   <td className="p-3 font-mono text-xs">{formatCnj(r.processoCnj)}</td>
                   <td className="p-3 hidden md:table-cell text-muted-foreground capitalize">{r.tipo?.replace("_", " ") ?? "-"}</td>
                   <td className="p-3">
@@ -552,6 +574,15 @@ function SecaoHistoricoJudit() {
                     </span>
                   </td>
                   <td className="p-3 hidden lg:table-cell text-muted-foreground">R$ {Number(r.custo).toFixed(2)}</td>
+                  <td className="p-3 hidden lg:table-cell">
+                    {r.isDuplicata ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
+                        <AlertTriangle className="h-3 w-3" /> Duplicata
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </td>
                   <td className="p-3 text-muted-foreground text-xs">
                     {new Date(r.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                   </td>

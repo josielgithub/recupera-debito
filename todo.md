@@ -571,3 +571,14 @@
 - [x] Seção "Erros de importação" no detalhe do lote
 - [x] Item "Lotes" já presente como aba na tela Admin.tsx
 - [x] Testes Vitest: 13 testes cobrindo controle de acesso e validação de input das procedures de lotes
+
+## Correções Anti-Duplicata Judit (7 correções)
+
+- [ ] C2: procedure aprovarFilaJudit — verificar statusJudit === "aguardando_aprovacao_judit" antes de consultar, pular CNJs já consultados
+- [ ] C3: criarRequisicaoJudit — cooldown 24h verificando judit_consulta_log, reutilizar resultado existente
+- [ ] C5: idempotência tRPC — tabela operacoes_idempotentes (requestKey UUID, resultado JSON, TTL 1h), procedure aprovarFilaJudit verifica requestKey duplicado
+- [ ] C7: migration — campo is_duplicata (boolean) na tabela judit_consulta_log, marcar 109 registros existentes, ajustar query de crédito restante
+- [ ] C1: AdminJudit frontend — isProcessing flag, botão desabilitado durante loading, debounce 2s no confirmar
+- [ ] C4: AdminJudit frontend — aviso amarelo no Dialog com contagem de CNJs já consultados e custo estimado ajustado
+- [ ] C6: AdminJudit histórico — badge "Duplicata" laranja na coluna, card de resumo "Consultas duplicadas este mês: X — Custo desperdiçado: R$ Y"
+- [ ] Testes Vitest cobrindo as novas validações

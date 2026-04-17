@@ -8,6 +8,7 @@
 
 import {
   extrairNomeClienteDoPayload,
+  getConsultaRecentePorCnj,
   getJuditRequestByCnj,
   getProcessoByCnj,
   listAllJuditRequestsByCnj,
@@ -84,6 +85,16 @@ async function juditFetch(path: string, options: RequestInit = {}): Promise<unkn
 
 // ─── Etapa 1: Criar requisição por CNJ ────────────────────────────────────
 export async function criarRequisicaoJudit(cnj: string, processoId?: number): Promise<string> {
+  // C3: Cooldown 24h — verificar se CNJ já foi consultado com sucesso nas últimas 24h
+  const consultaRecente = await getConsultaRecentePorCnj(cnj, 24);
+  if (consultaRecente) {
+    console.log(`[Judit] CNJ ${cnj} já consultado nas últimas 24h — reutilizando resultado. requestId: ${consultaRecente.requestId ?? 'N/A'}`);
+    // Retornar requestId existente ou buscar o mais recente no judit_requests
+    if (consultaRecente.requestId) return consultaRecente.requestId;
+    const existing = await getJuditRequestByCnj(cnj);
+    if (existing) return existing.requestId;
+  }
+
   // Verificar se já existe requisição recente com status processing (evitar duplicatas)
   const existing = await getJuditRequestByCnj(cnj);
   if (existing && existing.status === "processing") {

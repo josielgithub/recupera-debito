@@ -96,6 +96,11 @@ import { updateAiSummary, updateValorObtido, getImportJob, listImportJobs,
   detectarERegistrarTimeouts, listarProblemasJudit, marcarProblemaResolvido,
   atualizarObservacaoProblema, incrementarTentativasProblema, countProblemasJudit,
   resetStatusJuditParaFila,
+  getOperacaoIdempotente,
+  salvarOperacaoIdempotente,
+  limparOperacoesExpiradas,
+  getConsultaRecentePorCnj,
+  getCustoConsultasMes,
 } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { createHash } from "crypto";
@@ -1289,21 +1294,48 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
       }),
 
     aprovarFilaJudit: protectedProcedure
-      .input(z.object({ processoIds: z.array(z.number()) }))
+      .input(z.object({
+        processoIds: z.array(z.number()),
+        requestKey: z.string().uuid().optional(), // C5: idempotência
+      }))
       .mutation(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+
+        // C5: Idempotência — verificar se requestKey já foi processado
+        if (input.requestKey) {
+          const resultadoExistente = await getOperacaoIdempotente(input.requestKey);
+          if (resultadoExistente) {
+            console.log(`[aprovarFilaJudit] requestKey ${input.requestKey} já processado — retornando resultado anterior`);
+            return JSON.parse(resultadoExistente);
+          }
+        }
+
+        // Limpar operações expiradas em background (sem await)
+        limparOperacoesExpiradas().catch(() => {});
+
         const resultados = [];
+        let pulados = 0;
+
+        // Buscar todos os processos da fila de uma vez (mais eficiente)
+        const filaCompleta = await listFilaJudit(1, 10000);
+
         for (const processoId of input.processoIds) {
           try {
-            // Buscar o processo para obter o CNJ
-            const procs = await listFilaJudit(1, 1000);
-            const proc = procs.processos.find(p => p.id === processoId);
+            const proc = filaCompleta.processos.find(p => p.id === processoId);
             if (!proc) { resultados.push({ processoId, ok: false, erro: "Não encontrado" }); continue; }
+
+            // C2: Verificar se statusJudit ainda é aguardando_aprovacao_judit
+            if (proc.statusJudit !== "aguardando_aprovacao_judit") {
+              console.log(`[aprovarFilaJudit] CNJ ${proc.cnj} já foi consultado (statusJudit=${proc.statusJudit}) — pulando`);
+              pulados++;
+              resultados.push({ processoId, ok: true, pulado: true, motivo: `statusJudit=${proc.statusJudit}` });
+              continue;
+            }
+
             // Disparar consulta Judit
             const resultado = await buscarESalvarProcessoJudit(proc.cnj);
             if (resultado.notFound) {
               await marcarProcessoNaoEncontradoJudit(processoId);
-              // Registrar log de consulta em lote
               await insertJuditConsultaLog({
                 processoCnj: proc.cnj,
                 requestId: resultado.requestId ?? null,
@@ -1311,11 +1343,11 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
                 custo: "0.25",
                 status: "nao_encontrado",
                 aprovadoPorId: ctx.user.id,
+                isDuplicata: false,
               });
               resultados.push({ processoId, ok: true, notFound: true });
             } else {
               await aprovarProcessoJudit(processoId, ctx.user.id);
-              // Registrar log de consulta em lote
               await insertJuditConsultaLog({
                 processoCnj: proc.cnj,
                 requestId: resultado.requestId ?? null,
@@ -1323,13 +1355,12 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
                 custo: "0.25",
                 status: "sucesso",
                 aprovadoPorId: ctx.user.id,
+                isDuplicata: false,
               });
               resultados.push({ processoId, ok: true, notFound: false });
             }
           } catch (err) {
-            // Registrar log de erro na consulta em lote
-            const procs2 = await listFilaJudit(1, 1000).catch(() => ({ processos: [] }));
-            const proc2 = procs2.processos.find((p: { id: number; cnj: string }) => p.id === processoId);
+            const proc2 = filaCompleta.processos.find((p) => p.id === processoId);
             if (proc2) {
               await insertJuditConsultaLog({
                 processoCnj: proc2.cnj,
@@ -1338,12 +1369,21 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
                 custo: "0.25",
                 status: "erro",
                 aprovadoPorId: ctx.user.id,
+                isDuplicata: false,
               }).catch(() => {});
             }
             resultados.push({ processoId, ok: false, erro: String(err) });
           }
         }
-        return { resultados };
+
+        const resposta = { resultados, pulados };
+
+        // C5: Salvar resultado para idempotência
+        if (input.requestKey) {
+          await salvarOperacaoIdempotente(input.requestKey, resposta).catch(() => {});
+        }
+
+        return resposta;
       }),
 
     // ─── Importação Unificada (sem Judit) ──────────────────────────────

@@ -297,6 +297,7 @@ export const juditConsultaLog = mysqlTable("judit_consulta_log", {
   custo: decimal("custo", { precision: 10, scale: 2 }).default("0.25").notNull(),
   status: mysqlEnum("status", ["sucesso", "nao_encontrado", "erro"]).default("sucesso").notNull(),
   aprovadoPorId: int("aprovado_por_id"),
+  isDuplicata: boolean("is_duplicata").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 export type JuditConsultaLog = typeof juditConsultaLog.$inferSelect;
@@ -373,3 +374,13 @@ export const juditProblemas = mysqlTable("judit_problemas", {
 });
 export type JuditProblema = typeof juditProblemas.$inferSelect;
 export type InsertJuditProblema = typeof juditProblemas.$inferInsert;
+
+// ─── Operações Idempotentes (anti-duplo envio) ─────────────────────────────
+export const operacoesIdempotentes = mysqlTable("operacoes_idempotentes", {
+  id: int("id").autoincrement().primaryKey(),
+  requestKey: varchar("request_key", { length: 128 }).notNull().unique(),
+  resultado: text("resultado").notNull(), // JSON serializado
+  criadoEm: timestamp("criado_em").defaultNow().notNull(),
+});
+export type OperacaoIdempotente = typeof operacoesIdempotentes.$inferSelect;
+export type InsertOperacaoIdempotente = typeof operacoesIdempotentes.$inferInsert;
