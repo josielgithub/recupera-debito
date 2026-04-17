@@ -341,12 +341,14 @@ export async function listAllProcessos(page = 1, pageSize = 50, filtros?: Filtro
     condicoes.push(inArray(processos.statusResumido, filtros.status));
   }
   if (filtros?.dataInicio) {
-    condicoes.push(gte(processos.updatedAt, filtros.dataInicio));
+    const inicioISO = filtros.dataInicio.toISOString().slice(0, 19).replace('T', ' ');
+    condicoes.push(sql`${processos.updatedAt} >= ${inicioISO}`);
   }
   if (filtros?.dataFim) {
     const fim = new Date(filtros.dataFim);
     fim.setHours(23, 59, 59, 999);
-    condicoes.push(lte(processos.updatedAt, fim));
+    const fimISO = fim.toISOString().slice(0, 19).replace('T', ' ');
+    condicoes.push(sql`${processos.updatedAt} <= ${fimISO}`);
   }
   if (filtros?.semInvestidor) {
     condicoes.push(isNull(processos.investidorId));
@@ -493,12 +495,14 @@ export async function listLogsConsulta(
     condicoes.push(eq(logsConsulta.resultado, filtros.resultado as "encontrado" | "nao_encontrado" | "bloqueado"));
   }
   if (filtros?.dataInicio) {
-    condicoes.push(gte(logsConsulta.createdAt, filtros.dataInicio));
+    const inicioISO = filtros.dataInicio.toISOString().slice(0, 19).replace('T', ' ');
+    condicoes.push(sql`${logsConsulta.createdAt} >= ${inicioISO}`);
   }
   if (filtros?.dataFim) {
     const fim = new Date(filtros.dataFim);
     fim.setHours(23, 59, 59, 999);
-    condicoes.push(lte(logsConsulta.createdAt, fim));
+    const fimISO = fim.toISOString().slice(0, 19).replace('T', ' ');
+    condicoes.push(sql`${logsConsulta.createdAt} <= ${fimISO}`);
   }
 
   const whereClause = condicoes.length > 0 ? and(...condicoes) : undefined;
@@ -1581,12 +1585,14 @@ export async function metricsJudit() {
 
   const agora = new Date();
   const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
+  // Usar string ISO para evitar bug de timezone do driver mysql2 com Date objects
+  const inicioMesISO = inicioMes.toISOString().slice(0, 19).replace('T', ' ');
 
   const [logsMes, processando, fila] = await Promise.all([
     db
       .select({ total: sql<number>`count(*)`, custo: sql<number>`sum(custo)` })
       .from(juditConsultaLog)
-      .where(gte(juditConsultaLog.createdAt, inicioMes)),
+      .where(sql`${juditConsultaLog.createdAt} >= ${inicioMesISO}`),
     db
       .select({ total: sql<number>`count(*)` })
       .from(juditRequests)
@@ -1677,19 +1683,22 @@ export async function listHistoricoJudit(opts: {
   const { periodo = "30d", dataInicio, dataFim, page = 1, pageSize = 50 } = opts;
   const offset = (page - 1) * pageSize;
 
-  let inicio: Date;
-  const fim = dataFim ?? new Date();
+  let inicioDate: Date;
+  const fimDate = dataFim ?? new Date();
   if (periodo === "custom" && dataInicio) {
-    inicio = dataInicio;
+    inicioDate = dataInicio;
   } else if (periodo === "7d") {
-    inicio = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    inicioDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   } else {
-    inicio = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    inicioDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   }
+  // Usar strings ISO para evitar bug de timezone do driver mysql2 com Date objects
+  const inicioISO = inicioDate.toISOString().slice(0, 19).replace('T', ' ');
+  const fimISO = fimDate.toISOString().slice(0, 19).replace('T', ' ');
 
   const whereClause = and(
-    gte(juditConsultaLog.createdAt, inicio),
-    lte(juditConsultaLog.createdAt, fim)
+    sql`${juditConsultaLog.createdAt} >= ${inicioISO}`,
+    sql`${juditConsultaLog.createdAt} <= ${fimISO}`
   );
 
   const [rows, countRows, custoRows] = await Promise.all([
