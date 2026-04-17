@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Loader2, TrendingUp, DollarSign, BarChart3, CheckCircle, LogOut } from "lucide-react";
+import ImpersonacaoBanner from "@/components/ImpersonacaoBanner";
 import { toast } from "sonner";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -71,8 +72,9 @@ export default function InvestidorPortal() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <ImpersonacaoBanner />
       {/* Header */}
-      <header className="bg-white border-b sticky top-0 z-10">
+      <header className="bg-white border-b sticky top-0 z-10" style={{ top: sessionStorage.getItem('impersonacao_token') ? '48px' : '0' }}>
         <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-green-600" />

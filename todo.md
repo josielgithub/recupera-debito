@@ -523,3 +523,17 @@
 - [x] Criar procedures tRPC: getConfiguracoes, salvarConfiguracoes, promoverAdmin, removerAdmin
 - [x] Criar nova tela AdminConfig.tsx com 4 seções (status integrações, config geral, segurança, admins)
 - [x] Confirmar que /api/judit/callback continua funcionando após remoção da Codilo (Codilo nunca estava no index.ts)
+
+## Modo "Visualizar como" (Impersonação)
+
+- [ ] Criar tabela impersonacao_log no Drizzle e aplicar migração
+- [ ] Funções db.ts: criarImpersonacao, buscarImpersonacaoPorToken, encerrarImpersonacao, listarImpersonacoes
+- [ ] Procedure admin.iniciarImpersonacao (gera token UUID, salva no banco, retorna URL)
+- [ ] Procedure auth.validarTokenImpersonacao (valida token, retorna usuário + isImpersonating)
+- [ ] Procedure admin.encerrarImpersonacao (marca encerradoEm e ativo=false)
+- [ ] Middleware de autenticação: detectar type="impersonation" no JWT, setar isImpersonating=true
+- [ ] Middleware: bloquear mutations quando isImpersonating=true (TRPCError FORBIDDEN)
+- [ ] Barra amarela fixa nos dashboards de advogado e investidor durante impersonação
+- [ ] Botão "Voltar ao painel admin" na barra amarela (chama encerrarImpersonacao + redireciona)
+- [ ] Botão "Visualizar como" na tabela AdminUsuarios.tsx (apenas para adv/investidor/adv_investidor)
+- [ ] Testes Vitest: fluxo completo de impersonação

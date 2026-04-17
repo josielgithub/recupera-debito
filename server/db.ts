@@ -40,6 +40,9 @@ import {
   configuracoes,
   Configuracao,
   InsertConfiguracao,
+  impersonacaoLog,
+  ImpersonacaoLog,
+  InsertImpersonacaoLog,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -1846,4 +1849,50 @@ export async function salvarConfiguracoes(
   for (const [chave, valor] of Object.entries(dados)) {
     await salvarConfiguracao(chave, valor, adminId);
   }
+}
+
+// ─── Impersonação (Visualizar como) ───────────────────────────────────────
+export async function criarImpersonacao(
+  adminId: number,
+  usuarioVisualizadoId: number,
+  token: string
+): Promise<ImpersonacaoLog> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const agora = new Date();
+  const expira = new Date(agora.getTime() + 30 * 60 * 1000); // +30 minutos
+  await db.insert(impersonacaoLog).values({
+    adminId,
+    usuarioVisualizadoId,
+    token,
+    iniciadoEm: agora,
+    expiradoEm: expira,
+    ativo: true,
+  });
+  const rows = await db
+    .select()
+    .from(impersonacaoLog)
+    .where(eq(impersonacaoLog.token, token))
+    .limit(1);
+  return rows[0]!;
+}
+
+export async function buscarImpersonacaoPorToken(token: string): Promise<ImpersonacaoLog | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db
+    .select()
+    .from(impersonacaoLog)
+    .where(eq(impersonacaoLog.token, token))
+    .limit(1);
+  return rows[0];
+}
+
+export async function encerrarImpersonacao(token: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(impersonacaoLog)
+    .set({ ativo: false, encerradoEm: new Date() })
+    .where(eq(impersonacaoLog.token, token));
 }

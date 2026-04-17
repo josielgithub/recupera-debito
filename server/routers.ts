@@ -83,6 +83,7 @@ import { updateAiSummary, updateValorObtido, getImportJob, listImportJobs,
   metricsJudit, listFilaJuditFiltrada, listHistoricoJudit, buscarProcessosPorCpfLocal,
   insertManusLlmLog, metricsAnalisesIA, listAnalisesIA,
   getConfiguracoes, salvarConfiguracoes,
+  criarImpersonacao, buscarImpersonacaoPorToken, encerrarImpersonacao,
 } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { createHash } from "crypto";
@@ -113,6 +114,34 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+    validarTokenImpersonacao: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const imp = await buscarImpersonacaoPorToken(input.token);
+        if (!imp) throw new TRPCError({ code: "NOT_FOUND", message: "Token inválido" });
+        if (!imp.ativo) throw new TRPCError({ code: "UNAUTHORIZED", message: "Sessão de visualização encerrada" });
+        const agora = new Date();
+        if (imp.expiradoEm < agora) {
+          await encerrarImpersonacao(input.token);
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Token expirado" });
+        }
+        const usuario = await getUserById(imp.usuarioVisualizadoId);
+        if (!usuario) throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
+        return {
+          isImpersonating: true as const,
+          adminId: imp.adminId,
+          token: imp.token,
+          expiradoEm: imp.expiradoEm,
+          usuario: {
+            id: usuario.id,
+            name: usuario.name,
+            email: usuario.email,
+            role: usuario.role,
+            extraRoles: usuario.extraRoles,
+            foto: usuario.foto,
+          },
+        };
+      }),
   }),
 
   // ─── Consulta Pública por CPF ────────────────────────────────────────
@@ -1014,6 +1043,32 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
           throw new TRPCError({ code: "BAD_REQUEST", message: "Deve existir pelo menos 1 administrador no sistema." });
         }
         await db.update(usersTable).set({ role: "user" }).where(eq(usersTable.id, input.usuarioId));
+        return { ok: true };
+      }),
+
+    // ─── Impersonação ──────────────────────────────────────────────────────────
+    iniciarImpersonacao: protectedProcedure
+      .input(z.object({
+        usuarioId: z.number(),
+        origin: z.string().url(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        // Não permitir impersonar outro admin
+        const alvo = await getUserById(input.usuarioId);
+        if (!alvo) throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
+        if (alvo.role === "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Não é possível impersonar outro administrador" });
+        const token = randomUUID();
+        await criarImpersonacao(ctx.user.id, input.usuarioId, token);
+        const url = `${input.origin}/impersonar?token=${token}`;
+        return { token, url, nomeUsuario: alvo.name };
+      }),
+
+    encerrarImpersonacao: protectedProcedure
+      .input(z.object({ token: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        await encerrarImpersonacao(input.token);
         return { ok: true };
       }),
 

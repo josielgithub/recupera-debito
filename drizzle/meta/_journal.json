@@ -106,6 +106,13 @@
       "when": 1776410399145,
       "tag": "0014_tricky_william_stryker",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "5",
+      "when": 1776414382957,
+      "tag": "0015_shiny_luckman",
+      "breakpoints": true
     }
   ]
 }

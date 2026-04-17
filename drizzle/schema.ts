@@ -321,3 +321,17 @@ export const configuracoes = mysqlTable("configuracoes", {
 });
 export type Configuracao = typeof configuracoes.$inferSelect;
 export type InsertConfiguracao = typeof configuracoes.$inferInsert;
+
+// ─── Impersonação (Visualizar como) ───────────────────────────────────────
+export const impersonacaoLog = mysqlTable("impersonacao_log", {
+  id: int("id").autoincrement().primaryKey(),
+  adminId: int("admin_id").notNull(),                          // FK users.id — quem iniciou
+  usuarioVisualizadoId: int("usuario_visualizado_id").notNull(), // FK users.id — quem foi visualizado
+  token: varchar("token", { length: 64 }).notNull().unique(),  // UUID único
+  iniciadoEm: timestamp("iniciado_em").defaultNow().notNull(),
+  expiradoEm: timestamp("expirado_em").notNull(),              // iniciadoEm + 30 min
+  encerradoEm: timestamp("encerrado_em"),                      // nullable — quando clicou em voltar
+  ativo: boolean("ativo").default(true).notNull(),
+});
+export type ImpersonacaoLog = typeof impersonacaoLog.$inferSelect;
+export type InsertImpersonacaoLog = typeof impersonacaoLog.$inferInsert;

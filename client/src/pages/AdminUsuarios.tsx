@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Plus, Copy, CheckCircle, XCircle, Users, Link, Trash2, Pencil } from "lucide-react";
+import { Loader2, Plus, Copy, CheckCircle, XCircle, Users, Link, Trash2, Pencil, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
@@ -332,6 +332,31 @@ function GerarConviteDialog({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
+// ─── Visualizar Como Button ──────────────────────────────────────────────────
+function VisualizarComoButton({ usuarioId, nomeUsuario }: { usuarioId: number; nomeUsuario: string }) {
+  const iniciar = trpc.admin.iniciarImpersonacao.useMutation({
+    onSuccess: (data) => {
+      const url = `${window.location.origin}/impersonar?token=${data.token}`;
+      window.open(url, "_blank", "noopener,noreferrer");
+    },
+    onError: (e) => {
+      toast.error(`Erro ao iniciar visualização: ${e.message}`);
+    },
+  });
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      title={`Visualizar como ${nomeUsuario}`}
+      onClick={() => iniciar.mutate({ usuarioId, origin: window.location.origin })}
+      disabled={iniciar.isPending}
+    >
+      {iniciar.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
+    </Button>
+  );
+}
+
 // ─── Página Principal ─────────────────────────────────────────────────────────
 export default function AdminUsuarios() {
   const { user } = useAuth();
@@ -575,6 +600,10 @@ export default function AdminUsuarios() {
                                 }}
                                 onSuccess={() => utils.admin.listarUsuarios.invalidate()}
                               />
+                              {/* Botão Visualizar como — apenas para não-admins com extraRoles */}
+                              {u.role !== "admin" && extraRoles.length > 0 && (
+                                <VisualizarComoButton usuarioId={u.id} nomeUsuario={u.name ?? "Usuário"} />
+                              )}
                               {/* Botão de ativar/desativar — apenas para não-admins */}
                               {u.role !== "admin" && (
                                 <Button
