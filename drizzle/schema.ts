@@ -335,3 +335,20 @@ export const impersonacaoLog = mysqlTable("impersonacao_log", {
 });
 export type ImpersonacaoLog = typeof impersonacaoLog.$inferSelect;
 export type InsertImpersonacaoLog = typeof impersonacaoLog.$inferInsert;
+
+// ─── Problemas Judit ───────────────────────────────────────────────────────
+export const juditProblemas = mysqlTable("judit_problemas", {
+  id: int("id").autoincrement().primaryKey(),
+  processoCnj: varchar("processo_cnj", { length: 50 }).notNull(),
+  requestId: varchar("request_id", { length: 64 }).notNull(),
+  tipo: mysqlEnum("tipo", ["timeout", "nao_encontrado", "erro_api", "webhook_nao_recebido"]).notNull(),
+  descricao: text("descricao").notNull(),
+  enviadoEm: timestamp("enviado_em").notNull(),
+  detectadoEm: timestamp("detectado_em").defaultNow().notNull(),
+  tentativas: int("tentativas").default(1).notNull(),
+  resolvido: boolean("resolvido").default(false).notNull(),
+  resolvidoEm: timestamp("resolvido_em"),
+  observacao: text("observacao"),
+});
+export type JuditProblema = typeof juditProblemas.$inferSelect;
+export type InsertJuditProblema = typeof juditProblemas.$inferInsert;

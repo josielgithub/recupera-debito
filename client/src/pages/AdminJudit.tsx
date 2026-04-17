@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,10 +8,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import {
   Search, CheckCircle, Clock, AlertTriangle, DollarSign,
-  RefreshCw, ListChecks, History, FileSearch, ChevronLeft, ChevronRight, Download, Brain, ExternalLink
+  RefreshCw, ListChecks, History, FileSearch, ChevronLeft, ChevronRight, Download, Brain, ExternalLink,
+  TriangleAlert, RotateCcw, Pencil, ShieldCheck
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -703,15 +705,280 @@ function SecaoHistorico() {
   );
 }
 
+// ─── Seção 5: Problemas Registrados ─────────────────────────────────────────
+function SecaoProblemas() {
+  const [apenasNaoResolvidos, setApenasNaoResolvidos] = useState(true);
+  const [editObsId, setEditObsId] = useState<number | null>(null);
+  const [obsText, setObsText] = useState("");
+
+  const utils = trpc.useUtils();
+
+  const detectar = trpc.juditProblemas.detectarTimeouts.useMutation({
+    onSuccess: (res) => {
+      if (res.registrados > 0) {
+        toast.warning(`${res.registrados} novo(s) problema(s) detectado(s)`);
+      } else {
+        toast.success("Nenhum novo problema detectado");
+      }
+      utils.juditProblemas.listar.invalidate();
+      utils.juditProblemas.contagem.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const { data, isLoading, refetch } = trpc.juditProblemas.listar.useQuery(
+    { apenasNaoResolvidos },
+    { refetchOnMount: true }
+  );
+
+  const marcarResolvido = trpc.juditProblemas.marcarResolvido.useMutation({
+    onSuccess: () => {
+      toast.success("Problema marcado como resolvido");
+      utils.juditProblemas.listar.invalidate();
+      utils.juditProblemas.contagem.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const tentarNovamente = trpc.juditProblemas.tentarNovamente.useMutation({
+    onSuccess: () => {
+      toast.success("Processo reinserido na fila Judit");
+      utils.juditProblemas.listar.invalidate();
+      utils.admin.filaJuditFiltrada.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const atualizarObs = trpc.juditProblemas.atualizarObservacao.useMutation({
+    onSuccess: () => {
+      toast.success("Observação atualizada");
+      setEditObsId(null);
+      utils.juditProblemas.listar.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  // Verificar timeouts automaticamente ao abrir a tela
+  useEffect(() => {
+    detectar.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const problemas = data ?? [];
+
+  const TIPO_MAP: Record<string, { label: string; color: string }> = {
+    timeout: { label: "Timeout", color: "bg-orange-100 text-orange-800" },
+    nao_encontrado: { label: "Não encontrado", color: "bg-gray-100 text-gray-700" },
+    erro_api: { label: "Erro API", color: "bg-red-100 text-red-800" },
+    webhook_nao_recebido: { label: "Webhook não recebido", color: "bg-yellow-100 text-yellow-800" },
+  };
+
+  const exportarCsv = () => {
+    if (!problemas.length) return;
+    const header = ["ID", "CNJ", "Tipo", "Descrição", "Enviado em", "Detectado em", "Tentativas", "Resolvido", "Observação"];
+    const rows = problemas.map(p => [
+      p.id,
+      p.processoCnj,
+      p.tipo,
+      p.descricao.replace(/;/g, ","),
+      new Date(p.enviadoEm).toLocaleString("pt-BR"),
+      new Date(p.detectadoEm).toLocaleString("pt-BR"),
+      p.tentativas,
+      p.resolvido ? "Sim" : "Não",
+      (p.observacao ?? "").replace(/;/g, ","),
+    ]);
+    const csv = [header, ...rows].map(row => row.join(";")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `problemas-judit-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Controles */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+            <Checkbox
+              checked={apenasNaoResolvidos}
+              onCheckedChange={v => setApenasNaoResolvidos(!!v)}
+            />
+            Apenas não resolvidos
+          </label>
+          {!apenasNaoResolvidos && problemas.length > 0 && (
+            <span className="text-sm text-muted-foreground">{problemas.length} problema(s)</span>
+          )}
+          {apenasNaoResolvidos && problemas.length > 0 && (
+            <Badge variant="destructive" className="text-xs">{problemas.length} não resolvido(s)</Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => detectar.mutate()}
+            disabled={detectar.isPending}
+          >
+            <RefreshCw className={`h-4 w-4 mr-1 ${detectar.isPending ? "animate-spin" : ""}`} />
+            Verificar timeouts
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportarCsv} disabled={!problemas.length}>
+            <Download className="h-4 w-4 mr-1" /> Exportar CSV
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => refetch()}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Tabela */}
+      <div className="rounded-lg border overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50">
+            <tr>
+              <th className="p-3 text-left font-medium">CNJ</th>
+              <th className="p-3 text-left font-medium hidden md:table-cell">Tipo</th>
+              <th className="p-3 text-left font-medium hidden lg:table-cell">Descrição</th>
+              <th className="p-3 text-left font-medium hidden md:table-cell">Tentativas</th>
+              <th className="p-3 text-left font-medium hidden lg:table-cell">Detectado em</th>
+              <th className="p-3 text-left font-medium">Status</th>
+              <th className="p-3 text-left font-medium">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">Carregando...</td></tr>
+            ) : problemas.length === 0 ? (
+              <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">
+                <div className="flex flex-col items-center gap-2">
+                  <ShieldCheck className="h-8 w-8 text-green-500/60" />
+                  <span>Nenhum problema registrado</span>
+                </div>
+              </td></tr>
+            ) : problemas.map(p => {
+              const tipoInfo = TIPO_MAP[p.tipo] ?? { label: p.tipo, color: "bg-gray-100 text-gray-700" };
+              return (
+                <tr key={p.id} className={`border-t hover:bg-muted/30 ${p.resolvido ? "opacity-60" : ""}`}>
+                  <td className="p-3 font-mono text-xs">{formatCnj(p.processoCnj)}</td>
+                  <td className="p-3 hidden md:table-cell">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${tipoInfo.color}`}>
+                      {tipoInfo.label}
+                    </span>
+                  </td>
+                  <td className="p-3 hidden lg:table-cell text-muted-foreground text-xs max-w-xs truncate" title={p.descricao}>
+                    {p.descricao}
+                  </td>
+                  <td className="p-3 hidden md:table-cell text-center">
+                    <Badge variant="outline" className="text-xs">{p.tentativas}</Badge>
+                  </td>
+                  <td className="p-3 hidden lg:table-cell text-muted-foreground text-xs">
+                    {new Date(p.detectadoEm).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  </td>
+                  <td className="p-3">
+                    {p.resolvido ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <CheckCircle className="h-3 w-3" /> Resolvido
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        <TriangleAlert className="h-3 w-3" /> Pendente
+                      </span>
+                    )}
+                    {p.observacao && (
+                      <div className="text-xs text-muted-foreground mt-1 italic truncate max-w-[120px]" title={p.observacao}>
+                        {p.observacao}
+                      </div>
+                    )}
+                  </td>
+                  <td className="p-3">
+                    <div className="flex items-center gap-1">
+                      {!p.resolvido && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-green-700 hover:text-green-900"
+                            onClick={() => marcarResolvido.mutate({ id: p.id })}
+                            disabled={marcarResolvido.isPending}
+                            title="Marcar como resolvido"
+                          >
+                            <CheckCircle className="h-3.5 w-3.5 mr-1" /> Resolver
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-blue-700 hover:text-blue-900"
+                            onClick={() => tentarNovamente.mutate({ id: p.id, processoCnj: p.processoCnj })}
+                            disabled={tentarNovamente.isPending}
+                            title="Reinserir na fila Judit"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5 mr-1" /> Tentar
+                          </Button>
+                        </>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => { setEditObsId(p.id); setObsText(p.observacao ?? ""); }}
+                        title="Editar observação"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Dialog: Editar observação */}
+      <Dialog open={editObsId !== null} onOpenChange={open => { if (!open) setEditObsId(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar observação</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={obsText}
+            onChange={e => setObsText(e.target.value)}
+            placeholder="Adicione uma observação sobre este problema..."
+            rows={4}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditObsId(null)}>Cancelar</Button>
+            <Button
+              onClick={() => { if (editObsId !== null) atualizarObs.mutate({ id: editObsId, observacao: obsText }); }}
+              disabled={atualizarObs.isPending}
+            >
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 export default function AdminJudit() {
+  const { data: contagem } = trpc.juditProblemas.contagem.useQuery(undefined, {
+    refetchInterval: 60_000,
+  });
+  const naoResolvidos = contagem?.naoResolvidos ?? 0;
+
   return (
     <div className="space-y-6">
       {/* Métricas */}
       <SecaoMetricas />
 
-      {/* Tabs das 3 seções operacionais */}
+      {/* Tabs das 4 seções operacionais */}
       <Tabs defaultValue="fila" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="fila" className="flex items-center gap-1.5">
             <ListChecks className="h-4 w-4" />
             <span className="hidden sm:inline">Fila de Consulta</span>
@@ -724,7 +991,18 @@ export default function AdminJudit() {
           </TabsTrigger>
           <TabsTrigger value="historico" className="flex items-center gap-1.5">
             <History className="h-4 w-4" />
-            Histórico
+            <span className="hidden sm:inline">Histórico</span>
+            <span className="sm:hidden">Hist.</span>
+          </TabsTrigger>
+          <TabsTrigger value="problemas" className="flex items-center gap-1.5">
+            <TriangleAlert className="h-4 w-4" />
+            <span className="hidden sm:inline">Problemas</span>
+            <span className="sm:hidden">Prob.</span>
+            {naoResolvidos > 0 && (
+              <span className="ml-1 inline-flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold min-w-[16px] h-4 px-1">
+                {naoResolvidos}
+              </span>
+            )}
           </TabsTrigger>
         </TabsList>
 
@@ -766,6 +1044,23 @@ export default function AdminJudit() {
             </CardHeader>
             <CardContent>
               <SecaoHistorico />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="problemas">
+          <Card className="border shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <TriangleAlert className="h-4 w-4 text-orange-600" />
+                Problemas Registrados
+                {naoResolvidos > 0 && (
+                  <Badge variant="destructive" className="text-xs ml-1">{naoResolvidos} não resolvido(s)</Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <SecaoProblemas />
             </CardContent>
           </Card>
         </TabsContent>

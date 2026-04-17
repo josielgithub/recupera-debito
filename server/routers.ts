@@ -84,6 +84,9 @@ import { updateAiSummary, updateValorObtido, getImportJob, listImportJobs,
   insertManusLlmLog, metricsAnalisesIA, listAnalisesIA,
   getConfiguracoes, salvarConfiguracoes,
   criarImpersonacao, buscarImpersonacaoPorToken, encerrarImpersonacao,
+  detectarERegistrarTimeouts, listarProblemasJudit, marcarProblemaResolvido,
+  atualizarObservacaoProblema, incrementarTentativasProblema, countProblemasJudit,
+  resetStatusJuditParaFila,
 } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { createHash } from "crypto";
@@ -1564,6 +1567,48 @@ ${JSON.stringify(processo, null, 2)}`;
           throw new TRPCError({ code: "FORBIDDEN" });
         }
         await declinarProcesso(input.processoId, input.motivo);
+        return { ok: true };
+      }),
+  }),
+
+  // ─── Judit: Problemas ──────────────────────────────────────────────────────────────────────
+  juditProblemas: router({
+    detectarTimeouts: protectedProcedure.mutation(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return detectarERegistrarTimeouts();
+    }),
+    listar: protectedProcedure
+      .input(z.object({ apenasNaoResolvidos: z.boolean().optional() }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        return listarProblemasJudit({ apenasNaoResolvidos: input.apenasNaoResolvidos });
+      }),
+    contagem: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return countProblemasJudit();
+    }),
+    marcarResolvido: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        await marcarProblemaResolvido(input.id);
+        return { ok: true };
+      }),
+    atualizarObservacao: protectedProcedure
+      .input(z.object({ id: z.number(), observacao: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        await atualizarObservacaoProblema(input.id, input.observacao);
+        return { ok: true };
+      }),
+    tentarNovamente: protectedProcedure
+      .input(z.object({ id: z.number(), processoCnj: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        // Incrementar tentativas no problema
+        await incrementarTentativasProblema(input.id);
+        // Resetar statusJudit para aguardando_aprovacao_judit (volta para a fila)
+        await resetStatusJuditParaFila(input.processoCnj);
         return { ok: true };
       }),
   }),

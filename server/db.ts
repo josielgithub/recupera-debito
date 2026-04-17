@@ -43,6 +43,9 @@ import {
   impersonacaoLog,
   ImpersonacaoLog,
   InsertImpersonacaoLog,
+  juditProblemas,
+  JuditProblema,
+  InsertJuditProblema,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -1895,4 +1898,119 @@ export async function encerrarImpersonacao(token: string): Promise<void> {
     .update(impersonacaoLog)
     .set({ ativo: false, encerradoEm: new Date() })
     .where(eq(impersonacaoLog.token, token));
+}
+
+// ─── Judit: Problemas ──────────────────────────────────────────────────────
+export async function detectarERegistrarTimeouts(): Promise<{ registrados: number; cnjs: string[] }> {
+  const db = await getDb();
+  if (!db) return { registrados: 0, cnjs: [] };
+
+  // Buscar judit_requests com status "processing" há mais de 2 horas
+  const doisHorasAtras = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  const doisHorasAtrasISO = doisHorasAtras.toISOString().slice(0, 19).replace("T", " ");
+
+  const travados = await db
+    .select()
+    .from(juditRequests)
+    .where(
+      and(
+        eq(juditRequests.status, "processing"),
+        sql`${juditRequests.createdAt} < ${doisHorasAtrasISO}`
+      )
+    );
+
+  if (travados.length === 0) return { registrados: 0, cnjs: [] };
+
+  const cnjs: string[] = [];
+  for (const req of travados) {
+    const horasAtras = Math.round((Date.now() - new Date(req.createdAt).getTime()) / 3600000);
+    // Verificar se já existe problema registrado para este request_id
+    const existente = await db
+      .select({ id: juditProblemas.id })
+      .from(juditProblemas)
+      .where(eq(juditProblemas.requestId, req.requestId))
+      .limit(1);
+
+    if (existente.length === 0) {
+      await db.insert(juditProblemas).values({
+        processoCnj: req.cnj,
+        requestId: req.requestId,
+        tipo: "webhook_nao_recebido",
+        descricao: `Requisição enviada há ${horasAtras} horas sem retorno de webhook`,
+        enviadoEm: new Date(req.createdAt),
+        tentativas: 1,
+      });
+    }
+    // Marcar judit_request como error
+    await db
+      .update(juditRequests)
+      .set({ status: "error" })
+      .where(eq(juditRequests.id, req.id));
+
+    cnjs.push(req.cnj);
+  }
+
+  return { registrados: travados.length, cnjs };
+}
+
+export async function listarProblemasJudit(opts: { apenasNaoResolvidos?: boolean } = {}): Promise<JuditProblema[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const where = opts.apenasNaoResolvidos ? eq(juditProblemas.resolvido, false) : undefined;
+  return db
+    .select()
+    .from(juditProblemas)
+    .where(where)
+    .orderBy(desc(juditProblemas.detectadoEm));
+}
+
+export async function marcarProblemaResolvido(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(juditProblemas)
+    .set({ resolvido: true, resolvidoEm: new Date() })
+    .where(eq(juditProblemas.id, id));
+}
+
+export async function atualizarObservacaoProblema(id: number, observacao: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(juditProblemas)
+    .set({ observacao })
+    .where(eq(juditProblemas.id, id));
+}
+
+export async function incrementarTentativasProblema(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(juditProblemas)
+    .set({ tentativas: sql`${juditProblemas.tentativas} + 1` })
+    .where(eq(juditProblemas.id, id));
+}
+
+export async function countProblemasJudit(): Promise<{ total: number; naoResolvidos: number }> {
+  const db = await getDb();
+  if (!db) return { total: 0, naoResolvidos: 0 };
+  const [totais] = await db
+    .select({
+      total: sql<number>`count(*)`,
+      naoResolvidos: sql<number>`sum(case when ${juditProblemas.resolvido} = false then 1 else 0 end)`,
+    })
+    .from(juditProblemas);
+  return {
+    total: Number(totais?.total ?? 0),
+    naoResolvidos: Number(totais?.naoResolvidos ?? 0),
+  };
+}
+
+export async function resetStatusJuditParaFila(cnj: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(processos)
+    .set({ statusJudit: "aguardando_aprovacao_judit" })
+    .where(eq(processos.cnj, cnj));
 }

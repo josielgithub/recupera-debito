@@ -537,3 +537,16 @@
 - [ ] Botão "Voltar ao painel admin" na barra amarela (chama encerrarImpersonacao + redireciona)
 - [ ] Botão "Visualizar como" na tabela AdminUsuarios.tsx (apenas para adv/investidor/adv_investidor)
 - [ ] Testes Vitest: fluxo completo de impersonação
+
+## Sistema de Problemas Judit
+
+- [x] Criar tabela judit_problemas no Drizzle (id, processoCnj, requestId, tipo, descricao, enviadoEm, detectadoEm, tentativas, resolvido, resolvidoEm, observacao)
+- [x] Aplicar migração Drizzle para judit_problemas (migration 0016)
+- [x] Registrar 3 CNJs travados como problemas iniciais
+- [x] Funções db.ts: detectarERegistrarTimeouts, listarProblemasJudit, marcarProblemaResolvido, atualizarObservacaoProblema, incrementarTentativasProblema, countProblemasJudit, resetStatusJuditParaFila
+- [x] Procedures tRPC juditProblemas: detectarTimeouts, listar, contagem, marcarResolvido, atualizarObservacao, tentarNovamente
+- [x] AdminJudit: 4ª aba "Problemas" com badge de contagem de não resolvidos
+- [x] AdminJudit: seção SecaoProblemas com tabela, filtro toggle, exportação CSV, verificação automática ao abrir
+- [x] AdminJudit: botões por linha — "Resolver", "Tentar novamente", "Editar observação"
+- [x] Verificação automática de timeouts via useEffect ao abrir a aba Problemas
+- [x] TypeScript sem erros, 24 testes passando
