@@ -1007,25 +1007,21 @@ export default function Admin() {
               <Zap className="w-3.5 h-3.5" />
               Judit
             </TabsTrigger>
+            <TabsTrigger value="usuarios" className="flex items-center gap-1.5 text-xs">
+              <Users className="w-3.5 h-3.5" />
+              Usuários
+            </TabsTrigger>
             <TabsTrigger value="investidores" className="flex items-center gap-1.5 text-xs">
               <TrendingUp className="w-3.5 h-3.5" />
               Investidores
-            </TabsTrigger>
-            <TabsTrigger value="config" className="flex items-center gap-1.5 text-xs">
-              <Settings className="w-3.5 h-3.5" />
-              Config
-            </TabsTrigger>
-            <TabsTrigger value="fila-judit" className="flex items-center gap-1.5 text-xs">
-              <Clock className="w-3.5 h-3.5" />
-              Fila Judit
             </TabsTrigger>
             <TabsTrigger value="lotes" className="flex items-center gap-1.5 text-xs">
               <FileText className="w-3.5 h-3.5" />
               Lotes
             </TabsTrigger>
-            <TabsTrigger value="usuarios" className="flex items-center gap-1.5 text-xs">
-              <Users className="w-3.5 h-3.5" />
-              Usuários
+            <TabsTrigger value="config" className="flex items-center gap-1.5 text-xs">
+              <Settings className="w-3.5 h-3.5" />
+              Config
             </TabsTrigger>
           </TabsList>
 
@@ -1036,7 +1032,6 @@ export default function Admin() {
           <TabsContent value="judit"><AdminJudit /></TabsContent>
           <TabsContent value="investidores"><AdminInvestidores /></TabsContent>
           <TabsContent value="config"><AdminConfig /></TabsContent>
-          <TabsContent value="fila-judit"><AdminFilaJudit /></TabsContent>
           <TabsContent value="lotes"><AdminLotes /></TabsContent>
           <TabsContent value="usuarios"><AdminUsuarios /></TabsContent>
         </Tabs>

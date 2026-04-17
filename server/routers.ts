@@ -80,6 +80,7 @@ import { updateAiSummary, updateValorObtido, getImportJob, listImportJobs,
   listAdvogadosUsuarios, listInvestidoresUsuarios,
   insertJuditConsultaLog, listJuditConsultaLog, countJuditConsultaLog,
   insertLogImportacaoUnificado, listLogsImportacaoUnificado,
+  metricsJudit, listFilaJuditFiltrada, listHistoricoJudit, buscarProcessosPorCpfLocal,
 } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { createHash } from "crypto";
@@ -1017,6 +1018,45 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
     }),
 
     // ─── Fila Judit (admin) ────────────────────────────────────────────────────
+    metricsJudit: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return metricsJudit();
+    }),
+    filaJuditFiltrada: protectedProcedure
+      .input(z.object({
+        page: z.number().default(1),
+        pageSize: z.number().default(50),
+        busca: z.string().optional(),
+        advogadoId: z.number().optional(),
+      }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        return listFilaJuditFiltrada(input);
+      }),
+    historicoJudit: protectedProcedure
+      .input(z.object({
+        periodo: z.enum(["7d", "30d", "custom"]).default("30d"),
+        dataInicio: z.string().optional(),
+        dataFim: z.string().optional(),
+        page: z.number().default(1),
+        pageSize: z.number().default(50),
+      }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        return listHistoricoJudit({
+          periodo: input.periodo,
+          dataInicio: input.dataInicio ? new Date(input.dataInicio) : undefined,
+          dataFim: input.dataFim ? new Date(input.dataFim) : undefined,
+          page: input.page,
+          pageSize: input.pageSize,
+        });
+      }),
+    buscarProcessosPorCpf: protectedProcedure
+      .input(z.object({ cpf: z.string().min(11).max(18) }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        return buscarProcessosPorCpfLocal(input.cpf);
+      }),
     filaJudit: protectedProcedure
       .input(z.object({ page: z.number().default(1), pageSize: z.number().default(50) }))
       .query(async ({ input, ctx }) => {

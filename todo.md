@@ -486,3 +486,11 @@
 - [ ] Atualizar menu: remover "Importar + Judit" e "Importação", adicionar "Importar"
 - [ ] Remover AdminImportacaoSimples.tsx e arquivo antigo de importação
 - [ ] Remover rotas tRPC antigas de importação não usadas
+
+## Refatoração Painel Judit (Fase 7)
+
+- [ ] Remover agendamentos automáticos do backend (judit.ts e _core/index.ts)
+- [ ] Criar rotas tRPC: metricsJudit, filaJuditCompleta, buscarPorCpfJudit, historicoConsultas, exportarHistoricoCSV
+- [ ] Reescrever AdminJudit.tsx com 4 seções: métricas, fila, busca CPF, histórico
+- [ ] Atualizar ordem do menu: Dashboard, Processos, Importar, Histórico, Judit, Usuários, Investidores, Config
+- [ ] Verificar TypeScript e testar fluxo completo

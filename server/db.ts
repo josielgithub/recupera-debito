@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   Cliente,
@@ -1570,4 +1570,176 @@ export async function listLogsImportacaoUnificado(limit = 20) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(logsImportacaoUnificado).orderBy(desc(logsImportacaoUnificado.createdAt)).limit(limit);
+}
+
+// ─── Judit: Métricas do Painel ─────────────────────────────────────────────
+export async function metricsJudit() {
+  const db = await getDb();
+  if (!db) return { creditoRestante: 1000, consultasMes: 0, requisicaoProcessando: 0, processosNaFila: 0, custoMes: 0, limiteMensal: 1000 };
+
+  const agora = new Date();
+  const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
+
+  const [logsMes, processando, fila] = await Promise.all([
+    db
+      .select({ total: sql<number>`count(*)`, custo: sql<number>`sum(custo)` })
+      .from(juditConsultaLog)
+      .where(gte(juditConsultaLog.createdAt, inicioMes)),
+    db
+      .select({ total: sql<number>`count(*)` })
+      .from(juditRequests)
+      .where(eq(juditRequests.status, "processing")),
+    db
+      .select({ total: sql<number>`count(*)` })
+      .from(processos)
+      .where(eq(processos.statusJudit, "aguardando_aprovacao_judit")),
+  ]);
+
+  const custoMes = Number(logsMes[0]?.custo ?? 0);
+  const LIMITE_MENSAL = 1000;
+  return {
+    creditoRestante: Math.max(0, LIMITE_MENSAL - custoMes),
+    consultasMes: Number(logsMes[0]?.total ?? 0),
+    requisicaoProcessando: Number(processando[0]?.total ?? 0),
+    processosNaFila: Number(fila[0]?.total ?? 0),
+    custoMes,
+    limiteMensal: LIMITE_MENSAL,
+  };
+}
+
+// ─── Judit: Fila com filtros (busca + advogado) ────────────────────────────
+export async function listFilaJuditFiltrada(opts: {
+  busca?: string;
+  advogadoId?: number;
+  page?: number;
+  pageSize?: number;
+}) {
+  const db = await getDb();
+  if (!db) return { processos: [], total: 0 };
+  const { busca, advogadoId, page = 1, pageSize = 50 } = opts;
+  const offset = (page - 1) * pageSize;
+
+  const conditions: ReturnType<typeof eq>[] = [eq(processos.statusJudit, "aguardando_aprovacao_judit") as ReturnType<typeof eq>];
+  if (advogadoId) conditions.push(eq(processos.advogadoId, advogadoId) as ReturnType<typeof eq>);
+  if (busca) {
+    const like = `%${busca}%`;
+    conditions.push(
+      or(
+        sql`${processos.cnj} LIKE ${like}`,
+        sql`${clientes.nome} LIKE ${like}`,
+        sql`${clientes.cpf} LIKE ${like}`
+      ) as ReturnType<typeof eq>
+    );
+  }
+
+  const whereClause = conditions.length === 1 ? conditions[0] : and(...conditions);
+
+  const [rows, countRows] = await Promise.all([
+    db
+      .select({
+        id: processos.id,
+        cnj: processos.cnj,
+        statusResumido: processos.statusResumido,
+        statusJudit: processos.statusJudit,
+        clienteNome: clientes.nome,
+        clienteCpf: clientes.cpf,
+        advogadoId: processos.advogadoId,
+        createdAt: processos.createdAt,
+      })
+      .from(processos)
+      .leftJoin(clientes, eq(processos.clienteId, clientes.id))
+      .where(whereClause)
+      .orderBy(asc(processos.createdAt))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(processos)
+      .leftJoin(clientes, eq(processos.clienteId, clientes.id))
+      .where(whereClause),
+  ]);
+
+  return { processos: rows, total: Number(countRows[0]?.count ?? 0) };
+}
+
+// ─── Judit: Histórico paginado com filtro de período ──────────────────────
+export async function listHistoricoJudit(opts: {
+  periodo?: "7d" | "30d" | "custom";
+  dataInicio?: Date;
+  dataFim?: Date;
+  page?: number;
+  pageSize?: number;
+}) {
+  const db = await getDb();
+  if (!db) return { registros: [], total: 0, custoTotal: 0 };
+  const { periodo = "30d", dataInicio, dataFim, page = 1, pageSize = 50 } = opts;
+  const offset = (page - 1) * pageSize;
+
+  let inicio: Date;
+  const fim = dataFim ?? new Date();
+  if (periodo === "custom" && dataInicio) {
+    inicio = dataInicio;
+  } else if (periodo === "7d") {
+    inicio = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  } else {
+    inicio = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  }
+
+  const whereClause = and(
+    gte(juditConsultaLog.createdAt, inicio),
+    lte(juditConsultaLog.createdAt, fim)
+  );
+
+  const [rows, countRows, custoRows] = await Promise.all([
+    db
+      .select({
+        id: juditConsultaLog.id,
+        processoCnj: juditConsultaLog.processoCnj,
+        requestId: juditConsultaLog.requestId,
+        tipo: juditConsultaLog.tipo,
+        custo: juditConsultaLog.custo,
+        status: juditConsultaLog.status,
+        aprovadoPorId: juditConsultaLog.aprovadoPorId,
+        createdAt: juditConsultaLog.createdAt,
+      })
+      .from(juditConsultaLog)
+      .where(whereClause)
+      .orderBy(desc(juditConsultaLog.createdAt))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(juditConsultaLog)
+      .where(whereClause),
+    db
+      .select({ custo: sql<number>`sum(custo)` })
+      .from(juditConsultaLog)
+      .where(whereClause),
+  ]);
+
+  return {
+    registros: rows,
+    total: Number(countRows[0]?.count ?? 0),
+    custoTotal: Number(custoRows[0]?.custo ?? 0),
+  };
+}
+
+// ─── Judit: Buscar processos por CPF no banco local ────────────────────────
+export async function buscarProcessosPorCpfLocal(cpf: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const cpfLimpo = cpf.replace(/\D/g, "");
+  const rows = await db
+    .select({
+      id: processos.id,
+      cnj: processos.cnj,
+      statusResumido: processos.statusResumido,
+      statusJudit: processos.statusJudit,
+      clienteNome: clientes.nome,
+      clienteCpf: clientes.cpf,
+    })
+    .from(processos)
+    .leftJoin(clientes, eq(processos.clienteId, clientes.id))
+    .where(eq(clientes.cpf, cpfLimpo));
+  return rows;
 }
