@@ -32,7 +32,7 @@ const MAX_POLL_ATTEMPTS = 20;
 const POLL_INTERVAL_MS = 5_000;
 
 // ─── Retry com backoff exponencial ────────────────────────────────────────
-async function sleep(ms: number): Promise<void> {
+export async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
@@ -55,7 +55,7 @@ async function retryWithBackoff<T>(
 }
 
 // ─── Requisição HTTP base ──────────────────────────────────────────────────
-async function juditFetch(path: string, options: RequestInit = {}): Promise<unknown> {
+async function juditFetch(path: string, options: RequestInit = {}, attempt = 0): Promise<unknown> {
   if (!JUDIT_API_KEY) throw new Error("[Judit] JUDIT_API_KEY não configurada");
 
   const controller = new AbortController();
@@ -72,9 +72,36 @@ async function juditFetch(path: string, options: RequestInit = {}): Promise<unkn
       },
     });
 
+    // Tratamento especial de rate limit 429 — aguardar e tentar novamente
+    if (res.status === 429) {
+      const retryAfter = parseInt(res.headers.get("retry-after") ?? "60", 10);
+      const waitMs = retryAfter * 1000;
+      console.warn(`[Judit] Rate limit 429 em ${path} — aguardando ${retryAfter}s antes de tentar novamente (tentativa ${attempt + 1}/3)`);
+      if (attempt < 2) {
+        clearTimeout(timeout);
+        await sleep(waitMs);
+        return juditFetch(path, options, attempt + 1);
+      }
+      throw new Error(`[Judit] Rate limit 429 persistente em ${path} após 3 tentativas`);
+    }
+
     if (!res.ok) {
+      // Verificar se a resposta é HTML (página de erro do servidor)
+      const contentType = res.headers.get("content-type") ?? "";
       const body = await res.text().catch(() => "");
+      if (contentType.includes("text/html") || body.trimStart().startsWith("<")) {
+        console.error(`[Judit] HTTP ${res.status} retornou HTML em vez de JSON para ${path}. Primeiros 200 chars: ${body.slice(0, 200)}`);
+        throw new Error(`[Judit] HTTP ${res.status}: resposta HTML inesperada (servidor Judit pode estar fora do ar)`);
+      }
       throw new Error(`[Judit] HTTP ${res.status}: ${body}`);
+    }
+
+    // Verificar Content-Type antes de parsear JSON
+    const contentType = res.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json") && !contentType.includes("text/json")) {
+      const body = await res.text().catch(() => "");
+      console.error(`[Judit] Resposta não-JSON (Content-Type: ${contentType}) para ${path}. Body: ${body.slice(0, 200)}`);
+      throw new Error(`[Judit] Resposta inesperada não-JSON (Content-Type: ${contentType})`);
     }
 
     return await res.json();

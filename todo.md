@@ -582,3 +582,13 @@
 - [ ] C4: AdminJudit frontend — aviso amarelo no Dialog com contagem de CNJs já consultados e custo estimado ajustado
 - [ ] C6: AdminJudit histórico — badge "Duplicata" laranja na coluna, card de resumo "Consultas duplicadas este mês: X — Custo desperdiçado: R$ Y"
 - [ ] Testes Vitest cobrindo as novas validações
+
+## Correção Definitiva Erro HTML em Lote Judit
+- [x] Investigar logs do servidor no momento do erro
+- [x] Verificar middleware global de erro no Express
+- [x] Verificar processamento em lote (concorrência ilimitada)
+- [x] Correção 1: Handler global de erro JSON no Express
+- [x] Correção 2: Processamento em lote com concorrência limitada (5 por vez, 500ms)
+- [x] Correção 3: Tratamento de rate limit 429 com retry
+- [x] Correção 4: Logs detalhados de cada etapa do processamento em lote
+- [x] Verificar e marcar duplicatas geradas no episódio (41 novos registros marcados)

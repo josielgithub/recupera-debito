@@ -74,8 +74,9 @@ import {
 import { processarPlanilha } from "./importacao";
 import { importarPlanilhaSimples, conciliarComJuditBackground } from "./importacaoSimples";
 import {
-  atualizarProcesso,
+  sleep,
   buscarESalvarProcessoJudit,
+  atualizarProcesso,
   buscarMovimentacoesJudit,
   coletarResultadosPendentes,
   criarRequisicaoJudit,
@@ -1313,68 +1314,114 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         // Limpar operações expiradas em background (sem await)
         limparOperacoesExpiradas().catch(() => {});
 
-        const resultados = [];
+        const resultados: Array<{
+          processoId: number;
+          ok: boolean;
+          notFound?: boolean;
+          pulado?: boolean;
+          motivo?: string;
+          erro?: string;
+        }> = [];
         let pulados = 0;
 
         // Buscar todos os processos da fila de uma vez (mais eficiente)
         const filaCompleta = await listFilaJudit(1, 10000);
 
-        for (const processoId of input.processoIds) {
-          try {
-            const proc = filaCompleta.processos.find(p => p.id === processoId);
-            if (!proc) { resultados.push({ processoId, ok: false, erro: "Não encontrado" }); continue; }
+        // C2+C4: Processamento em lotes de 5 com pausa de 500ms entre lotes
+        // Evita sobrecarregar a API Judit e disparar rate limit
+        const BATCH_SIZE = 5;
+        const DELAY_MS = 500;
+        const total = input.processoIds.length;
+        console.log(`[aprovarFilaJudit] Iniciando processamento de ${total} processo(s) em lotes de ${BATCH_SIZE} (requestKey=${input.requestKey ?? 'N/A'})`);
 
-            // C2: Verificar se statusJudit ainda é aguardando_aprovacao_judit
-            if (proc.statusJudit !== "aguardando_aprovacao_judit") {
-              console.log(`[aprovarFilaJudit] CNJ ${proc.cnj} já foi consultado (statusJudit=${proc.statusJudit}) — pulando`);
-              pulados++;
-              resultados.push({ processoId, ok: true, pulado: true, motivo: `statusJudit=${proc.statusJudit}` });
-              continue;
-            }
+        for (let i = 0; i < total; i += BATCH_SIZE) {
+          const loteParcial = input.processoIds.slice(i, i + BATCH_SIZE);
+          const loteNum = Math.floor(i / BATCH_SIZE) + 1;
+          const totalLotes = Math.ceil(total / BATCH_SIZE);
+          console.log(`[aprovarFilaJudit] Lote ${loteNum}/${totalLotes}: processando IDs [${loteParcial.join(", ")}]`);
 
-            // Disparar consulta Judit
-            const resultado = await buscarESalvarProcessoJudit(proc.cnj);
-            if (resultado.notFound) {
-              await marcarProcessoNaoEncontradoJudit(processoId);
-              await insertJuditConsultaLog({
-                processoCnj: proc.cnj,
-                requestId: resultado.requestId ?? null,
-                tipo: "consulta_lote",
-                custo: "0.25",
-                status: "nao_encontrado",
-                aprovadoPorId: ctx.user.id,
-                isDuplicata: false,
-              });
-              resultados.push({ processoId, ok: true, notFound: true });
-            } else {
-              await aprovarProcessoJudit(processoId, ctx.user.id);
-              await insertJuditConsultaLog({
-                processoCnj: proc.cnj,
-                requestId: resultado.requestId ?? null,
-                tipo: "consulta_lote",
-                custo: "0.25",
-                status: "sucesso",
-                aprovadoPorId: ctx.user.id,
-                isDuplicata: false,
-              });
-              resultados.push({ processoId, ok: true, notFound: false });
+          // Processar cada item do lote sequencialmente (não em paralelo)
+          // para evitar condições de corrida e sobrecarga do banco
+          for (const processoId of loteParcial) {
+            try {
+              const proc = filaCompleta.processos.find(p => p.id === processoId);
+              if (!proc) {
+                console.warn(`[aprovarFilaJudit] Processo ID ${processoId} não encontrado na fila`);
+                resultados.push({ processoId, ok: false, erro: "Não encontrado" });
+                continue;
+              }
+
+              // C2: Verificar se statusJudit ainda é aguardando_aprovacao_judit
+              if (proc.statusJudit !== "aguardando_aprovacao_judit") {
+                console.log(`[aprovarFilaJudit] CNJ ${proc.cnj} já foi consultado (statusJudit=${proc.statusJudit}) — pulando`);
+                pulados++;
+                resultados.push({ processoId, ok: true, pulado: true, motivo: `statusJudit=${proc.statusJudit}` });
+                continue;
+              }
+
+              console.log(`[aprovarFilaJudit] Consultando CNJ ${proc.cnj} (processoId=${processoId})...`);
+              const tInicio = Date.now();
+
+              // Disparar consulta Judit
+              const resultado = await buscarESalvarProcessoJudit(proc.cnj);
+              const durMs = Date.now() - tInicio;
+
+              if (resultado.notFound) {
+                console.log(`[aprovarFilaJudit] CNJ ${proc.cnj} — não encontrado na Judit (${durMs}ms)`);
+                await marcarProcessoNaoEncontradoJudit(processoId);
+                await insertJuditConsultaLog({
+                  processoCnj: proc.cnj,
+                  requestId: resultado.requestId ?? null,
+                  tipo: "consulta_lote",
+                  custo: "0.25",
+                  status: "nao_encontrado",
+                  aprovadoPorId: ctx.user.id,
+                  isDuplicata: false,
+                });
+                resultados.push({ processoId, ok: true, notFound: true });
+              } else {
+                console.log(`[aprovarFilaJudit] CNJ ${proc.cnj} — sucesso requestId=${resultado.requestId ?? 'N/A'} (${durMs}ms)`);
+                await aprovarProcessoJudit(processoId, ctx.user.id);
+                await insertJuditConsultaLog({
+                  processoCnj: proc.cnj,
+                  requestId: resultado.requestId ?? null,
+                  tipo: "consulta_lote",
+                  custo: "0.25",
+                  status: "sucesso",
+                  aprovadoPorId: ctx.user.id,
+                  isDuplicata: false,
+                });
+                resultados.push({ processoId, ok: true, notFound: false });
+              }
+            } catch (err) {
+              const proc2 = filaCompleta.processos.find((p) => p.id === processoId);
+              const errMsg = String(err);
+              console.error(`[aprovarFilaJudit] Erro ao processar ID ${processoId} (CNJ=${proc2?.cnj ?? 'N/A'}): ${errMsg}`);
+              if (proc2) {
+                await insertJuditConsultaLog({
+                  processoCnj: proc2.cnj,
+                  requestId: null,
+                  tipo: "consulta_lote",
+                  custo: "0.25",
+                  status: "erro",
+                  aprovadoPorId: ctx.user.id,
+                  isDuplicata: false,
+                }).catch(() => {});
+              }
+              resultados.push({ processoId, ok: false, erro: errMsg });
             }
-          } catch (err) {
-            const proc2 = filaCompleta.processos.find((p) => p.id === processoId);
-            if (proc2) {
-              await insertJuditConsultaLog({
-                processoCnj: proc2.cnj,
-                requestId: null,
-                tipo: "consulta_lote",
-                custo: "0.25",
-                status: "erro",
-                aprovadoPorId: ctx.user.id,
-                isDuplicata: false,
-              }).catch(() => {});
-            }
-            resultados.push({ processoId, ok: false, erro: String(err) });
+          }
+
+          // Pausa entre lotes (exceto no último)
+          if (i + BATCH_SIZE < total) {
+            console.log(`[aprovarFilaJudit] Pausa de ${DELAY_MS}ms antes do próximo lote...`);
+            await sleep(DELAY_MS);
           }
         }
+
+        const ok = resultados.filter(r => r.ok && !r.pulado).length;
+        const erros = resultados.filter(r => !r.ok).length;
+        console.log(`[aprovarFilaJudit] Concluído: ${ok} sucesso(s), ${pulados} pulado(s), ${erros} erro(s) de ${total} total`);
 
         const resposta = { resultados, pulados };
 

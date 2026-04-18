@@ -284,6 +284,22 @@ async function startServer() {
     })
   );
 
+  // ── Handler global de erro JSON (DEVE vir antes do Vite/static) ──────────
+  // Garante que QUALQUER erro não capturado retorne JSON, nunca HTML
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  app.use((err: any, req: any, res: any, _next: any) => {
+    const status = err.status || err.statusCode || 500;
+    const message = err.message || "Erro interno do servidor";
+    console.error(`[Global Error Handler] ${req.method} ${req.path} → HTTP ${status}:`, message);
+    // Se a resposta já foi enviada parcialmente, não tentar enviar novamente
+    if (res.headersSent) return;
+    res.status(status).json({
+      error: true,
+      message,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   // Vite (dev) ou arquivos estáticos (prod)
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
