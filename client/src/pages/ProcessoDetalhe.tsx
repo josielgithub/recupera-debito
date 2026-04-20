@@ -295,6 +295,15 @@ function MovimentacoesTimeline({ cnj }: { cnj: string }) {
           </CardTitle>
           <div className="flex items-center gap-2">
             <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.dispatchEvent(new CustomEvent('atualizarProcessoJudit', { detail: { cnj } }))}
+              className="gap-1.5 text-xs h-7"
+            >
+              <RefreshCw className="w-3 h-3" />
+              Atualizar na Judit
+            </Button>
+            <Button
               variant="ghost"
               size="sm"
               onClick={() => refetch()}

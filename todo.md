@@ -592,3 +592,11 @@
 - [x] Correção 3: Tratamento de rate limit 429 com retry
 - [x] Correção 4: Logs detalhados de cada etapa do processamento em lote
 - [x] Verificar e marcar duplicatas geradas no episódio (41 novos registros marcados)
+
+
+## Remoção de Consulta Automática à Judit (Passo 1-5)
+- [x] Passo 1: Modificar admin.processoMovimentacoes para leitura simples (sem chamar Judit)
+- [x] Passo 4: Limpar buscarMovimentacoesJudit para retornar apenas do cache
+- [x] Passo 5: Adicionar getConsultaRecenteJudit no db.ts
+- [x] Passo 3: Criar rota admin.atualizarProcessoJudit com cooldown 24h
+- [x] Passo 2: Adicionar botão "Atualizar na Judit" no ProcessoDetalhe.tsx

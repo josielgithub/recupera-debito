@@ -2403,3 +2403,17 @@ export async function getCustoConsultasMes(excluirDuplicatas = true): Promise<nu
     .where(and(...conditions));
   return Number(row?.total ?? 0);
 }
+
+
+
+export async function getConsultaRecenteJudit(cnj: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const [consulta] = await db
+    .select()
+    .from(juditConsultaLog)
+    .where(eq(juditConsultaLog.processoCnj, cnj))
+    .orderBy(desc(juditConsultaLog.createdAt))
+    .limit(1);
+  return consulta ?? null;
+}

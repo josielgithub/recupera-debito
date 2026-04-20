@@ -70,6 +70,8 @@ import {
   // Investidor
   listProcessosDoInvestidor,
   metricsInvestidor,
+  // Judit Consultas
+  getConsultaRecenteJudit,
 } from "./db";
 import { processarPlanilha } from "./importacao";
 import { importarPlanilhaSimples, conciliarComJuditBackground } from "./importacaoSimples";
@@ -582,8 +584,35 @@ export const appRouter = router({
       .input(z.object({ cnj: z.string() }))
       .query(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
-        const { steps, fromCache, requestId } = await buscarMovimentacoesJudit(input.cnj);
+        const { steps, fromCache, requestId } = await buscarMovimentacoesJudit(input.cnj, true); // true = apenas cache
         return { steps, fromCache, requestId, total: steps.length };
+      }),
+
+    // Atualizar processo na Judit sob demanda (com cooldown 24h)
+    atualizarProcessoJudit: protectedProcedureWithImpersonationGuard
+      .input(z.object({ cnj: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const processo = await getProcessoByCnj(input.cnj);
+        if (!processo) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+
+        // Verificar cooldown 24h
+        const consultaRecente = await getConsultaRecenteJudit(input.cnj);
+        if (consultaRecente) {
+          const horasDesde = (Date.now() - new Date(consultaRecente.createdAt).getTime()) / (1000 * 60 * 60);
+          if (horasDesde < 24) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Este processo foi consultado há ${Math.round(horasDesde)}h. Aguarde ${Math.round(24 - horasDesde)}h para consultar novamente.`,
+            });
+          }
+        }
+
+        // Chamar Judit para atualizar
+        const { atualizado, criado, processo: processoAtualizado } = await buscarESalvarProcessoJudit(input.cnj);
+        if (!processoAtualizado) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado na Judit" });
+
+        return { atualizado, criado, processo: processoAtualizado };
       }),
 
     // Gera resumo IA do processo usando LLM interno (síncrono, sem polling)

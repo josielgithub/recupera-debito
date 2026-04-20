@@ -443,7 +443,7 @@ export interface JuditStep {
   lawsuit_instance?: number;
 }
 
-export async function buscarMovimentacoesJudit(cnj: string): Promise<{
+export async function buscarMovimentacoesJudit(cnj: string, apenasCache = false): Promise<{
   steps: JuditStep[];
   fromCache: boolean;
   requestId?: string;
@@ -464,6 +464,12 @@ export async function buscarMovimentacoesJudit(cnj: string): Promise<{
       console.log(`[Judit] Movimentações do CNJ ${cnj} retornadas do cache (${steps.length} steps).`);
       return { steps, fromCache: true };
     }
+  }
+
+  // Se apenasCache=true, retornar vazio em vez de chamar a API
+  if (apenasCache) {
+    console.log(`[Judit] Modo cache-only: retornando vazio para ${cnj}`);
+    return { steps: [], fromCache: true };
   }
 
   // 2. Buscar via API Judit usando o requestId mais recente
