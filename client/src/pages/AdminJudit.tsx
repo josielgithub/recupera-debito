@@ -495,9 +495,10 @@ function SecaoHistoricoJudit() {
 
   const exportarCsv = () => {
     if (!registros.length) return;
-    const header = ["CNJ", "Tipo", "Custo", "Status", "Duplicata", "Data"];
+    const header = ["CNJ", "Request ID", "Tipo", "Custo", "Status", "Duplicata", "Data"];
     const rows = registros.map(r => [
       r.processoCnj,
+      r.requestId ?? "",
       r.tipo ?? "",
       Number(r.custo).toFixed(2),
       r.status,
@@ -554,6 +555,7 @@ function SecaoHistoricoJudit() {
           <thead className="bg-muted/50">
             <tr>
               <th className="p-3 text-left font-medium">CNJ</th>
+              <th className="p-3 text-left font-medium hidden md:table-cell">Request ID</th>
               <th className="p-3 text-left font-medium hidden md:table-cell">Tipo</th>
               <th className="p-3 text-left font-medium">Status</th>
               <th className="p-3 text-left font-medium hidden lg:table-cell">Custo</th>
@@ -576,6 +578,9 @@ function SecaoHistoricoJudit() {
               return (
                 <tr key={r.id} className={`border-t hover:bg-muted/30 ${r.isDuplicata ? "bg-orange-50/40 dark:bg-orange-950/20" : ""}`}>
                   <td className="p-3 font-mono text-xs">{formatCnj(r.processoCnj)}</td>
+                  <td className="p-3 hidden md:table-cell font-mono text-xs text-muted-foreground" title={r.requestId ?? "-"}>
+                    {r.requestId ? r.requestId.slice(0, 8) + "..." : "-"}
+                  </td>
                   <td className="p-3 hidden md:table-cell text-muted-foreground capitalize">{r.tipo?.replace("_", " ") ?? "-"}</td>
                   <td className="p-3">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusInfo.color}`}>
@@ -815,10 +820,11 @@ function SecaoProblemas() {
 
   const exportarCsv = () => {
     if (!problemas.length) return;
-    const header = ["ID", "CNJ", "Tipo", "Descrição", "Enviado em", "Detectado em", "Tentativas", "Resolvido", "Observação"];
+    const header = ["ID", "CNJ", "Request ID", "Tipo", "Descrição", "Enviado em", "Detectado em", "Tentativas", "Resolvido", "Observação"];
     const rows = problemas.map(p => [
       p.id,
       p.processoCnj,
+      p.requestId ?? "",
       p.tipo,
       p.descricao.replace(/;/g, ","),
       new Date(p.enviadoEm).toLocaleString("pt-BR"),
@@ -881,6 +887,7 @@ function SecaoProblemas() {
           <thead className="bg-muted/50">
             <tr>
               <th className="p-3 text-left font-medium">CNJ</th>
+              <th className="p-3 text-left font-medium hidden md:table-cell">Request ID</th>
               <th className="p-3 text-left font-medium hidden md:table-cell">Tipo</th>
               <th className="p-3 text-left font-medium hidden lg:table-cell">Descrição</th>
               <th className="p-3 text-left font-medium hidden md:table-cell">Tentativas</th>
@@ -904,6 +911,9 @@ function SecaoProblemas() {
               return (
                 <tr key={p.id} className={`border-t hover:bg-muted/30 ${p.resolvido ? "opacity-60" : ""}`}>
                   <td className="p-3 font-mono text-xs">{formatCnj(p.processoCnj)}</td>
+                  <td className="p-3 hidden md:table-cell font-mono text-xs text-muted-foreground" title={p.requestId ?? "-"}>
+                    {p.requestId ? p.requestId.slice(0, 8) + "..." : "-"}
+                  </td>
                   <td className="p-3 hidden md:table-cell">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${tipoInfo.color}`}>
                       {tipoInfo.label}

@@ -364,6 +364,7 @@ export const juditProblemas = mysqlTable("judit_problemas", {
   id: int("id").autoincrement().primaryKey(),
   processoCnj: varchar("processo_cnj", { length: 50 }).notNull(),
   requestId: varchar("request_id", { length: 64 }).notNull(),
+  errorId: varchar("error_id", { length: 64 }), // UUID retornado pela Judit para rastreamento
   tipo: mysqlEnum("tipo", ["timeout", "nao_encontrado", "erro_api", "webhook_nao_recebido"]).notNull(),
   descricao: text("descricao").notNull(),
   enviadoEm: timestamp("enviado_em").notNull(),

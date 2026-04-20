@@ -1,0 +1,1 @@
+ALTER TABLE `judit_problemas` ADD `error_id` varchar(64);

@@ -659,3 +659,22 @@
 - ✅ Aba "Qualidade de Dados" criada com métricas e registros problemáticos
 - ✅ Crédito restante ajustado para contar apenas registros válidos
 - ✅ 50 testes Vitest passando (0 erros TypeScript)
+
+
+## Rastreamento de Error ID da Judit
+- [ ] Adicionar coluna `error_id` (UUID) à tabela judit_problemas
+- [ ] Investigar resposta de erro da Judit para extrair error_id
+- [ ] Atualizar buscarESalvarProcessoJudit para capturar error_id
+- [ ] Atualizar aba Qualidade para mostrar error_id nos registros problemáticos
+- [ ] Testes para validar captura de error_id
+
+
+## Adição de Request ID em Exportações CSV e Tabelas
+- [x] Adicionar coluna `request_id` na exportação CSV do histórico Judit
+- [x] Adicionar coluna `request_id` na exportação CSV de problemas registrados
+- [x] Adicionar coluna `request_id` na exportação CSV da aba Qualidade de Dados
+- [x] Adicionar coluna `request_id` na tabela visual do histórico (truncado com tooltip)
+- [x] Adicionar coluna `request_id` na tabela de problemas registrados (truncado com tooltip)
+- [x] Implementar função `exportarCsv` na aba Qualidade de Dados
+- [x] Formato CSV com UUID completo (sem truncar) para rastreamento junto ao suporte Judit
+- [x] Tabelas visuais com UUID truncado (primeiros 8 caracteres + "...") e tooltip ao passar mouse

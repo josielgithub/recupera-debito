@@ -11,6 +11,26 @@ export function SecaoQualidade() {
   const { data: registrosProblemáticos, isLoading: regLoading } = trpc.juditQualidade.registrosProblemáticos.useQuery({ page: 1, pageSize: 50 });
   const [page, setPage] = useState(1);
 
+  const exportarCsv = () => {
+    if (!registrosProblemáticos?.registros || registrosProblemáticos.registros.length === 0) return;
+    const header = ["CNJ", "Request ID", "Tipo de Problema", "Custo", "Data"];
+    const rows = registrosProblemáticos.registros.map((reg: any) => [
+      reg.processoCnj,
+      reg.requestId ?? "",
+      (reg.isDuplicata ? "Duplicata" : "") + (reg.requestIdInvalido ? (reg.isDuplicata ? ", " : "") + "UUID Inválido" : ""),
+      Number(reg.custo).toFixed(2),
+      new Date(reg.createdAt).toLocaleString("pt-BR"),
+    ]);
+    const csv = [header, ...rows].map(row => row.map(c => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `qualidade-dados-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (metricsLoading) {
     return <div className="text-center py-8 text-muted-foreground">Carregando métricas...</div>;
   }
@@ -104,7 +124,7 @@ export function SecaoQualidade() {
               <AlertTriangle className="h-4 w-4 text-red-600" />
               Registros Problemáticos ({registrosProblemáticos?.total ?? 0})
             </CardTitle>
-            <Button size="sm" variant="outline" className="text-xs">
+            <Button size="sm" variant="outline" className="text-xs" onClick={exportarCsv}>
               <Download className="h-3.5 w-3.5 mr-1" />
               Exportar CSV
             </Button>
