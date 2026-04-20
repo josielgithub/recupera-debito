@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
+import { useTransition } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -140,6 +141,8 @@ function SecaoFila() {
   const [progresso, setProgresso] = useState<{ atual: number; total: number } | null>(null);
   // C1: requestKey para idempotência — gerado uma vez por sessão de aprovação
   const [requestKey, setRequestKey] = useState<string>(() => crypto.randomUUID());
+  // useTransition para desabilitar botão IMEDIATAMENTE antes da requisição
+  const [isPending, startTransition] = useTransition();
 
   const { data: advogados } = trpc.admin.listarAdvogadosUsuarios.useQuery();
   const { data: metrics } = trpc.admin.metricsJudit.useQuery();
@@ -178,9 +181,14 @@ function SecaoFila() {
   };
 
   const handleConfirmar = () => {
-    if (aprovar.isPending) return; // C1: debounce — impede duplo clique
-    setProgresso({ atual: 0, total: selecionados.length });
-    aprovar.mutate({ processoIds: selecionados, requestKey });
+    // C1: Usar useTransition para desabilitar IMEDIATAMENTE
+    // Isso evita race condition onde múltiplos cliques acontecem antes de isPending ficar true
+    if (isPending || aprovar.isPending) return;
+    
+    startTransition(async () => {
+      setProgresso({ atual: 0, total: selecionados.length });
+      aprovar.mutate({ processoIds: selecionados, requestKey });
+    });
   };
 
   const handleAbrirConfirm = () => {
@@ -227,7 +235,7 @@ function SecaoFila() {
           <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
             {selecionados.length} selecionado(s) — custo estimado: <strong>R$ {custoEstimado}</strong>
           </span>
-          <Button size="sm" onClick={handleAbrirConfirm} disabled={aprovar.isPending}>
+          <Button size="sm" onClick={handleAbrirConfirm} disabled={aprovar.isPending || isPending}>
             <CheckCircle className="h-4 w-4 mr-1" />
             Consultar na Judit
           </Button>
@@ -335,8 +343,8 @@ function SecaoFila() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancelar</Button>
-            <Button onClick={handleConfirmar} disabled={aprovar.isPending} variant={ultrapassaCredito ? "destructive" : "default"} type="button">
-              {aprovar.isPending ? "Processando..." : `Confirmar (R$ ${custoEstimado})`}
+            <Button onClick={handleConfirmar} disabled={aprovar.isPending || isPending} variant={ultrapassaCredito ? "destructive" : "default"} type="button">
+              {aprovar.isPending || isPending ? "Processando..." : `Confirmar (R$ ${custoEstimado})`}
             </Button>
           </DialogFooter>
         </DialogContent>

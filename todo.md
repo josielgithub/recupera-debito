@@ -600,3 +600,20 @@
 - [x] Passo 5: Adicionar getConsultaRecenteJudit no db.ts
 - [x] Passo 3: Criar rota admin.atualizarProcessoJudit com cooldown 24h
 - [x] Passo 2: Adicionar botão "Atualizar na Judit" no ProcessoDetalhe.tsx
+
+
+## Correção Crítica: Formato do request_id (UUID vs Numérico)
+- [ ] Investigar: verificar código, banco de dados e resposta real da Judit
+- [ ] Corrigir código para sempre usar UUID da Judit e adicionar validação Zod
+- [ ] Marcar registros inválidos no banco e mover processos afetados de volta para fila
+- [ ] Verificar TypeScript, testes e salvar checkpoint
+
+## Correção de Duplicatas de request_id (Race Condition)
+- [x] Investigar padrão de duplicatas: 4 registros com mesmo request_id para o mesmo CNJ
+- [x] Identificar causa: race condition onde múltiplos cliques acontecem antes de isPending ficar true
+- [x] Correção 1 (Frontend): adicionar useTransition do React 19 para desabilitar botão IMEDIATAMENTE
+- [x] Correção 2 (Backend): tornar requestKey OBRIGATÓRIO no schema Zod (não mais opcional)
+- [x] Correção 3 (Backend): adicionar validação de UUID para request_id com função isValidUUID
+- [x] Correção 4 (AdminFilaJudit.tsx): adicionar requestKey e handleAbrirDialog para gerar novo UUID a cada abertura
+- [x] Correção 5 (AdminJudit.tsx): adicionar useTransition e desabilitar botão durante transição
+- [x] Testes Vitest: 6 novos testes cobrindo validação de UUID, idempotência, e rejeição de requestKey inválido (50 testes passando)

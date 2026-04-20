@@ -1552,10 +1552,26 @@ export async function listInvestidoresUsuarios() {
   });
 }
 
-// ─── Judit Consulta Log ────────────────────────────────────────────────────
+// ─── Judit Consulta Log ────────────────────────────────────────────────
+
+// Validar se uma string é um UUID v4 válido
+function isValidUUID(str: string | null | undefined): boolean {
+  if (!str) return false;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+}
+
 export async function insertJuditConsultaLog(data: InsertJuditConsultaLog): Promise<void> {
   const db = await getDb();
   if (!db) return;
+  
+  // Validar requestId se fornecido
+  if (data.requestId && !isValidUUID(data.requestId)) {
+    console.warn(`[insertJuditConsultaLog] requestId inválido para CNJ ${data.processoCnj}: "${data.requestId}" não é um UUID válido`);
+    // Salvar como null se inválido
+    data.requestId = null;
+  }
+  
   await db.insert(juditConsultaLog).values(data);
 }
 

@@ -24,6 +24,7 @@ export default function AdminFilaJudit() {
   const [page, setPage] = useState(1);
   const [selecionados, setSelecionados] = useState<number[]>([]);
   const [dialogAberto, setDialogAberto] = useState(false);
+  const [requestKey, setRequestKey] = useState<string>(() => crypto.randomUUID());
   const utils = trpc.useUtils();
 
   const { data: filaData, isLoading } = trpc.admin.filaJudit.useQuery(
@@ -61,6 +62,11 @@ export default function AdminFilaJudit() {
     } else {
       setSelecionados(filaData.processos.map(p => p.id));
     }
+  };
+
+  const handleAbrirDialog = () => {
+    setRequestKey(crypto.randomUUID());
+    setDialogAberto(true);
   };
 
   const custoEstimado = (selecionados.length * CUSTO_POR_CONSULTA).toLocaleString("pt-BR", {
@@ -109,7 +115,7 @@ export default function AdminFilaJudit() {
               </div>
               <Button
                 size="sm"
-                onClick={() => setDialogAberto(true)}
+                onClick={handleAbrirDialog}
                 disabled={aprovar.isPending}
               >
                 {aprovar.isPending ? (
@@ -240,7 +246,7 @@ export default function AdminFilaJudit() {
               Cancelar
             </Button>
             <Button
-              onClick={() => aprovar.mutate({ processoIds: selecionados })}
+              onClick={() => aprovar.mutate({ processoIds: selecionados, requestKey })}
               disabled={aprovar.isPending}
             >
               {aprovar.isPending ? (

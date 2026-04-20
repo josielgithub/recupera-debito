@@ -1326,18 +1326,17 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
     aprovarFilaJudit: protectedProcedure
       .input(z.object({
         processoIds: z.array(z.number()),
-        requestKey: z.string().uuid().optional(), // C5: idempotência
+        requestKey: z.string().uuid(), // C5: OBRIGATÓRIO para idempotência
       }))
       .mutation(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
 
         // C5: Idempotência — verificar se requestKey já foi processado
-        if (input.requestKey) {
-          const resultadoExistente = await getOperacaoIdempotente(input.requestKey);
-          if (resultadoExistente) {
-            console.log(`[aprovarFilaJudit] requestKey ${input.requestKey} já processado — retornando resultado anterior`);
-            return JSON.parse(resultadoExistente);
-          }
+        // Sempre verificar, pois requestKey é obrigatório
+        const resultadoExistente = await getOperacaoIdempotente(input.requestKey);
+        if (resultadoExistente) {
+          console.log(`[aprovarFilaJudit] requestKey ${input.requestKey} já processado — retornando resultado anterior`);
+          return JSON.parse(resultadoExistente);
         }
 
         // Limpar operações expiradas em background (sem await)
