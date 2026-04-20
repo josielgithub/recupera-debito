@@ -678,3 +678,15 @@
 - [x] Implementar função `exportarCsv` na aba Qualidade de Dados
 - [x] Formato CSV com UUID completo (sem truncar) para rastreamento junto ao suporte Judit
 - [x] Tabelas visuais com UUID truncado (primeiros 8 caracteres + "...") e tooltip ao passar mouse
+
+
+## Problema 1: Aba "Problemas" Não Mostra Registros
+- [ ] Investigar query da rota juditProblemas.listar
+- [ ] Verificar se há filtro que exclui todos os registros
+- [ ] Abrir console do navegador e capturar erro exato
+- [ ] Corrigir e confirmar que 64 registros aparecem
+
+## Problema 2: Análise de Taxa de Sucesso (56%)
+- [ ] Distribuição de status das 631 consultas (sucesso, nao_encontrado, erro)
+- [ ] Distribuição de status dos 355 registros válidos
+- [ ] Top 10 tribunais com maior taxa de nao_encontrado

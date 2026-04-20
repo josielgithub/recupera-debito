@@ -1979,7 +1979,8 @@ export async function detectarERegistrarTimeouts(): Promise<{ registrados: numbe
 export async function listarProblemasJudit(opts: { apenasNaoResolvidos?: boolean } = {}): Promise<JuditProblema[]> {
   const db = await getDb();
   if (!db) return [];
-  const where = opts.apenasNaoResolvidos ? eq(juditProblemas.resolvido, false) : undefined;
+  // MySQL/TiDB armazena boolean como TINYINT(1) — usar sql raw para evitar erro de tipo
+  const where = opts.apenasNaoResolvidos ? sql`${juditProblemas.resolvido} = 0` : undefined;
   return db
     .select()
     .from(juditProblemas)

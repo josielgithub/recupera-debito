@@ -775,6 +775,13 @@ function SecaoProblemas() {
     { apenasNaoResolvidos },
     { refetchOnMount: true }
   );
+  
+  // Debug
+  useEffect(() => {
+    console.log('🔍 Query data:', data);
+    console.log('🔍 Query isLoading:', isLoading);
+    console.log('🔍 apenasNaoResolvidos:', apenasNaoResolvidos);
+  }, [data, isLoading, apenasNaoResolvidos]);
 
   const marcarResolvido = trpc.juditProblemas.marcarResolvido.useMutation({
     onSuccess: () => {
