@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { useTransition } from "react";
+import { SecaoQualidade } from "./AdminJudit-Qualidade";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1015,9 +1016,9 @@ export default function AdminJudit() {
       {/* Métricas */}
       <SecaoMetricas />
 
-      {/* Tabs das 4 seções operacionais */}
+      {/* Tabs das 5 seções operacionais */}
       <Tabs defaultValue="fila" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="fila" className="flex items-center gap-1.5">
             <ListChecks className="h-4 w-4" />
             <span className="hidden sm:inline">Fila de Consulta</span>
@@ -1042,6 +1043,11 @@ export default function AdminJudit() {
                 {naoResolvidos}
               </span>
             )}
+          </TabsTrigger>
+          <TabsTrigger value="qualidade" className="flex items-center gap-1.5">
+            <ShieldCheck className="h-4 w-4" />
+            <span className="hidden sm:inline">Qualidade</span>
+            <span className="sm:hidden">Qual.</span>
           </TabsTrigger>
         </TabsList>
 
@@ -1100,6 +1106,20 @@ export default function AdminJudit() {
             </CardHeader>
             <CardContent>
               <SecaoProblemas />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="qualidade">
+          <Card className="border shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-blue-600" />
+                Qualidade de Dados
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <SecaoQualidade />
             </CardContent>
           </Card>
         </TabsContent>

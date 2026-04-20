@@ -617,3 +617,45 @@
 - [x] Correção 4 (AdminFilaJudit.tsx): adicionar requestKey e handleAbrirDialog para gerar novo UUID a cada abertura
 - [x] Correção 5 (AdminJudit.tsx): adicionar useTransition e desabilitar botão durante transição
 - [x] Testes Vitest: 6 novos testes cobrindo validação de UUID, idempotência, e rejeição de requestKey inválido (50 testes passando)
+
+
+## Passo 1: Marcar Duplicatas e Inválidos Existentes
+- [x] Adicionar coluna `is_duplicata` ao schema Drizzle (já existia)
+- [x] Adicionar coluna `request_id_invalido` ao schema Drizzle
+- [x] Gerar migration SQL com drizzle-kit generate
+- [x] Aplicar migration ao banco de dados
+- [x] Marcar 90 registros com request_id NULL como `request_id_invalido = true`
+- [x] Marcar 186 registros duplicados (mesmo CNJ no mesmo dia) como `is_duplicata = true`
+- [x] Resultado final: 355 registros válidos, 186 duplicados, 90 com UUID inválido (total: 631)
+
+## Passo 2: Mover Processos Afetados de Volta para Fila
+- [x] Identificar 66 processos com statusJudit = "consultado" mas com registros problemáticos
+- [x] Mover 66 processos de volta para statusJudit = "aguardando_aprovacao_judit"
+- [x] Processos agora voltarão à fila para nova consulta com request_id válido
+
+## Passo 3: Aba "Qualidade de Dados" no AdminJudit
+- [x] Criar arquivo `judit-qualidade.ts` com 3 functions:
+  - [x] `metricsQualidadeJudit()`: retorna métricas de qualidade (válidas, duplicatas, requestIdInvalidos, taxaSucesso)
+  - [x] `listRegistrosProblemáticos()`: lista registros com is_duplicata=true ou request_id_invalido=true
+  - [x] `creditoRestanteEsteMs()`: calcula crédito restante considerando apenas registros válidos
+- [x] Adicionar procedures tRPC em admin.juditQualidade:
+  - [x] `metricas`: retorna métricas de qualidade
+  - [x] `registrosProblemáticos`: lista registros problemáticos com paginação
+  - [x] `creditoRestante`: retorna crédito restante e custo com duplicatas
+- [x] Criar componente `SecaoQualidade` em AdminJudit-Qualidade.tsx com:
+  - [x] 4 cards de métricas (Consultas Válidas, Duplicadas, UUID Inválido, Taxa de Sucesso)
+  - [x] Card de Crédito Restante com custo de duplicatas/inválidos separado
+  - [x] Tabela de registros problemáticos com paginação
+  - [x] Botão "Exportar CSV" (placeholder)
+- [x] Adicionar aba "Qualidade" ao AdminJudit.tsx com 5 abas no total
+- [x] Ajustar cálculo de crédito restante para considerar apenas registros válidos
+- [x] Todos os 50 testes Vitest passando
+
+## Resumo Final
+- ✅ Correção de race condition com useTransition e requestKey obrigatório
+- ✅ Validação de UUID para request_id
+- ✅ 631 registros analisados: 355 válidos, 186 duplicados, 90 com UUID inválido
+- ✅ 66 processos movidos de volta para fila
+- ✅ Aba "Qualidade de Dados" criada com métricas e registros problemáticos
+- ✅ Crédito restante ajustado para contar apenas registros válidos
+- ✅ 50 testes Vitest passando (0 erros TypeScript)

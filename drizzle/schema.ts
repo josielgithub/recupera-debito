@@ -298,6 +298,7 @@ export const juditConsultaLog = mysqlTable("judit_consulta_log", {
   status: mysqlEnum("status", ["sucesso", "nao_encontrado", "erro"]).default("sucesso").notNull(),
   aprovadoPorId: int("aprovado_por_id"),
   isDuplicata: boolean("is_duplicata").default(false).notNull(),
+  requestIdInvalido: boolean("request_id_invalido").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 export type JuditConsultaLog = typeof juditConsultaLog.$inferSelect;

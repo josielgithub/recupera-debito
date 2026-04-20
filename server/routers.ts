@@ -75,6 +75,7 @@ import {
 } from "./db";
 import { processarPlanilha } from "./importacao";
 import { importarPlanilhaSimples, conciliarComJuditBackground } from "./importacaoSimples";
+import { metricsQualidadeJudit, listRegistrosProblemáticos, creditoRestanteEsteMs } from "./judit-qualidade";
 import {
   sleep,
   buscarESalvarProcessoJudit,
@@ -1790,6 +1791,24 @@ ${JSON.stringify(processo, null, 2)}`;
         await declinarProcesso(input.processoId, input.motivo);
         return { ok: true };
       }),
+  }),
+
+  // ─── Judit: Qualidade de Dados ─────────────────────────────────────────────────────────────
+  juditQualidade: router({
+    metricas: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return metricsQualidadeJudit();
+    }),
+    registrosProblemáticos: protectedProcedure
+      .input(z.object({ page: z.number().default(1), pageSize: z.number().default(50) }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        return listRegistrosProblemáticos(input.page, input.pageSize);
+      }),
+    creditoRestante: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return creditoRestanteEsteMs();
+    }),
   }),
 
   // ─── Judit: Problemas ──────────────────────────────────────────────────────────────────────

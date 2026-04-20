@@ -1,0 +1,1 @@
+ALTER TABLE `judit_consulta_log` ADD `request_id_invalido` boolean DEFAULT false NOT NULL;

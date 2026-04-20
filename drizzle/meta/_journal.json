@@ -134,6 +134,13 @@
       "when": 1776461233677,
       "tag": "0018_right_owl",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1776710583025,
+      "tag": "0019_bent_baron_strucker",
+      "breakpoints": true
     }
   ]
 }
