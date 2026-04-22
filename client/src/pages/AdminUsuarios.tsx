@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Plus, Copy, CheckCircle, XCircle, Users, Link, Trash2, Pencil, Eye } from "lucide-react";
+import { Loader2, Plus, Copy, CheckCircle, XCircle, Users, Link, Trash2, Pencil, Eye, UserPlus, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
@@ -332,6 +332,183 @@ function GerarConviteDialog({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
+// ─── Dialog de Novo Usuário (Pré-cadastro pelo Admin) ───────────────────────
+function NovoUsuarioDialog({ onSuccess }: { onSuccess: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [nome, setNome] = useState("");
+  const [role, setRole] = useState<"advogado" | "investidor" | "advogado_investidor">("advogado");
+  const [linkGerado, setLinkGerado] = useState<string | null>(null);
+
+  const criar = trpc.admin.criarUsuario.useMutation({
+    onSuccess: (data) => {
+      const link = `${window.location.origin}/convite/${data.conviteToken}`;
+      setLinkGerado(link);
+      onSuccess();
+    },
+    onError: (err) => toast.error(err.message || "Erro ao criar usuário"),
+  });
+
+  const copiarLink = () => {
+    if (!linkGerado) return;
+    navigator.clipboard.writeText(linkGerado);
+    toast.success("Link copiado!");
+  };
+
+  const handleClose = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (!isOpen) {
+      setNome("");
+      setRole("advogado");
+      setLinkGerado(null);
+    }
+  };
+
+  const handleSalvar = () => {
+    const nomeTrimmed = nome.trim();
+    if (nomeTrimmed.length < 2) {
+      toast.error("Nome deve ter pelo menos 2 caracteres");
+      return;
+    }
+    criar.mutate({ nome: nomeTrimmed, roleConvite: role });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="default">
+          <UserPlus className="h-4 w-4 mr-1" />
+          Novo Usuário
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Cadastrar Novo Usuário</DialogTitle>
+          <DialogDescription>
+            Crie o usuário agora e gere o link de acesso para enviar por WhatsApp ou e-mail.
+          </DialogDescription>
+        </DialogHeader>
+
+        {!linkGerado ? (
+          <>
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="novo-usuario-nome">Nome completo <span className="text-red-500">*</span></Label>
+                <Input
+                  id="novo-usuario-nome"
+                  placeholder="Ex: João da Silva"
+                  value={nome}
+                  onChange={(e) => setNome(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSalvar()}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Tipo de acesso</Label>
+                <Select value={role} onValueChange={(v) => setRole(v as typeof role)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="advogado">Advogado Parceiro</SelectItem>
+                    <SelectItem value="investidor">Investidor</SelectItem>
+                    <SelectItem value="advogado_investidor">Advogado & Investidor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+              <Button onClick={handleSalvar} disabled={criar.isPending || !nome.trim()}>
+                {criar.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+                Salvar e Gerar Link
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <div className="space-y-4 py-2">
+            <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+              <p className="text-xs font-medium text-green-800 mb-1">✅ Usuário criado com sucesso!</p>
+              <p className="text-xs text-green-700 mb-2">Envie o link abaixo para o usuário acessar o sistema pela primeira vez:</p>
+              <p className="text-xs text-green-700 break-all font-mono bg-white border border-green-100 rounded p-2">{linkGerado}</p>
+            </div>
+            <Button className="w-full" onClick={copiarLink}>
+              <Copy className="h-4 w-4 mr-2" />
+              Copiar Link de Acesso
+            </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              O usuário aparece como <strong>"Aguardando acesso"</strong> até fazer o primeiro login.
+            </p>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Dialog de Gerar Link de Acesso (para usuário já pré-cadastrado) ─────────
+function GerarLinkAcessoDialog({ usuarioId, nomeUsuario, onSuccess }: { usuarioId: number; nomeUsuario: string; onSuccess: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [linkGerado, setLinkGerado] = useState<string | null>(null);
+
+  const gerar = trpc.admin.gerarLinkAcesso.useMutation({
+    onSuccess: (data) => {
+      const link = `${window.location.origin}/convite/${data.token}`;
+      setLinkGerado(link);
+      onSuccess();
+    },
+    onError: (err) => toast.error(err.message || "Erro ao gerar link"),
+  });
+
+  const copiarLink = () => {
+    if (!linkGerado) return;
+    navigator.clipboard.writeText(linkGerado);
+    toast.success("Link copiado!");
+  };
+
+  const handleClose = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (!isOpen) setLinkGerado(null);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" title="Gerar link de acesso">
+          <Link className="h-3.5 w-3.5 mr-1" />
+          Gerar Link
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Gerar Link de Acesso</DialogTitle>
+          <DialogDescription>
+            Gere um novo link de acesso para <strong>{nomeUsuario}</strong>. O link anterior será invalidado.
+          </DialogDescription>
+        </DialogHeader>
+        {!linkGerado ? (
+          <DialogFooter className="pt-4">
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+            <Button onClick={() => gerar.mutate({ usuarioId })} disabled={gerar.isPending}>
+              {gerar.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              Gerar Novo Link
+            </Button>
+          </DialogFooter>
+        ) : (
+          <div className="space-y-4 py-2">
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-xs font-medium text-blue-800 mb-2">Link gerado! Envie para {nomeUsuario}:</p>
+              <p className="text-xs text-blue-700 break-all font-mono bg-white border border-blue-100 rounded p-2">{linkGerado}</p>
+            </div>
+            <Button className="w-full" onClick={copiarLink}>
+              <Copy className="h-4 w-4 mr-2" />
+              Copiar Link
+            </Button>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Visualizar Como Button ──────────────────────────────────────────────────
 function VisualizarComoButton({ usuarioId, nomeUsuario }: { usuarioId: number; nomeUsuario: string }) {
   const iniciar = trpc.admin.iniciarImpersonacao.useMutation({
@@ -515,11 +692,17 @@ export default function AdminUsuarios() {
         {/* Aba de Usuários */}
         <TabsContent value="usuarios">
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Usuários do Sistema</CardTitle>
-              <CardDescription className="text-xs mt-0.5">
-                Gerencie o acesso dos usuários
-              </CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <div>
+                <CardTitle className="text-base">Usuários do Sistema</CardTitle>
+                <CardDescription className="text-xs mt-0.5">
+                  Gerencie o acesso dos usuários
+                </CardDescription>
+              </div>
+              <NovoUsuarioDialog onSuccess={() => {
+                utils.admin.listarUsuarios.invalidate();
+                utils.admin.listarConvites.invalidate();
+              }} />
             </CardHeader>
             <CardContent>
               {loadingUsuarios ? (
@@ -574,7 +757,11 @@ export default function AdminUsuarios() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            {u.ativo ? (
+                            {(u as { statusCadastro?: string }).statusCadastro === "aguardando_acesso" ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-amber-700">
+                                <Clock className="h-3 w-3" /> Aguardando acesso
+                              </span>
+                            ) : u.ativo ? (
                               <span className="inline-flex items-center gap-1 text-xs text-green-700">
                                 <CheckCircle className="h-3 w-3" /> Ativo
                               </span>
@@ -603,6 +790,14 @@ export default function AdminUsuarios() {
                               {/* Botão Visualizar como — apenas para não-admins com extraRoles */}
                               {u.role !== "admin" && extraRoles.length > 0 && (
                                 <VisualizarComoButton usuarioId={u.id} nomeUsuario={u.name ?? "Usuário"} />
+                              )}
+                              {/* Botão Gerar Link — apenas para usuários aguardando acesso */}
+                              {(u as { statusCadastro?: string }).statusCadastro === "aguardando_acesso" && (
+                                <GerarLinkAcessoDialog
+                                  usuarioId={u.id}
+                                  nomeUsuario={u.name ?? "Usuário"}
+                                  onSuccess={() => utils.admin.listarConvites.invalidate()}
+                                />
                               )}
                               {/* Botão de ativar/desativar — apenas para não-admins */}
                               {u.role !== "admin" && (

@@ -72,6 +72,9 @@ import {
   metricsInvestidor,
   // Judit Consultas
   getConsultaRecenteJudit,
+  // Pré-cadastro de usuário pelo admin
+  criarUsuarioPreCadastrado,
+  gerarLinkAcessoUsuario,
 } from "./db";
 import { processarPlanilha } from "./importacao";
 import { importarPlanilhaSimples, conciliarComJuditBackground } from "./importacaoSimples";
@@ -1036,7 +1039,40 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         );
         return { ok: true };
       }),
-    // ─── Configurações do Sistema ─────────────────────────────────────────────
+
+    // ─── Pré-cadastro de Usuário pelo Admin ───────────────────────────────────────────────
+    criarUsuario: protectedProcedure
+      .input(z.object({
+        nome: z.string().min(2, "Nome deve ter pelo menos 2 caracteres").max(100),
+        roleConvite: z.enum(["advogado", "investidor", "advogado_investidor"]),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const extraRoles = input.roleConvite === "advogado_investidor"
+          ? ["advogado", "investidor"]
+          : [input.roleConvite];
+        const { userId, conviteToken } = await criarUsuarioPreCadastrado({
+          nome: input.nome,
+          extraRoles,
+          adminId: ctx.user.id,
+        });
+        return { userId, conviteToken };
+      }),
+
+    gerarLinkAcesso: protectedProcedure
+      .input(z.object({
+        usuarioId: z.number(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { token } = await gerarLinkAcessoUsuario({
+          usuarioId: input.usuarioId,
+          adminId: ctx.user.id,
+        });
+        return { token };
+      }),
+
+    // ─── Configurações do Sistema ────────────────────────────────────────────────────
     getConfiguracoes: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
       return getConfiguracoes();
@@ -1673,18 +1709,27 @@ ${JSON.stringify(processo, null, 2)}`;
         const convite = await getConviteByToken(input.token);
         if (!convite) return { valido: false, motivo: "Link de convite inválido ou expirado. Solicite um novo ao administrador." };
         if (!convite.ativo) return { valido: false, motivo: "Este convite já foi utilizado ou foi revogado." };
-        if (convite.usadoPor) return { valido: false, motivo: "Este convite já foi utilizado." };
         if (convite.expiradoEm && new Date() > new Date(convite.expiradoEm)) return { valido: false, motivo: "Link de convite inválido ou expirado. Solicite um novo ao administrador." };
-        return { valido: true, roleConvite: convite.roleConvite, token: convite.token };
+        // Se o convite já tem usadoEm (foi completado), é inválido
+        if (convite.usadoEm) return { valido: false, motivo: "Este convite já foi utilizado." };
+        // Se tem usadoPor mas sem usadoEm = pré-cadastro pelo admin, ainda válido
+        const preCadastrado = !!convite.usadoPor && !convite.usadoEm;
+        return { valido: true, roleConvite: convite.roleConvite, token: convite.token, preCadastrado };
       }),
 
     // Após OAuth: vincular convite ao usuário logado
     vincularAoUsuario: protectedProcedure
       .input(z.object({ token: z.string() }))
       .mutation(async ({ input, ctx }) => {
+        const db = await (await import("./db")).getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const { users: usersTable } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+
         const convite = await getConviteByToken(input.token);
         if (!convite) throw new TRPCError({ code: "NOT_FOUND", message: "Convite não encontrado" });
-        if (!convite.ativo || convite.usadoPor) throw new TRPCError({ code: "BAD_REQUEST", message: "Convite já utilizado" });
+        if (!convite.ativo) throw new TRPCError({ code: "BAD_REQUEST", message: "Convite já foi revogado" });
+        if (convite.usadoEm) throw new TRPCError({ code: "BAD_REQUEST", message: "Convite já utilizado" });
         if (convite.expiradoEm && new Date() > new Date(convite.expiradoEm)) throw new TRPCError({ code: "BAD_REQUEST", message: "Convite expirado" });
 
         // Definir extra_roles baseado no roleConvite
@@ -1692,8 +1737,56 @@ ${JSON.stringify(processo, null, 2)}`;
           ? ["advogado", "investidor"]
           : [convite.roleConvite];
 
+        // Caso 1: Convite de pré-cadastro (usadoPor já preenchido pelo admin)
+        if (convite.usadoPor && !convite.usadoEm) {
+          const [usuarioPreCadastrado] = await db
+            .select()
+            .from(usersTable)
+            .where(eq(usersTable.id, convite.usadoPor))
+            .limit(1);
+
+          if (usuarioPreCadastrado && usuarioPreCadastrado.preCadastradoPeloAdmin) {
+            // Vincular o openId real ao usuário pré-cadastrado
+            await db.update(usersTable)
+              .set({
+                openId: ctx.user.openId,
+                // Manter o nome do pré-cadastro se o usuário não tiver nome no OAuth
+                name: ctx.user.name || usuarioPreCadastrado.name,
+                email: ctx.user.email || usuarioPreCadastrado.email,
+                statusCadastro: "ativo",
+                preCadastradoPeloAdmin: false,
+                lastSignedIn: new Date(),
+              })
+              .where(eq(usersTable.id, usuarioPreCadastrado.id));
+
+            // Marcar convite como usado
+            await usarConvite(input.token, usuarioPreCadastrado.id);
+
+            // Remover o usuário duplicado criado pelo OAuth (se houver)
+            // O OAuth cria um novo usuário com o openId, mas já atualizamos o pré-cadastrado
+            const [duplicado] = await db
+              .select({ id: usersTable.id })
+              .from(usersTable)
+              .where(eq(usersTable.openId, ctx.user.openId))
+              .limit(1);
+
+            if (duplicado && duplicado.id !== usuarioPreCadastrado.id) {
+              // Deletar o duplicado criado pelo OAuth
+              await db.delete(usersTable).where(eq(usersTable.id, duplicado.id));
+            }
+
+            return { ok: true, extraRoles };
+          }
+        }
+
+        // Caso 2: Convite normal (sem pré-cadastro)
         await setUserExtraRoles(ctx.user.id, extraRoles, convite.id);
         await usarConvite(input.token, ctx.user.id);
+
+        // Atualizar status para ativo
+        await db.update(usersTable)
+          .set({ statusCadastro: "ativo" })
+          .where(eq(usersTable.id, ctx.user.id));
 
         return { ok: true, extraRoles };
       }),

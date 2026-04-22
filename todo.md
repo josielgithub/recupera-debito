@@ -681,12 +681,26 @@
 
 
 ## Problema 1: Aba "Problemas" Não Mostra Registros
-- [ ] Investigar query da rota juditProblemas.listar
-- [ ] Verificar se há filtro que exclui todos os registros
-- [ ] Abrir console do navegador e capturar erro exato
-- [ ] Corrigir e confirmar que 64 registros aparecem
+- [x] Investigar query da rota juditProblemas.listar
+- [x] Verificar se há filtro que exclui todos os registros
+- [x] Abrir console do navegador e capturar erro exato
+- [x] Corrigir e confirmar que 64 registros aparecem (migration error_id aplicada)
 
 ## Problema 2: Análise de Taxa de Sucesso (56%)
-- [ ] Distribuição de status das 631 consultas (sucesso, nao_encontrado, erro)
-- [ ] Distribuição de status dos 355 registros válidos
-- [ ] Top 10 tribunais com maior taxa de nao_encontrado
+- [x] Distribuição de status das 631 consultas (sucesso, nao_encontrado, erro)
+- [x] Distribuição de status dos 355 registros válidos
+- [x] Top 10 tribunais com maior taxa de nao_encontrado
+
+## Request ID na Aba Judit > Problemas
+- [x] Adicionar coluna request_id na tabela visual da aba Problemas
+- [x] Adicionar campo request_id na exportação CSV da aba Problemas
+
+## Novo Fluxo de Cadastro Direto pelo Admin
+- [x] Migration: adicionar coluna `statusCadastro` (enum: aguardando_acesso, ativo, inativo) na tabela users
+- [x] Backend: procedure admin.criarUsuario (nome, roleConvite) — cria usuário e gera convite automaticamente
+- [x] Backend: procedure admin.gerarLinkAcesso (usuarioId) — gera ou regenera token de acesso
+- [x] Backend: atualizar fluxo OAuth para vincular usuário pré-cadastrado (usar nome e role já definidos)
+- [x] Frontend: botão "+ Novo Usuário" no AdminUsuarios com Dialog (nome, role, salvar)
+- [x] Frontend: botão "Gerar Link" para usuários com status "Aguardando acesso"
+- [x] Frontend: mostrar status "Aguardando acesso" / "Ativo" na tabela de usuários
+- [x] Manter fluxo atual de convite funcionando

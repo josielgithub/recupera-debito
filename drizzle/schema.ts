@@ -27,6 +27,10 @@ export const users = mysqlTable("users", {
   oab: varchar("oab", { length: 30 }),                        // número OAB do advogado (ex: OAB/MT 12345)
   whatsappSuporte: varchar("whatsapp_suporte", { length: 20 }), // WhatsApp de suporte do advogado
   bio: text("bio"),                                          // bio/apresentação do advogado
+  // Status de cadastro: aguardando_acesso = pré-cadastrado pelo admin, ativo = já fez OAuth
+  statusCadastro: mysqlEnum("status_cadastro", ["aguardando_acesso", "ativo", "inativo"]).default("ativo").notNull(),
+  // openId placeholder para usuários pré-cadastrados (antes do OAuth)
+  preCadastradoPeloAdmin: boolean("pre_cadastrado_pelo_admin").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),

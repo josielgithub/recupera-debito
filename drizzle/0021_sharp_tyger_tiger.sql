@@ -1,0 +1,2 @@
+ALTER TABLE `users` ADD `status_cadastro` enum('aguardando_acesso','ativo','inativo') DEFAULT 'ativo' NOT NULL;--> statement-breakpoint
+ALTER TABLE `users` ADD `pre_cadastrado_pelo_admin` boolean DEFAULT false NOT NULL;

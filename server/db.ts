@@ -2434,3 +2434,155 @@ export async function getConsultaRecenteJudit(cnj: string) {
     .limit(1);
   return consulta ?? null;
 }
+
+// ─── Pré-cadastro de Usuário pelo Admin ──────────────────────────────────────
+
+/**
+ * Cria um usuário pré-cadastrado pelo admin (sem openId real ainda).
+ * O openId é um placeholder UUID que será substituído quando o usuário fizer OAuth.
+ */
+export async function criarUsuarioPreCadastrado(opts: {
+  nome: string;
+  extraRoles: string[];
+  adminId: number;
+}): Promise<{ userId: number; conviteToken: string }> {
+  const db = await getDb();
+  if (!db) throw new Error("Banco de dados não disponível");
+
+  // Gerar placeholder único para openId (será substituído no OAuth)
+  const placeholderOpenId = `pre_${crypto.randomUUID()}`;
+  const conviteToken = crypto.randomUUID();
+
+  // Determinar roleConvite
+  const roleConvite = opts.extraRoles.includes("advogado") && opts.extraRoles.includes("investidor")
+    ? "advogado_investidor"
+    : opts.extraRoles.includes("advogado")
+      ? "advogado"
+      : "investidor";
+
+  // Criar usuário com status aguardando_acesso
+  await db.insert(users).values({
+    openId: placeholderOpenId,
+    name: opts.nome,
+    role: "user",
+    extraRoles: opts.extraRoles,
+    ativo: true,
+    statusCadastro: "aguardando_acesso",
+    preCadastradoPeloAdmin: true,
+    lastSignedIn: new Date(),
+  });
+
+  // Buscar o ID do usuário recém-criado
+  const [novoUsuario] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.openId, placeholderOpenId))
+    .limit(1);
+
+  if (!novoUsuario) throw new Error("Falha ao criar usuário");
+
+  // Criar convite vinculado ao usuário
+  await db.insert(convites).values({
+    token: conviteToken,
+    roleConvite: roleConvite as "advogado" | "investidor" | "advogado_investidor",
+    geradoPor: opts.adminId,
+    usadoPor: novoUsuario.id, // Pré-vincular ao usuário criado
+    ativo: true,
+  });
+
+  // Atualizar conviteId no usuário
+  const [conviteCriado] = await db
+    .select({ id: convites.id })
+    .from(convites)
+    .where(eq(convites.token, conviteToken))
+    .limit(1);
+
+  if (conviteCriado) {
+    await db.update(users)
+      .set({ conviteId: conviteCriado.id })
+      .where(eq(users.id, novoUsuario.id));
+  }
+
+  return { userId: novoUsuario.id, conviteToken };
+}
+
+/**
+ * Gera ou regenera um link de acesso para um usuário pré-cadastrado.
+ * Cria um novo convite com token UUID único.
+ */
+export async function gerarLinkAcessoUsuario(opts: {
+  usuarioId: number;
+  adminId: number;
+}): Promise<{ token: string }> {
+  const db = await getDb();
+  if (!db) throw new Error("Banco de dados não disponível");
+
+  // Verificar se o usuário existe e está aguardando acesso
+  const [usuario] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, opts.usuarioId))
+    .limit(1);
+
+  if (!usuario) throw new Error("Usuário não encontrado");
+  if (usuario.statusCadastro === "ativo") throw new Error("Usuário já está ativo — não precisa de link de acesso");
+
+  // Revogar convites anteriores não utilizados para este usuário
+  await db.update(convites)
+    .set({ ativo: false })
+    .where(and(
+      eq(convites.usadoPor, opts.usuarioId),
+      eq(convites.ativo, true),
+      isNull(convites.usadoEm),
+    ));
+
+  // Determinar roleConvite com base nos extraRoles do usuário
+  const extraRoles = (usuario.extraRoles as string[] | null) ?? [];
+  const roleConvite = extraRoles.includes("advogado") && extraRoles.includes("investidor")
+    ? "advogado_investidor"
+    : extraRoles.includes("advogado")
+      ? "advogado"
+      : extraRoles.includes("investidor")
+        ? "investidor"
+        : "advogado"; // fallback
+
+  const novoToken = crypto.randomUUID();
+
+  await db.insert(convites).values({
+    token: novoToken,
+    roleConvite: roleConvite as "advogado" | "investidor" | "advogado_investidor",
+    geradoPor: opts.adminId,
+    usadoPor: opts.usuarioId,
+    ativo: true,
+  });
+
+  return { token: novoToken };
+}
+
+/**
+ * Vincula um openId real a um usuário pré-cadastrado pelo admin.
+ * Chamado no OAuth callback quando um usuário pré-cadastrado faz login pela primeira vez.
+ */
+export async function vincularOpenIdAoPreCadastro(opts: {
+  openId: string;
+  nome: string | null;
+  email: string | null;
+  loginMethod: string | null;
+}): Promise<{ vinculado: boolean; usuarioId?: number }> {
+  const db = await getDb();
+  if (!db) return { vinculado: false };
+
+  // Verificar se já existe usuário com este openId
+  const [existente] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.openId, opts.openId))
+    .limit(1);
+
+  if (existente) return { vinculado: false }; // Já tem conta, fluxo normal
+
+  // Não há usuário com este openId — verificar se há convite ativo para vincular
+  // Neste caso, o admin pré-cadastrou mas não vinculou ao openId ainda
+  // O vínculo acontece via /convite/[token] no frontend
+  return { vinculado: false };
+}
