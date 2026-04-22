@@ -704,3 +704,9 @@
 - [x] Frontend: botão "Gerar Link" para usuários com status "Aguardando acesso"
 - [x] Frontend: mostrar status "Aguardando acesso" / "Ativo" na tabela de usuários
 - [x] Manter fluxo atual de convite funcionando
+
+## Correção do Comportamento de Importação (advogado_id em processos existentes)
+- [x] Identificar que importação não atualizava advogado_id em processos já existentes
+- [x] Corrigir procedure importarProcessos: quando advogado selecionado, atualizar advogado_id mesmo em processos existentes
+- [x] Reatribuir manualmente 84 processos do Marcos para Rogério Teópilo
+- [x] 50 testes Vitest passando após correção

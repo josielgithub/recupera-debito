@@ -1540,6 +1540,18 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
             // Verificar se processo já existe
             const existente = await getProcessoByCnj(cnj);
             if (existente) {
+              // Se um advogado foi selecionado na importação, atualizar o vínculo do processo
+              if (advogadoIdImportacao !== undefined) {
+                const { getDb } = await import("./db");
+                const { processos: processosTable } = await import("../drizzle/schema");
+                const { eq } = await import("drizzle-orm");
+                const db = await getDb();
+                if (db) {
+                  await db.update(processosTable)
+                    .set({ advogadoId: advogadoIdImportacao })
+                    .where(eq(processosTable.cnj, cnj));
+                }
+              }
               atualizadas++;
               detalhes.push({ linha: i + 2, cnj, status: "atualizado" });
             } else {
