@@ -60,6 +60,9 @@ import {
   Users,
   Activity,
   Gavel,
+  AlertTriangle,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 import { STATUS_RESUMIDO_LABELS, STATUS_CORES } from "@shared/const";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -359,6 +362,31 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
     onError: (err) => toast.error(`Erro: ${err.message}`),
   });
 
+  // Ação rápida de revisão manual (ganho/perdido)
+  const revisaoRapidaMutation = trpc.admin.atualizarStatusProcesso.useMutation({
+    onSuccess: (_, vars) => {
+      const label = vars.status === "concluido_ganho" ? "Marcado como Ganho" : "Marcado como Perdido";
+      toast.success(label);
+      refetch();
+    },
+    onError: (err) => toast.error(`Erro: ${err.message}`),
+  });
+
+  // Filtro rápido de revisão manual
+  const [modoRevisaoManual, setModoRevisaoManual] = useState(false);
+
+  function toggleRevisaoManual() {
+    setModoRevisaoManual((v) => !v);
+    if (!modoRevisaoManual) {
+      setFiltros((f) => ({ ...f, status: ["arquivado_encerrado"] }));
+      setFiltrosAplicados((f) => ({ ...f, status: ["arquivado_encerrado"] }));
+    } else {
+      setFiltros((f) => ({ ...f, status: [] }));
+      setFiltrosAplicados((f) => ({ ...f, status: [] }));
+    }
+    setPagina(1);
+  }
+
   const processos = (data?.processos ?? []) as ProcessoRow[];
   const total = data?.total ?? 0;
   const totalPaginas = Math.ceil(total / 50);
@@ -462,11 +490,24 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <FileText className="w-4 h-4 text-primary" />
-              Todos os processos
+              {modoRevisaoManual ? "Revisão manual necessária" : "Todos os processos"}
               <Badge variant="outline" className="ml-1 text-xs">{total}</Badge>
             </CardTitle>
 
-            {/* Botão de filtro avançado */}
+            <div className="flex items-center gap-2">
+              {/* Botão filtro rápido: Revisão Manual */}
+              <Button
+                variant={modoRevisaoManual ? "default" : "outline"}
+                size="sm"
+                className={`h-8 text-xs ${modoRevisaoManual ? "bg-amber-500 hover:bg-amber-600 border-amber-500" : ""}`}
+                onClick={toggleRevisaoManual}
+              >
+                <AlertTriangle className="w-3.5 h-3.5 mr-1.5" />
+                Revisão manual
+                {modoRevisaoManual && <X className="w-3 h-3 ml-1.5" />}
+              </Button>
+
+              {/* Botão de filtro avançado */}
             <Button
               variant={filtrosAtivos > 0 ? "default" : "outline"}
               size="sm"
@@ -481,6 +522,7 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
                 </Badge>
               )}
             </Button>
+            </div>
           </div>
 
           {/* Painel de filtros */}
@@ -854,7 +896,7 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
                       <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                         {formatarData(p.updatedAt)}
                       </TableCell>
-                      <TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <div className="flex gap-0.5">
                           <Button
                             variant="ghost"
@@ -883,6 +925,31 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
                           >
                             <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />
                           </Button>
+                          {/* Ações rápidas para processos em revisão manual */}
+                          {p.statusResumido === "arquivado_encerrado" && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 hover:text-green-600 hover:bg-green-50"
+                                title="Marcar como Ganho"
+                                disabled={revisaoRapidaMutation.isPending}
+                                onClick={() => revisaoRapidaMutation.mutate({ cnj: p.cnj, status: "concluido_ganho" as any })}
+                              >
+                                <ThumbsUp className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 hover:text-red-600 hover:bg-red-50"
+                                title="Marcar como Perdido"
+                                disabled={revisaoRapidaMutation.isPending}
+                                onClick={() => revisaoRapidaMutation.mutate({ cnj: p.cnj, status: "concluido_perdido" as any })}
+                              >
+                                <ThumbsDown className="w-3.5 h-3.5" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

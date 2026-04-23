@@ -718,3 +718,12 @@
 - [x] Log [Judit] Alvará detectado para CNJ ... com origem da detecção
 - [x] Reprocessar 422 processos existentes: 55 atualizados para concluido_ganho
 - [x] 50 testes Vitest passando
+
+## Classificação Automática de Processos Arquivados
+- [x] Regra 2: arquivado + related_lawsuits → em_recurso (mapearStatusJudit)
+- [x] Regra 3: arquivado + palavras-chave no last_step → concluido_perdido (mapearStatusJudit)
+- [x] Regra 4: arquivado sem related_lawsuits e sem palavras-chave → manter arquivado_encerrado (revisão manual)
+- [x] Reclassificação retroativa: 15 → em_recurso, 143 → concluido_perdido, 61 → revisão manual
+- [x] Botão "Revisão manual" na tela AdminProcessos com filtro rápido
+- [x] Botões ThumbsUp/ThumbsDown por linha para processos arquivado_encerrado
+- [x] 50 testes Vitest passando

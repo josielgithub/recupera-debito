@@ -374,6 +374,30 @@ export function mapearStatusJudit(data: unknown, cnj?: string): { statusResumido
   if (/arquivado|extinto|encerrado|baixa definitiva|baixado/.test(textoCompleto) ||
       (statusVal === "finalizado" && /arquivado|extinto|encerrado/.test(phaseVal)) ||
       texto === "finalizado" || statusVal === "finalizado") {
+
+    // ── REGRA 2: Arquivado + related_lawsuits → em_recurso ─────────────────────────────
+    const relatedLawsuits = (
+      payload.related_lawsuits ??
+      (payload.response_data as Record<string, unknown> | undefined)?.related_lawsuits
+    ) as unknown[] | undefined;
+    if (Array.isArray(relatedLawsuits) && relatedLawsuits.length > 0) {
+      if (cnj) console.log(`[Judit] Arquivado com related_lawsuits para CNJ ${cnj} — regra: em_recurso`);
+      return { statusResumido: "em_recurso", statusOriginal };
+    }
+
+    // ── REGRA 3: Arquivado + sem related_lawsuits + palavras-chave → concluido_perdido ────────
+    const lastStep = (
+      payload.last_step ??
+      (payload.response_data as Record<string, unknown> | undefined)?.last_step
+    ) as Record<string, unknown> | undefined;
+    const lastStepContent = String(lastStep?.content ?? lastStep?.description ?? lastStep?.title ?? "").toLowerCase();
+    const PERDIDO_REGEX = /arquivado definitivamente|baixa definitiva|processo arquivado|extinto|extin[cç][aã]o|improcedente|julgado improcedente|n[aã]o provido|negado provimento/i;
+    if (PERDIDO_REGEX.test(lastStepContent)) {
+      if (cnj) console.log(`[Judit] Arquivado definitivo para CNJ ${cnj} — regra: concluido_perdido (last_step: "${lastStepContent.substring(0, 60)}")`);
+      return { statusResumido: "concluido_perdido", statusOriginal };
+    }
+
+    // ── REGRA 4: Manter arquivado_encerrado para revisão manual ───────────────────────
     statusResumido = "arquivado_encerrado";
   } else if (/^ativo$|^ativa$|movimento|andamento|tramit|em curso|em andamento/.test(texto) ||
              /^ativo$|^ativa$/.test(statusVal)) {
