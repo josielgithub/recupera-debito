@@ -638,40 +638,45 @@ export const appRouter = router({
         // Extrair dados do payload Judit
         const payload = processo.rawPayload as Record<string, unknown> | null;
         const rd = (payload as Record<string, unknown> | null);
-        const partes: string[] = [];
-        if (rd && Array.isArray(rd.parties)) {
-          for (const p of rd.parties as Record<string, unknown>[]) {
-            const nome = (p.name as string) ?? "";
-            const polo = (p.polarity as string) ?? "";
-            if (nome) partes.push(`${nome} (${polo === "active" ? "Polo Ativo" : polo === "passive" ? "Polo Passivo" : polo})`);
-          }
-        }
-        const steps: string[] = [];
-        if (rd && Array.isArray(rd.steps)) {
-          const allSteps = rd.steps as Record<string, unknown>[];
-          // Pegar as últimas 20 movimentações
-          const recentes = allSteps.slice(-20);
-          for (const s of recentes) {
-            const data = s.step_date ? new Date(s.step_date as string).toLocaleDateString("pt-BR") : "";
-            const conteudo = (s.content as string) ?? "";
-            if (conteudo) steps.push(`${data}: ${conteudo}`);
-          }
-        }
-        const lastStep = rd && typeof rd.last_step === "object" && rd.last_step
-          ? ((rd.last_step as Record<string, unknown>).content as string) ?? ""
-          : "";
-        const tribunal = (rd?.tribunal_acronym as string) ?? "";
-        const fase = (rd?.phase as string) ?? "";
-        const classe = (rd?.main_subject as string) ?? (rd?.class_code as string) ?? "";
-        const valor = (rd?.value as number) ?? null;
+
+        // Campos para o novo user prompt
+        const rdName = (rd?.name as string) ?? "Não informado";
+        const rdTribunal = (rd?.tribunal_acronym as string) ?? "Não informado";
+        const rdCounty = (rd?.county as string) ?? "Não informado";
+        const rdState = (rd?.state as string) ?? "Não informado";
+        const rdArea = (rd?.area as string) ?? "Não informado";
+        const rdPhase = (rd?.phase as string) ?? "Não informado";
+        const rdAmount = rd?.value ?? rd?.amount ?? null;
+        const rdAmountFmt = rdAmount ? `R$ ${Number(rdAmount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "Não informado";
+        const rdDistDate = rd?.distribution_date
+          ? new Date(rd.distribution_date as string).toLocaleDateString("pt-BR")
+          : "Não informado";
+        const rdLastStepObj = (rd?.last_step ?? null) as Record<string, unknown> | null;
+        const rdLastStepContent = (rdLastStepObj?.content as string) ?? "Não informado";
+        const rdLastStepDate = rdLastStepObj?.step_date
+          ? new Date(rdLastStepObj.step_date as string).toLocaleDateString("pt-BR")
+          : "Não informado";
+        const rdSteps = Array.isArray(rd?.steps) ? (rd!.steps as unknown[]) : [];
+        const rdStepsCount = rdSteps.length;
+        const rdSubjects = Array.isArray(rd?.subjects)
+          ? (rd!.subjects as Record<string, unknown>[]).map((s) => s.name ?? s.code ?? "").filter(Boolean).join(", ")
+          : "Não informado";
+        const rdAttachments = Array.isArray(rd?.attachments) ? (rd!.attachments as unknown[]) : [];
+        const rdAttachmentsCount = rdAttachments.length;
+        const rdAttachmentNames = rdAttachments.length > 0
+          ? (rdAttachments as Record<string, unknown>[]).map((a) => a.attachment_name ?? a.name ?? "").filter(Boolean).join(", ")
+          : "Nenhum";
+        const rdRelated = Array.isArray(rd?.related_lawsuits) ? (rd!.related_lawsuits as unknown[]) : [];
+        const rdRelatedCount = rdRelated.length;
+
         const statusLabel: Record<string, string> = {
           concluido_ganho: "Ganho (Procedente)",
           concluido_perdido: "Perdido (Improcedente)",
           acordo_negociacao: "Acordo/Conciliação",
-          arquivado_encerrado: "Arquivado/Encerrado",
+          arquivado_encerrado: "Arquivado/Encerrado (Revisão Manual)",
           em_andamento: "Em Andamento",
+          em_recurso: "Em Recurso (Instância Superior)",
           cumprimento_de_sentenca: "Cumprimento de Sentença",
-          recurso: "Recurso",
           em_analise_inicial: "Em Análise Inicial",
           protocolado: "Protocolado",
           suspenso: "Suspenso",
@@ -680,47 +685,65 @@ export const appRouter = router({
         };
         const statusTexto = statusLabel[processo.statusResumido ?? ""] ?? processo.statusResumido ?? "Desconhecido";
 
-        const prompt = `Você é um assistente jurídico especializado em direito do consumidor e processos cíveis.
-Gere um resumo executivo claro e objetivo do processo judicial abaixo, em português brasileiro.
+        const prompt = `Analise este processo judicial:
 
-**Dados do Processo:**
-- CNJ: ${processo.cnj}
-- Tribunal: ${tribunal || "Não informado"}
-- Fase atual: ${fase || "Não informada"}
-- Classe/Assunto: ${classe || "Não informado"}
-- Valor da causa: ${valor ? `R$ ${valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "Não informado"}
-- Status no sistema: ${statusTexto}
-- Cliente: ${processo.clienteNome ?? "Não vinculado"}
-- Advogado: ${processo.advogado ?? "Não informado"}
+CNJ: ${processo.cnj}
+Partes: ${rdName}
+Tribunal: ${rdTribunal} — ${rdCounty} — ${rdState}
+Área: ${rdArea}
+Status atual: ${statusTexto}
+Fase: ${rdPhase}
+Valor em disputa: ${rdAmountFmt}
+Data de distribuição: ${rdDistDate}
+Última movimentação em ${rdLastStepDate}: ${rdLastStepContent}
+Total de movimentações: ${rdStepsCount}
+Assuntos: ${rdSubjects}
+Documentos anexados: ${rdAttachmentsCount}
+Nomes dos documentos: ${rdAttachmentNames}
+Processos relacionados em outras instâncias: ${rdRelatedCount}`;
 
-**Partes:**
-${partes.length > 0 ? partes.join("\n") : "Não disponível"}
+        const systemPrompt = `Você é um assistente jurídico especializado em processos de recuperação de débito no Brasil.
 
-**Últimas movimentações (cronológica):**
-${steps.length > 0 ? steps.join("\n") : "Não disponível"}
+CONTEXTO DO ESCRITÓRIO:
+- Atua exclusivamente em recuperação de crédito para pessoas físicas (consumidores)
+- Processos movidos contra bancos, financeiras e empresas de cobrança
+- Casos mais comuns: cobranças indevidas, negativação indevida, juros abusivos, tarifas bancárias ilegais e danos morais
+- Áreas: Direito do Consumidor e Direito Bancário
+- Tribunais: majoritariamente Juizados Especiais Cíveis em todo o Brasil
 
-**Última movimentação registrada:** ${lastStep || "Não disponível"}
+MODELO FINANCEIRO:
+- 51% do valor ganho sempre vai para o cliente
+- 49% dividido entre escritório, advogado e investidores
+- O valor da causa é o valor em disputa, não necessariamente o que será recebido
 
-Gere o resumo com as seguintes seções em Markdown:
-1. **Situação Atual** — status atual e fase do processo
-2. **Partes Envolvidas** — quem é o autor e o réu
-3. **Cronologia Resumida** — principais eventos em ordem cronológica (máximo 5 pontos)
-4. **Perspectiva** — análise objetiva das chances ou desfecho já ocorrido
+INTERPRETAÇÃO DE STATUS:
+- Alvará expedido = processo GANHO, cliente tem direito a receber
+- Baixa definitiva ou arquivado definitivamente sem alvará = processo provavelmente PERDIDO
+- Transitado em julgado com baixa = encerrado definitivamente, sem alvará provavelmente perdido
+- Trânsito em julgado sozinho = decisão final mas ainda pode ter execução pendente
+- Cumprimento de sentença = cliente ganhou e está na fase de receber
+- Remetidos os autos em grau de recurso = foi para instância superior, ainda em andamento
+- Conclusos para despacho = aguardando decisão do juiz
+- Decorrido prazo = prazo processual expirou, aguarda próximo passo
+- Juntada de certidão ou petição = movimentação administrativa, processo ativo
+- Related_lawsuits = processo relacionado em outra instância
+- Em andamento no JEC = prazo médio de 6 a 18 meses
 
-Seja conciso, direto e use linguagem acessível (não excessivamente técnica).`;
+FORMATO DA RESPOSTA:
+Responda sempre em português brasileiro, linguagem clara e direta, sem jargão jurídico.
+Escreva como se estivesse explicando para o próprio cliente leigo.
+Estruture em exatamente 4 parágrafos curtos com esses títulos em negrito:
+
+**Situação atual:** O que está acontecendo agora com o processo em 1 ou 2 frases.
+**Última movimentação:** O que significou a última movimentação em linguagem simples.
+**Próximo passo:** O que provavelmente vai acontecer a seguir.
+**Valor:** Se houver valor em disputa, mencionar o valor total e quanto o cliente pode receber (51%).
+
+Máximo 150 palavras no total. Seja objetivo e direto.`;
 
         const response = await invokeLLM({
           messages: [
-            { role: "system", content: `Você é um assistente jurídico especializado em análise de processos judiciais brasileiros. Responda sempre em português brasileiro com linguagem clara e objetiva.
-
-INTERPRETAÇÃO DE STATUS — use estas definições ao analisar movimentações:
-- "Trânsito em julgado com baixa" = processo encerrado definitivamente. Se não houver alvará, provavelmente foi perdido ou encerrado sem pagamento ao autor.
-- "Remetidos os autos em grau de recurso" ou "instância superior" = processo ainda em andamento, foi para instância superior — não está encerrado.
-- "Juntada de certidão" = movimentação administrativa, processo ainda ativo — não indica encerramento.
-- "Decorrido prazo" = prazo processual expirou, aguarda próximo passo do juiz — processo ainda ativo.
-- "Conclusos para despacho" = processo aguardando decisão do juiz — processo ainda ativo.
-- "Alvará expedido" ou "alvará de levantamento" = processo ganho, houve pagamento ao autor.
-- "Arquivado definitivamente" sem alvará = processo encerrado sem pagamento, provavelmente perdido.` },
+            { role: "system", content: systemPrompt },
             { role: "user", content: prompt },
           ],
         });
