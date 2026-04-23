@@ -727,3 +727,10 @@
 - [x] Botão "Revisão manual" na tela AdminProcessos com filtro rápido
 - [x] Botões ThumbsUp/ThumbsDown por linha para processos arquivado_encerrado
 - [x] 50 testes Vitest passando
+
+## Melhorias na Classificação Automática (3 melhorias)
+- [x] Melhoria 1: "trânsito em julgado + baixa" → concluido_perdido (PERDIDO_REGEX atualizado)
+- [x] Melhoria 2: em_recurso pelo last_step (RECURSO_LAST_STEP_REGEX adicionado como REGRA 2b)
+- [x] Reclassificação retroativa dos 61 processos: 1 → em_recurso, 1 → concluido_perdido, 59 → revisão manual
+- [x] Melhoria 3: system prompt da LLM atualizado com bloco INTERPRETAÇÃO DE STATUS
+- [x] 50 testes Vitest passando

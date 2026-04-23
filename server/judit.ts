@@ -385,13 +385,21 @@ export function mapearStatusJudit(data: unknown, cnj?: string): { statusResumido
       return { statusResumido: "em_recurso", statusOriginal };
     }
 
-    // ── REGRA 3: Arquivado + sem related_lawsuits + palavras-chave → concluido_perdido ────────
+    // ── REGRA 2b: Arquivado + last_step indica recurso em instância superior → em_recurso ───
     const lastStep = (
       payload.last_step ??
       (payload.response_data as Record<string, unknown> | undefined)?.last_step
     ) as Record<string, unknown> | undefined;
     const lastStepContent = String(lastStep?.content ?? lastStep?.description ?? lastStep?.title ?? "").toLowerCase();
-    const PERDIDO_REGEX = /arquivado definitivamente|baixa definitiva|processo arquivado|extinto|extin[cç][aã]o|improcedente|julgado improcedente|n[aã]o provido|negado provimento/i;
+    const RECURSO_LAST_STEP_REGEX = /remetidos? os autos.*recurso|remetido.*inst[aâ]ncia superior|enviado ao tribunal|grau de recurso|inst[aâ]ncia superior|segunda inst[aâ]ncia|apela[cç][aã]o recebida|agravo recebido/i;
+    if (RECURSO_LAST_STEP_REGEX.test(lastStepContent)) {
+      if (cnj) console.log(`[Judit] Recurso detectado no last_step para CNJ ${cnj} — regra: em_recurso ("${lastStepContent.substring(0, 60)}")`);
+      return { statusResumido: "em_recurso", statusOriginal };
+    }
+
+    // ── REGRA 3: Arquivado + sem related_lawsuits + palavras-chave → concluido_perdido ────────
+    // Trânsito em julgado + baixa = encerrado definitivamente sem pagamento
+    const PERDIDO_REGEX = /arquivado definitivamente|baixa definitiva|processo arquivado|extinto|extin[cç][aã]o|improcedente|julgado improcedente|n[aã]o provido|negado provimento|tr[aâ]nsito em julgado.*com baixa|transitado em julgado.*baixa|tr[aâ]nsito em julgado.*baixa definitiva/i;
     if (PERDIDO_REGEX.test(lastStepContent)) {
       if (cnj) console.log(`[Judit] Arquivado definitivo para CNJ ${cnj} — regra: concluido_perdido (last_step: "${lastStepContent.substring(0, 60)}")`);
       return { statusResumido: "concluido_perdido", statusOriginal };
