@@ -108,6 +108,10 @@ import { updateAiSummary, updateValorObtido, getImportJob, listImportJobs,
   limparOperacoesExpiradas,
   getConsultaRecentePorCnj,
   getCustoConsultasMes,
+  marcarAutosSolicitado,
+  listProcessoAutos,
+  insertProcessoAuto,
+  marcarAutosDisponiveis,
 } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { createHash } from "crypto";
@@ -1102,6 +1106,92 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
           adminId: ctx.user.id,
         });
         return { token };
+      }),
+
+    // ─── Download de Autos Processuais ──────────────────────────────────────────────
+    baixarAutosProcessos: protectedProcedure
+      .input(z.object({
+        processoIds: z.array(z.number()).min(1).max(50),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+
+        const { getDb } = await import("./db");
+        const { processos: processosTable } = await import("../drizzle/schema");
+        const { inArray } = await import("drizzle-orm");
+
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+        // Buscar processos selecionados
+        const processosSelecionados = await db
+          .select()
+          .from(processosTable)
+          .where(inArray(processosTable.id, input.processoIds));
+
+        const resultado = {
+          iniciados: 0,
+          jaTemAutos: 0,
+          erros: 0,
+          detalhes: [] as { cnj: string; status: "iniciado" | "ja_tem_autos" | "erro"; erro?: string }[],
+        };
+
+        // Processar em lotes de 3 com pausa de 1s entre lotes
+        const LOTE_SIZE = 3;
+        for (let i = 0; i < processosSelecionados.length; i += LOTE_SIZE) {
+          const lote = processosSelecionados.slice(i, i + LOTE_SIZE);
+
+          await Promise.all(lote.map(async (processo) => {
+            try {
+              // Verificar se já tem autos
+              if (processo.autosDisponiveis) {
+                resultado.jaTemAutos++;
+                resultado.detalhes.push({ cnj: processo.cnj, status: "ja_tem_autos" });
+                return;
+              }
+
+              // Criar requisição Judit com with_attachments=true
+              const requestId = await criarRequisicaoJudit(processo.cnj, processo.id, true);
+
+              // Registrar no log de consulta com custo R$3,50
+              await insertJuditConsultaLog({
+                processoCnj: processo.cnj,
+                requestId,
+                tipo: "download_autos",
+                custo: "3.50",
+                status: "sucesso",
+                aprovadoPorId: ctx.user.id,
+                isDuplicata: false,
+              });
+
+              // Marcar como solicitado
+              await marcarAutosSolicitado(processo.id);
+
+              resultado.iniciados++;
+              resultado.detalhes.push({ cnj: processo.cnj, status: "iniciado" });
+              console.log(`[Autos] Download solicitado para CNJ ${processo.cnj} — requestId: ${requestId}`);
+            } catch (err) {
+              resultado.erros++;
+              resultado.detalhes.push({ cnj: processo.cnj, status: "erro", erro: String(err) });
+              console.error(`[Autos] Erro ao solicitar download para CNJ ${processo.cnj}:`, err);
+            }
+          }));
+
+          // Pausa de 1s entre lotes (exceto no último)
+          if (i + LOTE_SIZE < processosSelecionados.length) {
+            await sleep(1000);
+          }
+        }
+
+        return resultado;
+      }),
+
+    getAutosProcesso: protectedProcedure
+      .input(z.object({ processoId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { listProcessoAutos } = await import("./db");
+        return listProcessoAutos(input.processoId);
       }),
 
     // ─── Configurações do Sistema ────────────────────────────────────────────────────

@@ -155,6 +155,13 @@
       "when": 1776893062515,
       "tag": "0021_sharp_tyger_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "5",
+      "when": 1776972905771,
+      "tag": "0022_silky_abomination",
+      "breakpoints": true
     }
   ]
 }

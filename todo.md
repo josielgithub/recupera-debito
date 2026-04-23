@@ -734,3 +734,15 @@
 - [x] Reclassificação retroativa dos 61 processos: 1 → em_recurso, 1 → concluido_perdido, 59 → revisão manual
 - [x] Melhoria 3: system prompt da LLM atualizado com bloco INTERPRETAÇÃO DE STATUS
 - [x] 50 testes Vitest passando
+
+## Download de Autos Processuais
+- [x] Migration: colunas autosDisponiveis, autosDisponivelEm, autosSolicitadoEm na tabela processos
+- [x] Migration: tabela processo_autos (id, processoId, attachmentId, nomeArquivo, urlS3, fileKey, etc.)
+- [x] Backend: criarRequisicaoJudit com suporte a withAttachments=true
+- [x] Backend: rota tRPC admin.baixarAutosProcessos (seleção em lote, custo R$3,50/processo)
+- [x] Backend: rota tRPC admin.getAutosProcesso (listar autos de um processo)
+- [x] Backend: webhook processarResultadoJudit atualizado para salvar attachments no S3
+- [x] Frontend: botão "Baixar autos" na barra de ação em lote do AdminProcessos
+- [x] Frontend: dialog de confirmação com custo estimado antes do download
+- [x] Frontend: ícone de clipe (Paperclip) na coluna CNJ para processos com autos disponíveis
+- [x] Frontend: componente AutosProcessuaisCard no ProcessoDetalhe com lista de documentos e links de download

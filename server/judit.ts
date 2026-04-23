@@ -111,38 +111,46 @@ async function juditFetch(path: string, options: RequestInit = {}, attempt = 0):
 }
 
 // ─── Etapa 1: Criar requisição por CNJ ────────────────────────────────────
-export async function criarRequisicaoJudit(cnj: string, processoId?: number): Promise<string> {
-  // C3: Cooldown 24h — verificar se CNJ já foi consultado com sucesso nas últimas 24h
-  const consultaRecente = await getConsultaRecentePorCnj(cnj, 24);
-  if (consultaRecente) {
-    console.log(`[Judit] CNJ ${cnj} já consultado nas últimas 24h — reutilizando resultado. requestId: ${consultaRecente.requestId ?? 'N/A'}`);
-    // Retornar requestId existente ou buscar o mais recente no judit_requests
-    if (consultaRecente.requestId) return consultaRecente.requestId;
+export async function criarRequisicaoJudit(cnj: string, processoId?: number, withAttachments = false): Promise<string> {
+  // Para download de autos, pular cooldown (sempre criar nova requisição com attachments)
+  if (!withAttachments) {
+    // C3: Cooldown 24h — verificar se CNJ já foi consultado com sucesso nas últimas 24h
+    const consultaRecente = await getConsultaRecentePorCnj(cnj, 24);
+    if (consultaRecente) {
+      console.log(`[Judit] CNJ ${cnj} já consultado nas últimas 24h — reutilizando resultado. requestId: ${consultaRecente.requestId ?? 'N/A'}`);
+      // Retornar requestId existente ou buscar o mais recente no judit_requests
+      if (consultaRecente.requestId) return consultaRecente.requestId;
+      const existing = await getJuditRequestByCnj(cnj);
+      if (existing) return existing.requestId;
+    }
+
+    // Verificar se já existe requisição recente com status processing (evitar duplicatas)
     const existing = await getJuditRequestByCnj(cnj);
-    if (existing) return existing.requestId;
+    if (existing && existing.status === "processing") {
+      const minutoDesde = (Date.now() - existing.createdAt.getTime()) / (1000 * 60);
+      if (minutoDesde < 30) {
+        console.log(`[Judit] CNJ ${cnj} já possui requisição em processamento (${Math.round(minutoDesde)}min). Reutilizando requestId: ${existing.requestId}`);
+        return existing.requestId;
+      }
+    }
   }
 
-  // Verificar se já existe requisição recente com status processing (evitar duplicatas)
-  const existing = await getJuditRequestByCnj(cnj);
-  if (existing && existing.status === "processing") {
-    const minutoDesde = (Date.now() - existing.createdAt.getTime()) / (1000 * 60);
-    if (minutoDesde < 30) {
-      console.log(`[Judit] CNJ ${cnj} já possui requisição em processamento (${Math.round(minutoDesde)}min). Reutilizando requestId: ${existing.requestId}`);
-      return existing.requestId;
-    }
+  const requestBody: Record<string, unknown> = {
+    search: {
+      search_type: "lawsuit_cnj",
+      search_key: cnj,
+    },
+  };
+  if (withAttachments) {
+    requestBody.with_attachments = true;
+    console.log(`[Judit] Requisição com autos (with_attachments=true) para CNJ ${cnj}`);
   }
 
   const data = await retryWithBackoff(
     () =>
       juditFetch("/requests", {
         method: "POST",
-        body: JSON.stringify({
-          search: {
-            search_type: "lawsuit_cnj",
-            search_key: cnj,
-          },
-          // cache_ttl_in_days omitido — suporte Judit recomenda não usar para dados em tempo real
-        }),
+        body: JSON.stringify(requestBody),
       }),
     3,
     `POST /requests CNJ=${cnj}`

@@ -37,6 +37,8 @@ import {
   Stamp,
   ScrollText,
   Hammer,
+  Paperclip,
+  FileDown,
 } from "lucide-react";
 import { Streamdown } from "streamdown";
 import { useState as useStateIA } from "react";
@@ -811,6 +813,109 @@ function DocumentosCard({ attachments }: { attachments: JuditAttachment[] }) {
   );
 }
 
+
+// ─── Componente de Autos Processuais (S3) ─────────────────────────────────────
+function AutosProcessuaisCard({ processoId, autosDisponiveis }: { processoId: number; autosDisponiveis?: boolean }) {
+  const { data: autos, isLoading } = trpc.admin.getAutosProcesso.useQuery(
+    { processoId },
+    { enabled: !!processoId }
+  );
+
+  if (isLoading) {
+    return (
+      <Card className="border-amber-200 dark:border-amber-800">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Paperclip className="w-4 h-4 text-amber-500" />
+            Autos Processuais
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Carregando documentos...
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!autos || autos.length === 0) {
+    if (!autosDisponiveis) return null;
+    return (
+      <Card className="border-amber-200 dark:border-amber-800">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Paperclip className="w-4 h-4 text-amber-500" />
+            Autos Processuais
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">Nenhum documento disponível ainda.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  function formatBytes(bytes?: number): string {
+    if (!bytes) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  return (
+    <Card className="border-amber-200 dark:border-amber-800">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Paperclip className="w-4 h-4 text-amber-500" />
+          Autos Processuais
+          <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-800 border-amber-200">
+            {autos.length} {autos.length === 1 ? "arquivo" : "arquivos"}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          {autos.map((auto: any) => (
+            <div
+              key={auto.id}
+              className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-amber-50/50 dark:bg-amber-950/20 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <FileDown className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{auto.nomeArquivo}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {auto.tipo && <span className="mr-2">{auto.tipo}</span>}
+                    {auto.tamanhoBytes && <span>{formatBytes(auto.tamanhoBytes)}</span>}
+                    {auto.createdAt && (
+                      <span className="ml-2">
+                        · {new Date(auto.createdAt).toLocaleDateString("pt-BR")}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <a
+                href={auto.urlS3}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-shrink-0"
+              >
+                <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 bg-background">
+                  <Download className="w-3.5 h-3.5" />
+                  Baixar
+                </Button>
+              </a>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Componente de Análise IA ──────────────────────────────────────────────
 function AnaliseIACard({
   cnj,
@@ -1280,6 +1385,8 @@ export default function ProcessoDetalhe() {
       {/* Análise IA da Judit */}
       <AnaliseIACard cnj={cnj} aiSummaryInicial={(data as any).aiSummary} aiSummaryUpdatedAt={(data as any).aiSummaryUpdatedAt} />
 
+      {/* Autos Processuais do S3 */}
+      {(data as any).id && <AutosProcessuaisCard processoId={(data as any).id} autosDisponiveis={(data as any).autosDisponiveis} />}
       {/* Payload bruto (expansível) */}
       <Card>
         <CardHeader className="pb-3">

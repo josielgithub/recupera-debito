@@ -18,7 +18,10 @@ import {
   upsertCliente,
   vincularClienteAoProcesso,
   extrairNomeClienteDoPayload,
+  insertProcessoAuto,
+  marcarAutosDisponiveis,
 } from "../db";
+import { storagePut } from "../storage";
 
 // ─── Helpers de rede ──────────────────────────────────────────────────────────
 
@@ -137,6 +140,77 @@ async function processarResultadoJudit(
     `[Judit Webhook] ✅ Processo ${cnj} ${criado ? "CRIADO" : "ATUALIZADO"} ` +
     `via webhook → ${statusResumido} (${statusOriginal}) | requestId=${requestId}`
   );
+
+  // ─── Processar attachments (autos processuais) se presentes ───────────────────────────────
+  const attachments = (resultado.attachments as unknown[]) ?? [];
+  if (attachments.length > 0) {
+    const processoDb = await getProcessoByCnj(cnj);
+    if (processoDb) {
+      console.log(`[Judit Webhook] 📎 ${attachments.length} attachment(s) encontrado(s) para CNJ ${cnj}`);
+      let autosCount = 0;
+
+      for (const att of attachments) {
+        const attachment = att as Record<string, unknown>;
+        const attachmentId = String(attachment.id ?? attachment.attachment_id ?? "");
+        const nomeArquivo = String(attachment.name ?? attachment.attachment_name ?? attachment.filename ?? "documento");
+        const urlDownload = String(attachment.url ?? attachment.download_url ?? attachment.file_url ?? "");
+        const tipo = String(attachment.type ?? attachment.attachment_type ?? "");
+        const tamanhoBytes = typeof attachment.size === "number" ? attachment.size : undefined;
+
+        if (!attachmentId || !urlDownload) {
+          console.warn(`[Judit Webhook] Attachment sem id ou url para CNJ ${cnj}:`, attachment);
+          continue;
+        }
+
+        try {
+          // Extrair extensão do nome do arquivo
+          const extensao = nomeArquivo.includes(".") ? nomeArquivo.split(".").pop()?.toLowerCase() ?? "pdf" : "pdf";
+          const nomeBase = nomeArquivo.replace(/[^a-zA-Z0-9._-]/g, "_");
+          const fileKey = `processos/${cnj}/autos/${attachmentId}/${nomeBase}`;
+
+          // Fazer download do arquivo da Judit
+          const JUDIT_API_KEY = process.env.JUDIT_API_KEY ?? "";
+          const response = await fetch(urlDownload, {
+            headers: { "api-key": JUDIT_API_KEY },
+          });
+
+          if (!response.ok) {
+            console.warn(`[Judit Webhook] Falha ao baixar attachment ${attachmentId} para CNJ ${cnj}: HTTP ${response.status}`);
+            continue;
+          }
+
+          const buffer = Buffer.from(await response.arrayBuffer());
+          const contentType = response.headers.get("content-type") ?? "application/pdf";
+
+          // Salvar no S3
+          const { url: urlS3 } = await storagePut(fileKey, buffer, contentType);
+
+          // Salvar metadados no banco
+          await insertProcessoAuto({
+            processoId: processoDb.id,
+            attachmentId,
+            nomeArquivo,
+            extensao,
+            tamanhoBytes,
+            urlS3,
+            fileKey,
+            tipo: tipo || undefined,
+          });
+
+          autosCount++;
+          console.log(`[Judit Webhook] 📄 Auto salvo no S3: ${fileKey} (CNJ ${cnj})`);
+        } catch (attErr) {
+          console.error(`[Judit Webhook] Erro ao processar attachment ${attachmentId} para CNJ ${cnj}:`, attErr);
+        }
+      }
+
+      // Marcar processo como tendo autos disponíveis
+      if (autosCount > 0) {
+        await marcarAutosDisponiveis(processoDb.id);
+        console.log(`[Judit Webhook] ✅ ${autosCount} auto(s) salvo(s) para CNJ ${cnj} — autosDisponiveis=true`);
+      }
+    }
+  }
 }
 
 // ─── Servidor principal ───────────────────────────────────────────────────────

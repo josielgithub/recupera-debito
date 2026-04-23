@@ -63,6 +63,9 @@ import {
   AlertTriangle,
   ThumbsUp,
   ThumbsDown,
+  Paperclip,
+  Download,
+  FileDown,
 } from "lucide-react";
 import { STATUS_RESUMIDO_LABELS, STATUS_CORES } from "@shared/const";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -367,6 +370,23 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
     onSuccess: (_, vars) => {
       const label = vars.status === "concluido_ganho" ? "Marcado como Ganho" : "Marcado como Perdido";
       toast.success(label);
+      refetch();
+    },
+    onError: (err) => toast.error(`Erro: ${err.message}`),
+  });
+
+  // Dialog de download de autos
+  const [dialogAutos, setDialogAutos] = useState(false);
+
+  const baixarAutosMutation = trpc.admin.baixarAutosProcessos.useMutation({
+    onSuccess: (res) => {
+      const msgs: string[] = [];
+      if (res.iniciados > 0) msgs.push(`${res.iniciados} download${res.iniciados !== 1 ? 's' : ''} iniciado${res.iniciados !== 1 ? 's' : ''}`);
+      if (res.jaTemAutos > 0) msgs.push(`${res.jaTemAutos} já tinham autos`);
+      if (res.erros > 0) msgs.push(`${res.erros} com erro`);
+      toast.success(msgs.join(' · ') || 'Processado');
+      setDialogAutos(false);
+      setSelecionados(new Set());
       refetch();
     },
     onError: (err) => toast.error(`Erro: ${err.message}`),
@@ -829,6 +849,15 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
                       </>
                     )}
                     <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs bg-background border-amber-300 text-amber-700 hover:bg-amber-50"
+                      onClick={() => setDialogAutos(true)}
+                    >
+                      <FileDown className="w-3.5 h-3.5 mr-1" />
+                      Baixar autos ({selecionados.size})
+                    </Button>
+                    <Button
                       variant="ghost"
                       size="sm"
                       className="h-7 text-xs text-muted-foreground"
@@ -877,7 +906,12 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
                         />
                       </TableCell>
                       <TableCell className="text-xs font-mono text-muted-foreground max-w-[160px] truncate" onClick={(e) => e.stopPropagation()}>
-                        {p.cnj}
+                        <span className="flex items-center gap-1">
+                          {(p as any).autosDisponiveis && (
+                            <span title="Autos disponíveis"><Paperclip className="w-3 h-3 text-amber-500 flex-shrink-0" /></span>
+                          )}
+                          {p.cnj}
+                        </span>
                       </TableCell>
                       <TableCell className="text-xs">
                         <div>
@@ -1139,6 +1173,63 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
 
       {/* Dialog de detalhes Judit */}
       <DialogDetalhesJudit cnj={detalheCnj} onClose={() => setDetalheCnj(null)} />
+
+      {/* Dialog de download de autos */}
+      <Dialog open={dialogAutos} onOpenChange={(open) => !open && setDialogAutos(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm flex items-center gap-2">
+              <FileDown className="w-4 h-4 text-amber-600" />
+              Baixar autos processuais
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs space-y-2">
+              <p className="font-medium text-amber-800">
+                {selecionados.size} processo{selecionados.size !== 1 ? 's' : ''} selecionado{selecionados.size !== 1 ? 's' : ''}
+              </p>
+              <p className="text-amber-700">
+                Cada download de autos custa <strong>R$ 3,50</strong> na Judit. O custo estimado desta operação é de <strong>R$ {(selecionados.size * 3.5).toFixed(2).replace('.', ',')}</strong>.
+              </p>
+              <p className="text-amber-600">
+                Os arquivos serão salvos automaticamente e ficarão disponíveis na página de detalhes de cada processo.
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Processos que já possuem autos baixados não serão cobrados novamente.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setDialogAutos(false)}>
+              Cancelar
+            </Button>
+            <Button
+              size="sm"
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={() => {
+                const processosSelecionadosIds = processos
+                  .filter((p) => selecionados.has(p.cnj))
+                  .map((p) => (p as any).id)
+                  .filter(Boolean);
+                baixarAutosMutation.mutate({ processoIds: processosSelecionadosIds });
+              }}
+              disabled={baixarAutosMutation.isPending}
+            >
+              {baixarAutosMutation.isPending ? (
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Solicitando...
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  <Download className="w-3.5 h-3.5" />
+                  Confirmar download
+                </span>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

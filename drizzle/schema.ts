@@ -215,11 +215,32 @@ export const processos = mysqlTable("processos", {
   // Controle
   semAtualizacao7dias: boolean("sem_atualizacao_7dias").default(false).notNull(),
   investidorId: int("investidor_id"),
+  // Autos processuais (download via Judit)
+  autosDisponiveis: boolean("autos_disponiveis").default(false).notNull(),
+  autosSolicitadoEm: timestamp("autos_solicitado_em"),
+  autosDisponivelEm: timestamp("autos_disponivel_em"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 export type Processo = typeof processos.$inferSelect;
 export type InsertProcesso = typeof processos.$inferInsert;
+
+// ─── Autos Processuais (arquivos baixados via Judit e salvos no S3) ──────────
+export const processoAutos = mysqlTable("processo_autos", {
+  id: int("id").autoincrement().primaryKey(),
+  processoId: int("processo_id").notNull(),  // FK processos.id
+  attachmentId: varchar("attachment_id", { length: 128 }).notNull(), // ID retornado pela Judit
+  nomeArquivo: varchar("nome_arquivo", { length: 512 }).notNull(),
+  extensao: varchar("extensao", { length: 20 }),
+  tamanhoBytes: int("tamanho_bytes"),
+  urlS3: varchar("url_s3", { length: 1024 }).notNull(),  // URL completa no S3
+  fileKey: varchar("file_key", { length: 1024 }).notNull(), // chave no S3
+  tipo: varchar("tipo", { length: 128 }),  // Sentença, Decisão, Petição, Alvará, etc
+  dataDocumento: timestamp("data_documento"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type ProcessoAuto = typeof processoAutos.$inferSelect;
+export type InsertProcessoAuto = typeof processoAutos.$inferInsert;
 
 // ─── Logs de Consulta Pública ──────────────────────────────────────────────
 export const logsConsulta = mysqlTable("logs_consulta", {
@@ -297,7 +318,7 @@ export const juditConsultaLog = mysqlTable("judit_consulta_log", {
   id: int("id").autoincrement().primaryKey(),
   processoCnj: varchar("processo_cnj", { length: 30 }).notNull(),
   requestId: varchar("request_id", { length: 128 }),
-  tipo: mysqlEnum("tipo", ["consulta_avulsa", "importacao", "consulta_lote"]).default("consulta_avulsa").notNull(),
+  tipo: mysqlEnum("tipo", ["consulta_avulsa", "importacao", "consulta_lote", "download_autos"]).default("consulta_avulsa").notNull(),
   custo: decimal("custo", { precision: 10, scale: 2 }).default("0.25").notNull(),
   status: mysqlEnum("status", ["sucesso", "nao_encontrado", "erro"]).default("sucesso").notNull(),
   aprovadoPorId: int("aprovado_por_id"),

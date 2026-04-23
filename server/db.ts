@@ -51,6 +51,8 @@ import {
   LoteImportacaoErro,
   InsertLoteImportacaoErro,
   LOTE_IMPORTACAO_ERRO_MOTIVO,
+  processoAutos,
+  ProcessoAuto,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -2585,4 +2587,44 @@ export async function vincularOpenIdAoPreCadastro(opts: {
   // Neste caso, o admin pré-cadastrou mas não vinculou ao openId ainda
   // O vínculo acontece via /convite/[token] no frontend
   return { vinculado: false };
+}
+
+// ─── Autos Processuais ────────────────────────────────────────────────────────
+
+export async function insertProcessoAuto(data: {
+  processoId: number;
+  attachmentId: string;
+  nomeArquivo: string;
+  extensao?: string;
+  tamanhoBytes?: number;
+  urlS3: string;
+  fileKey: string;
+  tipo?: string;
+  dataDocumento?: Date;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(processoAutos).values(data);
+}
+
+export async function listProcessoAutos(processoId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(processoAutos).where(eq(processoAutos.processoId, processoId)).orderBy(desc(processoAutos.createdAt));
+}
+
+export async function marcarAutosDisponiveis(processoId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(processos)
+    .set({ autosDisponiveis: true, autosDisponivelEm: new Date() })
+    .where(eq(processos.id, processoId));
+}
+
+export async function marcarAutosSolicitado(processoId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(processos)
+    .set({ autosSolicitadoEm: new Date() })
+    .where(eq(processos.id, processoId));
 }
