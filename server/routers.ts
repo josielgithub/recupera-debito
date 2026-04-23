@@ -88,6 +88,7 @@ import {
   criarRequisicaoJudit,
   iniciarAnaliseIA,
   verificarAnaliseIA,
+  buscarProcessosPorCpfJudit,
 } from "./judit";
 import { updateAiSummary, updateValorObtido, getImportJob, listImportJobs,
   listInvestidores, upsertInvestidor, vincularInvestidorAoProcesso,
@@ -1471,9 +1472,17 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
       }),
     buscarProcessosPorCpf: protectedProcedure
       .input(z.object({ cpf: z.string().min(11).max(18) }))
-      .query(async ({ input, ctx }) => {
+      .mutation(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
-        return buscarProcessosPorCpfLocal(input.cpf);
+        try {
+          // Busca diretamente na Judit (não apenas no banco local)
+          const resultado = await buscarProcessosPorCpfJudit(input.cpf);
+          return resultado.processos;
+        } catch (err) {
+          console.error("[buscarProcessosPorCpf] Erro na Judit:", err);
+          // Fallback: banco local
+          return buscarProcessosPorCpfLocal(input.cpf);
+        }
       }),
     filaJudit: protectedProcedure
       .input(z.object({ page: z.number().default(1), pageSize: z.number().default(50) }))

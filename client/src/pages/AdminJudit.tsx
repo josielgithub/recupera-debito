@@ -357,13 +357,20 @@ function SecaoFila() {
 // ─── Seção 3: Busca por CPF ───────────────────────────────────────────────────
 function SecaoBuscaCpf() {
   const [cpfInput, setCpfInput] = useState("");
-  const [cpfBusca, setCpfBusca] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [resultados, setResultados] = useState<any[] | null>(null);
 
-  const { data, isLoading } = trpc.admin.buscarProcessosPorCpf.useQuery(
-    { cpf: cpfBusca ?? "" },
-    { enabled: !!cpfBusca }
-  );
+  const buscarMutation = trpc.admin.buscarProcessosPorCpf.useMutation({
+    onSuccess: (data) => {
+      setResultados(data);
+      if (data.length === 0) toast.info("Nenhum processo encontrado para este CPF na Judit.");
+      else toast.success(`${data.length} processo(s) encontrado(s) na Judit.`);
+    },
+    onError: (err) => {
+      toast.error(`Erro na busca: ${err.message}`);
+    },
+  });
 
   const formatarCpfInput = (v: string) => {
     const d = v.replace(/\D/g, "").slice(0, 11);
@@ -380,15 +387,17 @@ function SecaoBuscaCpf() {
   };
 
   const handleConfirmar = () => {
-    const limpo = cpfInput.replace(/\D/g, "");
-    setCpfBusca(limpo);
     setConfirmOpen(false);
+    setResultados(null);
+    buscarMutation.mutate({ cpf: cpfInput });
   };
+
+  const isLoading = buscarMutation.isPending;
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Consulta todos os processos vinculados ao CPF diretamente na Judit e salva no banco.
+        Consulta todos os processos vinculados ao CPF diretamente na Judit. A busca pode levar até 60 segundos.
       </p>
       <div className="flex gap-2">
         <div className="relative flex-1 max-w-sm">
@@ -399,46 +408,61 @@ function SecaoBuscaCpf() {
             onChange={e => setCpfInput(formatarCpfInput(e.target.value))}
             onKeyDown={e => e.key === "Enter" && handleBuscar()}
             className="pl-9"
+            disabled={isLoading}
           />
         </div>
         <Button onClick={handleBuscar} disabled={isLoading}>
-          {isLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4 mr-1" />}
-          Buscar
+          {isLoading ? <RefreshCw className="h-4 w-4 animate-spin mr-1" /> : <Search className="h-4 w-4 mr-1" />}
+          {isLoading ? "Buscando..." : "Buscar"}
         </Button>
       </div>
 
-      {cpfBusca && (
+      {isLoading && (
+        <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/40 border text-sm text-muted-foreground">
+          <RefreshCw className="h-4 w-4 animate-spin shrink-0" />
+          <span>Consultando a Judit... Isso pode levar até 60 segundos. Não feche esta aba.</span>
+        </div>
+      )}
+
+      {resultados !== null && (
         <div className="rounded-lg border overflow-hidden">
+          <div className="px-4 py-2 bg-muted/30 border-b text-xs text-muted-foreground">
+            {resultados.length} processo(s) encontrado(s) na Judit para <strong>{cpfInput}</strong>
+          </div>
           <table className="w-full text-sm">
             <thead className="bg-muted/50">
               <tr>
                 <th className="p-3 text-left font-medium">CNJ</th>
-                <th className="p-3 text-left font-medium">Cliente</th>
-                <th className="p-3 text-left font-medium hidden md:table-cell">CPF</th>
-                <th className="p-3 text-left font-medium">Status</th>
-                <th className="p-3 text-left font-medium hidden lg:table-cell">Status Judit</th>
+                <th className="p-3 text-left font-medium hidden md:table-cell">Parte Ativa</th>
+                <th className="p-3 text-left font-medium hidden md:table-cell">Parte Passiva</th>
+                <th className="p-3 text-left font-medium hidden lg:table-cell">Última Movimentação</th>
+                <th className="p-3 text-left font-medium">Valor</th>
+                <th className="p-3 text-left font-medium">No Banco</th>
               </tr>
             </thead>
             <tbody>
-              {isLoading ? (
-                <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">Buscando...</td></tr>
-              ) : !data || data.length === 0 ? (
-                <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">
+              {resultados.length === 0 ? (
+                <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">
                   <div className="flex flex-col items-center gap-2">
                     <FileSearch className="h-8 w-8 text-muted-foreground/50" />
                     <span>Nenhum processo encontrado para o CPF informado</span>
                   </div>
                 </td></tr>
-              ) : data.map(p => (
-                <tr key={p.id} className="border-t hover:bg-muted/30">
+              ) : resultados.map((p, i) => (
+                <tr key={i} className="border-t hover:bg-muted/30">
                   <td className="p-3 font-mono text-xs">{formatCnj(p.cnj)}</td>
-                  <td className="p-3">{p.clienteNome ?? "-"}</td>
-                  <td className="p-3 hidden md:table-cell text-muted-foreground">{formatCpf(p.clienteCpf)}</td>
-                  <td className="p-3">
-                    <Badge variant="outline" className="text-xs">{p.statusResumido ?? "-"}</Badge>
+                  <td className="p-3 hidden md:table-cell text-xs">{p.parteAtiva ?? "-"}</td>
+                  <td className="p-3 hidden md:table-cell text-xs">{p.partePassiva ?? "-"}</td>
+                  <td className="p-3 hidden lg:table-cell text-xs max-w-[200px] truncate" title={p.ultimaMovimentacao ?? ""}>
+                    {p.ultimaMovimentacao ?? "-"}
                   </td>
-                  <td className="p-3 hidden lg:table-cell">
-                    <Badge variant="outline" className="text-xs">{p.statusJudit ?? "-"}</Badge>
+                  <td className="p-3 text-xs">
+                    {p.valor ? `R$ ${p.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "-"}
+                  </td>
+                  <td className="p-3">
+                    <Badge variant={p.existeNoBanco ? "default" : "outline"} className="text-xs">
+                      {p.existeNoBanco ? "✓ Sim" : "Não"}
+                    </Badge>
                   </td>
                 </tr>
               ))}
@@ -451,11 +475,11 @@ function SecaoBuscaCpf() {
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirmar busca por CPF</DialogTitle>
+            <DialogTitle>Confirmar busca por CPF na Judit</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <p className="text-sm text-muted-foreground">
-              Esta consulta pode retornar múltiplos processos. Cada processo encontrado custará <strong>R$ 0,25</strong>.
+              Esta consulta busca processos diretamente na Judit. Pode levar até 60 segundos.
             </p>
             <div className="bg-muted rounded-lg p-3 text-sm">
               <span className="text-muted-foreground">CPF consultado: </span>
@@ -464,7 +488,7 @@ function SecaoBuscaCpf() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancelar</Button>
-            <Button onClick={handleConfirmar}>Confirmar</Button>
+            <Button onClick={handleConfirmar}>Confirmar busca</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

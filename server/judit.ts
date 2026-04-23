@@ -776,3 +776,120 @@ export async function verificarAnaliseIA(
 
   return { status: "pending" };
 }
+
+// ─── Busca por CPF diretamente na Judit ───────────────────────────────────
+export interface JuditProcessoCpfResult {
+  cnj: string;
+  tribunal: string | null;
+  comarca: string | null;
+  parteAtiva: string | null;
+  partePassiva: string | null;
+  valor: number | null;
+  ultimaMovimentacao: string | null;
+  dataDistribuicao: string | null;
+  area: string | null;
+  existeNoBanco: boolean;
+}
+
+export async function buscarProcessosPorCpfJudit(cpf: string): Promise<{
+  processos: JuditProcessoCpfResult[];
+  total: number;
+}> {
+  const cpfLimpo = cpf.replace(/\D/g, "");
+  if (cpfLimpo.length !== 11) throw new Error("[Judit] CPF inválido");
+
+  const cpfFormatado = `${cpfLimpo.slice(0,3)}.${cpfLimpo.slice(3,6)}.${cpfLimpo.slice(6,9)}-${cpfLimpo.slice(9)}`;
+
+  // 1. Criar requisição por CPF
+  const reqData = await retryWithBackoff(
+    () => juditFetch("/requests", {
+      method: "POST",
+      body: JSON.stringify({
+        search: {
+          search_type: "cpf",
+          search_key: cpfFormatado,
+        },
+      }),
+    }),
+    3,
+    `POST /requests CPF=${cpfFormatado}`
+  ) as { request_id?: string; id?: string };
+
+  const requestId = reqData.request_id ?? reqData.id;
+  if (!requestId) throw new Error(`[Judit] Sem requestId na busca por CPF ${cpfFormatado}`);
+
+  console.log(`[Judit] Busca por CPF ${cpfFormatado} — requestId=${requestId}`);
+
+  // 2. Polling até completar (máx 60s)
+  let status = "processing";
+  for (let i = 0; i < 20; i++) {
+    await sleep(3000);
+    const statusData = await juditFetch(`/requests/${requestId}`) as { status?: string; state?: string };
+    const s = (statusData.status ?? statusData.state ?? "processing").toLowerCase();
+    if (s === "completed" || s === "done" || s === "success") { status = "completed"; break; }
+    if (s === "error" || s === "failed") { status = "error"; break; }
+    console.log(`[Judit] CPF ${cpfFormatado} — aguardando... (tentativa ${i+1}/20, status=${s})`);
+  }
+
+  if (status !== "completed") {
+    throw new Error(`[Judit] Busca por CPF não completou a tempo (status=${status})`);
+  }
+
+  // 3. Obter resultados
+  const respData = await juditFetch(`/responses?request_id=${requestId}`) as {
+    all_count?: number;
+    page_data?: unknown[];
+  };
+
+  const pageData = (respData.page_data ?? []) as Array<Record<string, unknown>>;
+
+  // 4. Verificar quais CNJs já existem no banco
+  const { getDb } = await import("./db.js");
+  const { processos: processosTable } = await import("../drizzle/schema.js");
+  const { inArray } = await import("drizzle-orm");
+
+  const cnjs = pageData.map(item => {
+    const rd = (item.response_data ?? {}) as Record<string, unknown>;
+    return (rd.code as string) ?? null;
+  }).filter((c): c is string => !!c && c.length > 10);
+
+  const cnjsNoBanco = new Set<string>();
+  if (cnjs.length > 0) {
+    const db = await getDb();
+    if (db) {
+      const rows = await db.select({ cnj: processosTable.cnj }).from(processosTable).where(inArray(processosTable.cnj, cnjs));
+      rows.forEach(r => cnjsNoBanco.add(r.cnj));
+    }
+  }
+
+  // 5. Mapear resultados
+  const processos: JuditProcessoCpfResult[] = pageData
+    .filter(item => item.response_type !== "ia")
+    .map(item => {
+      const rd = (item.response_data ?? {}) as Record<string, unknown>;
+      const cnj = (rd.code as string) ?? "";
+      const parties = (rd.parties as Array<Record<string, unknown>>) ?? [];
+      const steps = (rd.steps as Array<Record<string, unknown>>) ?? [];
+      const lastStep = steps.length > 0 ? steps[steps.length - 1] : null;
+
+      const parteAtiva = parties.find(p => p.polarity === "active" || p.type === "author")?.name as string ?? null;
+      const partePassiva = parties.find(p => p.polarity === "passive" || p.type === "defendant")?.name as string ?? null;
+
+      return {
+        cnj,
+        tribunal: (rd.tribunal as string) ?? (rd.court as string) ?? null,
+        comarca: (rd.city as string) ?? (rd.comarca as string) ?? null,
+        parteAtiva,
+        partePassiva,
+        valor: rd.value ? Number(rd.value) : null,
+        ultimaMovimentacao: lastStep ? (lastStep.content as string ?? lastStep.name as string ?? null) : null,
+        dataDistribuicao: (rd.distribution_date as string) ?? null,
+        area: (rd.area as string) ?? (rd.subject as string) ?? null,
+        existeNoBanco: cnjsNoBanco.has(cnj),
+      };
+    })
+    .filter(p => p.cnj.length > 10);
+
+  console.log(`[Judit] CPF ${cpfFormatado} — ${processos.length} processo(s) encontrado(s)`);
+  return { processos, total: processos.length };
+}
