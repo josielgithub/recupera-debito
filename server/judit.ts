@@ -266,9 +266,69 @@ export async function obterResultadoJudit(requestId: string): Promise<unknown | 
   return match ?? null;
 }
 
+// ─── Helpers de detecção de alvará ──────────────────────────────────────────
+const ALVARA_REGEX = /alvar[aá]|expedi[cç][aã]o.*alvar[aá]|alvar[aá].*expedido|alvar[aá].*levantamento/i;
+
+function detectarAlvara(data: Record<string, unknown>, cnj?: string): boolean {
+  // 1. Verificar last_step.content
+  const lastStep = data.last_step as Record<string, unknown> | undefined;
+  if (lastStep?.content && ALVARA_REGEX.test(String(lastStep.content))) {
+    if (cnj) console.log(`[Judit] Alvará detectado para CNJ ${cnj} — origem: last_step — status atualizado para concluido_ganho`);
+    return true;
+  }
+
+  // 2. Verificar array steps[]
+  const steps = (data.steps ?? (data.response_data as Record<string, unknown> | undefined)?.steps) as unknown[] | undefined;
+  if (Array.isArray(steps)) {
+    for (const step of steps) {
+      const s = step as Record<string, unknown>;
+      if (s.content && ALVARA_REGEX.test(String(s.content))) {
+        if (cnj) console.log(`[Judit] Alvará detectado para CNJ ${cnj} — origem: steps[] — status atualizado para concluido_ganho`);
+        return true;
+      }
+    }
+  }
+
+  // 3. Verificar array attachments[]
+  const attachments = (data.attachments ?? (data.response_data as Record<string, unknown> | undefined)?.attachments) as unknown[] | undefined;
+  if (Array.isArray(attachments)) {
+    for (const att of attachments) {
+      const a = att as Record<string, unknown>;
+      const nome = String(a.attachment_name ?? a.name ?? "");
+      if (ALVARA_REGEX.test(nome)) {
+        if (cnj) console.log(`[Judit] Alvará detectado para CNJ ${cnj} — origem: attachments[] — status atualizado para concluido_ganho`);
+        return true;
+      }
+    }
+  }
+
+  // 4. Verificar também em nested response_data
+  const nested = data.response_data as Record<string, unknown> | undefined;
+  if (nested) {
+    const nestedSteps = nested.steps as unknown[] | undefined;
+    if (Array.isArray(nestedSteps)) {
+      for (const step of nestedSteps) {
+        const s = step as Record<string, unknown>;
+        if (s.content && ALVARA_REGEX.test(String(s.content))) {
+          if (cnj) console.log(`[Judit] Alvará detectado para CNJ ${cnj} — origem: response_data.steps[] — status atualizado para concluido_ganho`);
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
 // ─── Mapeamento de status ──────────────────────────────────────────────────
-export function mapearStatusJudit(data: unknown): { statusResumido: StatusResumido; statusOriginal: string } {
+export function mapearStatusJudit(data: unknown, cnj?: string): { statusResumido: StatusResumido; statusOriginal: string } {
   const payload = data as Record<string, unknown>;
+
+  // ── PRIORIDADE MÁXIMA: detecção de alvará ──────────────────────────────────
+  if (detectarAlvara(payload, cnj)) {
+    const statusOriginal = (payload.status as string) ?? (payload.situation as string) ?? "Alvará Detectado";
+    return { statusResumido: "concluido_ganho", statusOriginal };
+  }
 
   // Campos do objeto Lawsuit da Judit — prioridade: situation > status > phase > state
   const candidatos: string[] = [];
@@ -361,7 +421,7 @@ export async function atualizarProcesso(cnj: string): Promise<boolean> {
           return false;
         }
 
-        const { statusResumido, statusOriginal } = mapearStatusJudit(resultado);
+        const { statusResumido, statusOriginal } = mapearStatusJudit(resultado, cnj);
         await updateProcessoStatus(cnj, statusResumido, statusOriginal, resultado, requestId);
         await updateJuditRequestStatus(requestId, "completed");
         // Extrair e vincular cliente pelo nome do payload
@@ -405,7 +465,7 @@ export async function coletarResultadosPendentes(): Promise<{
       if (status === "completed") {
         const resultado = await obterResultadoJudit(req.requestId);
         if (resultado) {
-          const { statusResumido, statusOriginal } = mapearStatusJudit(resultado);
+          const { statusResumido, statusOriginal } = mapearStatusJudit(resultado, req.cnj);
           await updateProcessoStatus(req.cnj, statusResumido, statusOriginal, resultado, req.requestId);
           await updateJuditRequestStatus(req.requestId, "completed");
           await vincularClienteDoPayload(req.cnj, resultado);
@@ -492,7 +552,7 @@ export async function buscarMovimentacoesJudit(cnj: string, apenasCache = false)
           const steps = (payload.steps as JuditStep[]) ?? [];
           // Salvar no banco
           if (processo) {
-            const { statusResumido, statusOriginal } = mapearStatusJudit(resultado);
+            const { statusResumido, statusOriginal } = mapearStatusJudit(resultado, cnj);
             await updateProcessoStatus(cnj, statusResumido, statusOriginal, resultado, requestId);
             await updateJuditRequestStatus(requestId, "completed");
           }
@@ -512,7 +572,7 @@ export async function buscarMovimentacoesJudit(cnj: string, apenasCache = false)
 
     // Se encontrou steps, atualizar o banco
     if (steps.length > 0 && processo) {
-      const { statusResumido, statusOriginal } = mapearStatusJudit(resultado);
+      const { statusResumido, statusOriginal } = mapearStatusJudit(resultado, cnj);
       await updateProcessoStatus(cnj, statusResumido, statusOriginal, resultado, completada.requestId);
     }
 
@@ -560,7 +620,7 @@ export async function buscarESalvarProcessoJudit(cnj: string): Promise<{
           return { atualizado: false, criado: false, processo, notFound: true, requestId };
         }
 
-        const { statusResumido, statusOriginal } = mapearStatusJudit(resultado);
+        const { statusResumido, statusOriginal } = mapearStatusJudit(resultado, cnj);
 
         // Criar ou atualizar processo no banco
         const { criado } = await upsertProcessoFromJudit(cnj, statusResumido, statusOriginal, resultado, requestId);

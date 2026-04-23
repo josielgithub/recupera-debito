@@ -710,3 +710,11 @@
 - [x] Corrigir procedure importarProcessos: quando advogado selecionado, atualizar advogado_id mesmo em processos existentes
 - [x] Reatribuir manualmente 84 processos do Marcos para Rogério Teópilo
 - [x] 50 testes Vitest passando após correção
+
+## Detecção Automática de Alvará
+- [x] Adicionar ALVARA_REGEX e função detectarAlvara em server/judit.ts
+- [x] Detecção em last_step.content, steps[], attachments[], response_data.steps[]
+- [x] mapearStatusJudit retorna concluido_ganho com prioridade máxima quando alvará detectado
+- [x] Log [Judit] Alvará detectado para CNJ ... com origem da detecção
+- [x] Reprocessar 422 processos existentes: 55 atualizados para concluido_ganho
+- [x] 50 testes Vitest passando
