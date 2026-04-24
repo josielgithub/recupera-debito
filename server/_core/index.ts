@@ -142,6 +142,8 @@ async function processarResultadoJudit(
   );
 
   // ─── Processar attachments (autos processuais) se presentes ───────────────────────────────
+  // NOTA: A Judit retorna apenas metadados dos attachments (id, nome, extensão, data).
+  // Não há URL de download direta via API. Salvamos os metadados para exibição.
   const attachments = (resultado.attachments as unknown[]) ?? [];
   if (attachments.length > 0) {
     const processoDb = await getProcessoByCnj(cnj);
@@ -153,61 +155,56 @@ async function processarResultadoJudit(
         const attachment = att as Record<string, unknown>;
         const attachmentId = String(attachment.id ?? attachment.attachment_id ?? "");
         const nomeArquivo = String(attachment.name ?? attachment.attachment_name ?? attachment.filename ?? "documento");
-        const urlDownload = String(attachment.url ?? attachment.download_url ?? attachment.file_url ?? "");
+        // A Judit retorna extensão como campo separado
+        const extensao = String(
+          attachment.extension ?? attachment.ext ??
+          (nomeArquivo.includes(".") ? nomeArquivo.split(".").pop() : "pdf") ?? "pdf"
+        ).toLowerCase();
         const tipo = String(attachment.type ?? attachment.attachment_type ?? "");
         const tamanhoBytes = typeof attachment.size === "number" ? attachment.size : undefined;
+        const dataDocumento = attachment.attachment_date
+          ? new Date(attachment.attachment_date as string)
+          : undefined;
+        const corrupted = attachment.corrupted === true;
 
-        if (!attachmentId || !urlDownload) {
-          console.warn(`[Judit Webhook] Attachment sem id ou url para CNJ ${cnj}:`, attachment);
+        if (!attachmentId) {
+          console.warn(`[Judit Webhook] Attachment sem id para CNJ ${cnj}:`, attachment);
+          continue;
+        }
+        if (corrupted) {
+          console.warn(`[Judit Webhook] Attachment ${attachmentId} corrompido para CNJ ${cnj} — ignorando`);
           continue;
         }
 
         try {
-          // Extrair extensão do nome do arquivo
-          const extensao = nomeArquivo.includes(".") ? nomeArquivo.split(".").pop()?.toLowerCase() ?? "pdf" : "pdf";
-          const nomeBase = nomeArquivo.replace(/[^a-zA-Z0-9._-]/g, "_");
-          const fileKey = `processos/${cnj}/autos/${attachmentId}/${nomeBase}`;
-
-          // Fazer download do arquivo da Judit
-          const JUDIT_API_KEY = process.env.JUDIT_API_KEY ?? "";
-          const response = await fetch(urlDownload, {
-            headers: { "api-key": JUDIT_API_KEY },
-          });
-
-          if (!response.ok) {
-            console.warn(`[Judit Webhook] Falha ao baixar attachment ${attachmentId} para CNJ ${cnj}: HTTP ${response.status}`);
-            continue;
-          }
-
-          const buffer = Buffer.from(await response.arrayBuffer());
-          const contentType = response.headers.get("content-type") ?? "application/pdf";
-
-          // Salvar no S3
-          const { url: urlS3 } = await storagePut(fileKey, buffer, contentType);
-
-          // Salvar metadados no banco
+          // Salvar apenas metadados (sem download — Judit não fornece URL direta)
           await insertProcessoAuto({
             processoId: processoDb.id,
             attachmentId,
             nomeArquivo,
             extensao,
             tamanhoBytes,
-            urlS3,
-            fileKey,
+            urlS3: "",
+            fileKey: "",
             tipo: tipo || undefined,
+            dataDocumento,
           });
-
           autosCount++;
-          console.log(`[Judit Webhook] 📄 Auto salvo no S3: ${fileKey} (CNJ ${cnj})`);
+          console.log(`[Judit Webhook] 📄 Metadado registrado: "${nomeArquivo}" (${attachmentId}) para CNJ ${cnj}`);
         } catch (attErr) {
-          console.error(`[Judit Webhook] Erro ao processar attachment ${attachmentId} para CNJ ${cnj}:`, attErr);
+          const errMsg = String(attErr);
+          if (errMsg.includes("Duplicate") || errMsg.includes("ER_DUP")) {
+            console.log(`[Judit Webhook] Attachment ${attachmentId} já registrado para CNJ ${cnj} — ignorando`);
+          } else {
+            console.error(`[Judit Webhook] Erro ao registrar attachment ${attachmentId} para CNJ ${cnj}:`, attErr);
+          }
         }
       }
 
       // Marcar processo como tendo autos disponíveis
       if (autosCount > 0) {
         await marcarAutosDisponiveis(processoDb.id);
-        console.log(`[Judit Webhook] ✅ ${autosCount} auto(s) salvo(s) para CNJ ${cnj} — autosDisponiveis=true`);
+        console.log(`[Judit Webhook] ✅ ${autosCount} metadado(s) registrado(s) para CNJ ${cnj} — autosDisponiveis=true`);
       }
     }
   }

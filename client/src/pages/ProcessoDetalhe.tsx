@@ -897,17 +897,23 @@ function AutosProcessuaisCard({ processoId, autosDisponiveis }: { processoId: nu
                   </p>
                 </div>
               </div>
-              <a
-                href={auto.urlS3}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-shrink-0"
-              >
-                <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 bg-background">
-                  <Download className="w-3.5 h-3.5" />
-                  Baixar
-                </Button>
-              </a>
+              {auto.urlS3 ? (
+                <a
+                  href={auto.urlS3}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-shrink-0"
+                >
+                  <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 bg-background">
+                    <Download className="w-3.5 h-3.5" />
+                    Baixar
+                  </Button>
+                </a>
+              ) : (
+                <Badge variant="outline" className="flex-shrink-0 text-xs uppercase text-amber-700 border-amber-300">
+                  {auto.extensao ?? "doc"}
+                </Badge>
+              )}
             </div>
           ))}
         </div>
