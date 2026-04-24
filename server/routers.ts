@@ -1195,6 +1195,69 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         return listProcessoAutos(input.processoId);
       }),
 
+
+    // ─── Download físico de anexo individual ─────────────────────────────────────
+    downloadAnexo: protectedProcedure
+      .input(z.object({
+        processoId: z.number(),
+        autoId: z.number(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { getDb } = await import("./db");
+        const { processoAutos, processos: processosTable } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+        const { storagePut } = await import("./storage");
+        const { downloadAnexoJudit } = await import("./judit");
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+        // Buscar o auto e o processo
+        const [auto] = await db.select().from(processoAutos).where(eq(processoAutos.id, input.autoId));
+        if (!auto) throw new TRPCError({ code: "NOT_FOUND", message: "Anexo não encontrado" });
+        if (auto.processoId !== input.processoId) throw new TRPCError({ code: "FORBIDDEN" });
+
+        // Se já tem URL no S3, retornar direto
+        if (auto.urlS3 && auto.urlS3.trim().length > 0) {
+          return { url: auto.urlS3, cached: true };
+        }
+
+        // Buscar o processo para obter CNJ e instância
+        const [processo] = await db.select().from(processosTable).where(eq(processosTable.id, input.processoId));
+        if (!processo) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+
+        const instancia = auto.instancia ?? 1;
+
+        // Baixar o arquivo da Judit
+        const result = await downloadAnexoJudit(processo.cnj, instancia, auto.attachmentId);
+        if (!result) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: `Não foi possível baixar o anexo ${auto.attachmentId}. O arquivo pode estar com status 'pending' (ainda sendo processado pela Judit).`,
+          });
+        }
+
+        // Salvar no S3
+        const ext = auto.extensao ?? result.fileName.split(".").pop() ?? "bin";
+        const fileKey = `autos/${processo.cnj.replace(/[^\w]/g, "_")}/${auto.attachmentId}.${ext}`;
+        const { url } = await storagePut(fileKey, result.buffer, result.contentType);
+
+        // Atualizar o registro com a URL do S3
+        await db.update(processoAutos)
+          .set({ urlS3: url, fileKey, tamanhoBytes: result.buffer.length })
+          .where(eq(processoAutos.id, input.autoId));
+
+        // Marcar autosDisponiveis = true no processo se ainda não estiver
+        if (!processo.autosDisponiveis) {
+          await db.update(processosTable)
+            .set({ autosDisponiveis: true })
+            .where(eq(processosTable.id, input.processoId));
+        }
+
+        console.log(`[Autos] Anexo ${auto.attachmentId} salvo no S3: ${url}`);
+        return { url, cached: false };
+      }),
+
     // ─── Configurações do Sistema ────────────────────────────────────────────────────
     getConfiguracoes: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });

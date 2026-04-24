@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -816,10 +817,31 @@ function DocumentosCard({ attachments }: { attachments: JuditAttachment[] }) {
 
 // ─── Componente de Autos Processuais (S3) ─────────────────────────────────────
 function AutosProcessuaisCard({ processoId, autosDisponiveis }: { processoId: number; autosDisponiveis?: boolean }) {
+  
+  const utils = trpc.useUtils();
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+
   const { data: autos, isLoading } = trpc.admin.getAutosProcesso.useQuery(
     { processoId },
     { enabled: !!processoId }
   );
+
+  const downloadMutation = trpc.admin.downloadAnexo.useMutation({
+    onSuccess: (result, variables) => {
+      utils.admin.getAutosProcesso.setData({ processoId }, (old: any) => {
+        if (!old) return old;
+        return old.map((a: any) =>
+          a.id === variables.autoId ? { ...a, urlS3: result.url } : a
+        );
+      });
+      window.open(result.url, "_blank");
+      setDownloadingId(null);
+    },
+    onError: (err) => {
+      setDownloadingId(null);
+      toast.error("Erro ao baixar arquivo: " + err.message);
+    },
+  });
 
   if (isLoading) {
     return (
@@ -839,7 +861,6 @@ function AutosProcessuaisCard({ processoId, autosDisponiveis }: { processoId: nu
       </Card>
     );
   }
-
   if (!autos || autos.length === 0) {
     if (!autosDisponiveis) return null;
     return (
@@ -856,7 +877,6 @@ function AutosProcessuaisCard({ processoId, autosDisponiveis }: { processoId: nu
       </Card>
     );
   }
-
   function formatBytes(bytes?: number): string {
     if (!bytes) return "";
     if (bytes < 1024) return `${bytes} B`;
@@ -864,58 +884,107 @@ function AutosProcessuaisCard({ processoId, autosDisponiveis }: { processoId: nu
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
+  const totalComUrl = autos.filter((a: any) => a.urlS3 && a.urlS3.trim().length > 0).length;
+  const totalPending = autos.filter((a: any) => a.statusAnexo === "pending").length;
+
   return (
     <Card className="border-amber-200 dark:border-amber-800">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
+        <CardTitle className="text-base flex items-center gap-2 flex-wrap">
           <Paperclip className="w-4 h-4 text-amber-500" />
           Autos Processuais
           <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-800 border-amber-200">
             {autos.length} {autos.length === 1 ? "arquivo" : "arquivos"}
           </Badge>
+          {totalComUrl > 0 && (
+            <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 border-green-200">
+              {totalComUrl} no S3
+            </Badge>
+          )}
+          {totalPending > 0 && (
+            <Badge variant="outline" className="text-xs text-amber-700 border-amber-300">
+              {totalPending} pendentes
+            </Badge>
+          )}
         </CardTitle>
+        {totalPending > 0 && (
+          <p className="text-xs text-muted-foreground mt-1">
+            Arquivos pendentes ainda estão sendo processados pela Judit. Tente baixar novamente em alguns minutos.
+          </p>
+        )}
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
-          {autos.map((auto: any) => (
-            <div
-              key={auto.id}
-              className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-amber-50/50 dark:bg-amber-950/20 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <FileDown className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{auto.nomeArquivo}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {auto.tipo && <span className="mr-2">{auto.tipo}</span>}
-                    {auto.tamanhoBytes && <span>{formatBytes(auto.tamanhoBytes)}</span>}
-                    {auto.createdAt && (
-                      <span className="ml-2">
-                        · {new Date(auto.createdAt).toLocaleDateString("pt-BR")}
-                      </span>
-                    )}
-                  </p>
+          {autos.map((auto: any) => {
+            const isPending = auto.statusAnexo === "pending";
+            const hasUrl = auto.urlS3 && auto.urlS3.trim().length > 0;
+            const isDownloading = downloadingId === auto.id;
+            return (
+              <div
+                key={auto.id}
+                className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-amber-50/50 dark:bg-amber-950/20 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <FileDown className={`w-4 h-4 flex-shrink-0 ${isPending ? "text-muted-foreground" : "text-amber-600"}`} />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{auto.nomeArquivo}</p>
+                    <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                      {auto.extensao && (
+                        <Badge variant="outline" className="text-xs uppercase px-1.5 py-0 h-4 font-mono">
+                          {auto.extensao}
+                        </Badge>
+                      )}
+                      {isPending && (
+                        <Badge variant="outline" className="text-xs text-amber-600 border-amber-300 px-1.5 py-0 h-4">
+                          pendente
+                        </Badge>
+                      )}
+                      {auto.tamanhoBytes && (
+                        <span className="text-xs text-muted-foreground">{formatBytes(auto.tamanhoBytes)}</span>
+                      )}
+                      {auto.dataDocumento && (
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(auto.dataDocumento).toLocaleDateString("pt-BR")}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-              {auto.urlS3 ? (
-                <a
-                  href={auto.urlS3}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-shrink-0"
-                >
-                  <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 bg-background">
-                    <Download className="w-3.5 h-3.5" />
-                    Baixar
+                {hasUrl ? (
+                  <a href={auto.urlS3} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 bg-background">
+                      <Download className="w-3.5 h-3.5" />
+                      Abrir
+                    </Button>
+                  </a>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1.5 bg-background flex-shrink-0"
+                    disabled={isDownloading || isPending}
+                    onClick={() => {
+                      setDownloadingId(auto.id);
+                      downloadMutation.mutate({ processoId, autoId: auto.id });
+                    }}
+                    title={isPending ? "Arquivo ainda sendo processado pela Judit" : "Baixar da Judit e salvar no S3"}
+                  >
+                    {isDownloading ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Baixando...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-3.5 h-3.5" />
+                        Baixar
+                      </>
+                    )}
                   </Button>
-                </a>
-              ) : (
-                <Badge variant="outline" className="flex-shrink-0 text-xs uppercase text-amber-700 border-amber-300">
-                  {auto.extensao ?? "doc"}
-                </Badge>
-              )}
-            </div>
-          ))}
+                )}
+              </div>
+            );
+          })}
         </div>
       </CardContent>
     </Card>

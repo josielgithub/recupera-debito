@@ -162,6 +162,13 @@
       "when": 1776972905771,
       "tag": "0022_silky_abomination",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1777056049025,
+      "tag": "0023_tense_silver_sable",
+      "breakpoints": true
     }
   ]
 }

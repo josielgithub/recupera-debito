@@ -893,3 +893,55 @@ export async function buscarProcessosPorCpfJudit(cpf: string): Promise<{
   console.log(`[Judit] CPF ${cpfFormatado} — ${processos.length} processo(s) encontrado(s)`);
   return { processos, total: processos.length };
 }
+
+// ─── Download de Anexo Individual ─────────────────────────────────────────────
+/**
+ * Faz o download físico de um anexo da Judit via endpoint confirmado:
+ * GET https://lawsuits.prod.judit.io/lawsuits/{cnj}/{instancia}/attachments/{attachmentId}
+ * Retorna o buffer do arquivo e o content-type.
+ * Só deve ser chamado quando attachment.status === "done".
+ */
+export async function downloadAnexoJudit(
+  cnj: string,
+  instancia: number,
+  attachmentId: string
+): Promise<{ buffer: Buffer; contentType: string; fileName: string } | null> {
+  const LAWSUITS_BASE = "https://lawsuits.prod.judit.io";
+  const url = `${LAWSUITS_BASE}/lawsuits/${encodeURIComponent(cnj)}/${instancia}/attachments/${attachmentId}`;
+
+  console.log(`[Judit] Baixando anexo: ${url}`);
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "api-key": JUDIT_API_KEY,
+      },
+    });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(`[Judit] Erro ao baixar anexo ${attachmentId} — HTTP ${res.status}: ${body.slice(0, 200)}`);
+      return null;
+    }
+
+    const contentType = res.headers.get("content-type") ?? "application/octet-stream";
+    const arrayBuffer = await res.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Inferir extensão pelo content-type se necessário
+    let ext = "";
+    if (contentType.includes("pdf")) ext = "pdf";
+    else if (contentType.includes("html")) ext = "html";
+    else if (contentType.includes("word") || contentType.includes("docx")) ext = "docx";
+    else if (contentType.includes("jpeg") || contentType.includes("jpg")) ext = "jpg";
+    else if (contentType.includes("mp4")) ext = "mp4";
+
+    const fileName = `${attachmentId}${ext ? "." + ext : ""}`;
+
+    console.log(`[Judit] Anexo ${attachmentId} baixado — ${buffer.length} bytes — ${contentType}`);
+    return { buffer, contentType, fileName };
+  } catch (err) {
+    console.error(`[Judit] Exceção ao baixar anexo ${attachmentId}:`, err);
+    return null;
+  }
+}

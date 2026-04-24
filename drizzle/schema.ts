@@ -237,6 +237,10 @@ export const processoAutos = mysqlTable("processo_autos", {
   fileKey: varchar("file_key", { length: 1024 }).notNull(), // chave no S3
   tipo: varchar("tipo", { length: 128 }),  // Sentença, Decisão, Petição, Alvará, etc
   dataDocumento: timestamp("data_documento"),
+  instancia: int("instancia").default(1),  // instância do processo (1, 2, 3)
+  statusAnexo: varchar("status_anexo", { length: 32 }).default("done"),  // status retornado pela Judit (done, pending, etc)
+  corrompido: boolean("corrompido").default(false),  // campo corrupted da Judit
+  stepId: varchar("step_id", { length: 64 }),  // step_id da movimentação relacionada
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 export type ProcessoAuto = typeof processoAutos.$inferSelect;
