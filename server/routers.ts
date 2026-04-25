@@ -215,18 +215,31 @@ export const appRouter = router({
 
         await registrarLogConsulta({ ipHash: hashValue(ip), cpfHash: hashValue(cpfLimpo), cpfMascarado, telefone: telefoneLimpo, resultado: "encontrado" });
 
+        // Buscar documentos para processos com autos disponíveis
+        const processosComDocs = await Promise.all(
+          processosCliente.map(async (p, idx) => {
+            const documentos = p.autosDisponiveis ? await listProcessoAutos(p.id) : [];
+            return {
+              indice: idx + 1,
+              statusResumido: p.statusResumido,
+              ultimaAtualizacao: p.ultimaAtualizacaoApi ?? p.updatedAt,
+              autosDisponiveis: p.autosDisponiveis ?? false,
+              documentos: documentos.map(d => ({
+                nome: d.nomeArquivo,
+                extensao: d.extensao,
+                dataDocumento: d.dataDocumento,
+              })),
+              advogado: p.advogadoInfo ?? null,
+              parceiro: p.parceiro
+                ? { nome: p.parceiro.nomeEscritorio, whatsapp: p.parceiro.whatsapp, email: p.parceiro.email }
+                : null,
+            };
+          })
+        );
+
         return {
           nomeCliente: cliente.nome,
-          processos: processosCliente.map((p, idx) => ({
-            indice: idx + 1,
-            statusResumido: p.statusResumido,
-            ultimaAtualizacao: p.ultimaAtualizacaoApi ?? p.updatedAt,
-            // Dados do advogado vinculado ao processo (prioridade) ou parceiro legado
-            advogado: p.advogadoInfo ?? null,
-            parceiro: p.parceiro
-              ? { nome: p.parceiro.nomeEscritorio, whatsapp: p.parceiro.whatsapp, email: p.parceiro.email }
-              : null,
-          })),
+          processos: processosComDocs,
         };
       }),
   }),
@@ -1258,6 +1271,64 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         return { url, cached: false };
       }),
 
+    // ─── Listar processos com autos ─────────────────────────────────────────────
+    listarProcessosComAutos: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      const { getDb } = await import("./db");
+      const { processos: processosTable, processoAutos: processoAutosTable, clientes: clientesTable, users: usersTable } = await import("../drizzle/schema");
+      const { isNotNull, count, eq, sql } = await import("drizzle-orm");
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      // Buscar processos com autos solicitados + join com clientes
+      const processosComAutos = await db
+        .select({
+          id: processosTable.id,
+          cnj: processosTable.cnj,
+          clienteNome: clientesTable.nome,
+          advogadoId: processosTable.advogadoId,
+          autosDisponiveis: processosTable.autosDisponiveis,
+          autosSolicitadoEm: processosTable.autosSolicitadoEm,
+          autosDisponivelEm: processosTable.autosDisponivelEm,
+        })
+        .from(processosTable)
+        .leftJoin(clientesTable, eq(processosTable.clienteId, clientesTable.id))
+        .where(isNotNull(processosTable.autosSolicitadoEm))
+        .orderBy(sql`${processosTable.autosSolicitadoEm} DESC`);
+      // Contar documentos por processo
+      const resultado = await Promise.all(
+        processosComAutos.map(async (p) => {
+          const [countResult] = await db
+            .select({ total: count() })
+            .from(processoAutosTable)
+            .where(eq(processoAutosTable.processoId, p.id));
+          return { ...p, totalDocumentos: countResult?.total ?? 0 };
+        })
+      );
+      // Buscar nomes dos advogados (users com advogadoId)
+      const advogadosMap = new Map<number, string>();
+      const advIds = Array.from(new Set(resultado.map(p => p.advogadoId).filter((id): id is number => id !== null && id !== undefined)));
+      if (advIds.length > 0) {
+        const advs = await db.select({ id: usersTable.id, name: usersTable.name }).from(usersTable);
+        for (const a of advs) advogadosMap.set(a.id, a.name ?? "");
+      }
+      const totalSolicitados = resultado.length;
+      const totalComAutos = resultado.filter(p => p.autosDisponiveis).length;
+      const totalDocumentos = resultado.reduce((acc, p) => acc + p.totalDocumentos, 0);
+      const custoTotal = totalSolicitados * 3.5;
+      return {
+        processos: resultado.map(p => ({
+          id: p.id,
+          cnj: p.cnj,
+          nomeCliente: p.clienteNome,
+          advogadoNome: p.advogadoId ? (advogadosMap.get(p.advogadoId) ?? null) : null,
+          autosDisponiveis: p.autosDisponiveis,
+          autosSolicitadoEm: p.autosSolicitadoEm,
+          autosDisponivelEm: p.autosDisponivelEm,
+          totalDocumentos: p.totalDocumentos,
+        })),
+        metricas: { totalSolicitados, totalComAutos, totalDocumentos, custoTotal },
+      };
+    }),
     // ─── Configurações do Sistema ────────────────────────────────────────────────────
     getConfiguracoes: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });

@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import {
   Search, CheckCircle, Clock, AlertTriangle, DollarSign,
   RefreshCw, ListChecks, History, FileSearch, ChevronLeft, ChevronRight, Download, Brain, ExternalLink,
-  TriangleAlert, RotateCcw, Pencil, ShieldCheck
+  TriangleAlert, RotateCcw, Pencil, ShieldCheck, Paperclip, FileArchive, CheckCircle2, AlertCircle
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -1046,6 +1046,145 @@ function SecaoProblemas() {
   );
 }
 
+// ─── Seção Autos Processuais ─────────────────────────────────────────────────
+function SecaoAutos() {
+  const { data, isLoading, error } = trpc.admin.listarProcessosComAutos.useQuery(undefined, {
+    refetchInterval: 60_000,
+  });
+
+  function formatarData(d: Date | string | null | undefined) {
+    if (!d) return "-";
+    return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  }
+
+  function formatCnj(cnj: string) {
+    if (!cnj) return "-";
+    const d = cnj.replace(/\D/g, "");
+    if (d.length === 20)
+      return `${d.slice(0, 7)}-${d.slice(7, 9)}.${d.slice(9, 13)}.${d.slice(13, 14)}.${d.slice(14, 16)}.${d.slice(16)}`;
+    return cnj;
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-10 text-muted-foreground">
+        <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+        Carregando autos...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center gap-2 py-6 text-red-600">
+        <AlertCircle className="h-4 w-4" />
+        <span className="text-sm">Erro ao carregar: {error.message}</span>
+      </div>
+    );
+  }
+
+  const metricas = data?.metricas ?? { totalSolicitados: 0, totalComAutos: 0, totalDocumentos: 0, custoTotal: 0 };
+  const processos = data?.processos ?? [];
+
+  return (
+    <div className="space-y-6">
+      {/* Cards de métricas */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="p-3 bg-teal-50 rounded-lg border border-teal-100">
+          <p className="text-xs text-teal-600 font-medium">Processos solicitados</p>
+          <p className="text-2xl font-bold text-teal-800">{metricas.totalSolicitados}</p>
+        </div>
+        <div className="p-3 bg-green-50 rounded-lg border border-green-100">
+          <p className="text-xs text-green-600 font-medium">Com autos disponíveis</p>
+          <p className="text-2xl font-bold text-green-800">{metricas.totalComAutos}</p>
+        </div>
+        <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+          <p className="text-xs text-blue-600 font-medium">Total de documentos</p>
+          <p className="text-2xl font-bold text-blue-800">{metricas.totalDocumentos}</p>
+        </div>
+        <div className="p-3 bg-orange-50 rounded-lg border border-orange-100">
+          <p className="text-xs text-orange-600 font-medium">Custo total (R$ 3,50/proc)</p>
+          <p className="text-2xl font-bold text-orange-800">R$ {metricas.custoTotal.toFixed(2).replace(".", ",")}</p>
+        </div>
+      </div>
+
+      {/* Aviso sobre endpoint Judit */}
+      <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+        <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-600" />
+        <div>
+          <p className="font-semibold">Endpoint de download da Judit retorna 502</p>
+          <p className="mt-0.5">A Judit registra os metadados dos documentos (nome, extensão, data), mas o endpoint de download de PDF ainda não está disponível via API. Os documentos estão listados mas sem conteúdo para download.</p>
+        </div>
+      </div>
+
+      {/* Tabela de processos */}
+      {processos.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <FileArchive className="h-10 w-10 mx-auto mb-2 opacity-30" />
+          <p className="text-sm">Nenhum processo com autos solicitados.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left py-2 px-2 text-xs font-semibold text-muted-foreground">CNJ</th>
+                <th className="text-left py-2 px-2 text-xs font-semibold text-muted-foreground">Cliente</th>
+                <th className="text-left py-2 px-2 text-xs font-semibold text-muted-foreground hidden sm:table-cell">Advogado</th>
+                <th className="text-left py-2 px-2 text-xs font-semibold text-muted-foreground">Solicitado em</th>
+                <th className="text-center py-2 px-2 text-xs font-semibold text-muted-foreground">Docs</th>
+                <th className="text-center py-2 px-2 text-xs font-semibold text-muted-foreground">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {processos.map((p) => (
+                <tr key={p.id} className="border-b border-border/40 hover:bg-muted/20">
+                  <td className="py-2 px-2">
+                    <a
+                      href={`/admin/processos/${p.id}`}
+                      className="text-primary hover:underline font-mono text-xs"
+                    >
+                      {formatCnj(p.cnj)}
+                    </a>
+                  </td>
+                  <td className="py-2 px-2 text-xs max-w-[120px] truncate" title={p.nomeCliente ?? ""}>
+                    {p.nomeCliente ?? "-"}
+                  </td>
+                  <td className="py-2 px-2 text-xs hidden sm:table-cell">
+                    {p.advogadoNome ?? <span className="text-muted-foreground">-</span>}
+                  </td>
+                  <td className="py-2 px-2 text-xs">
+                    {formatarData(p.autosSolicitadoEm)}
+                  </td>
+                  <td className="py-2 px-2 text-center">
+                    <span className="inline-flex items-center gap-1 text-xs font-medium">
+                      <Paperclip className="h-3 w-3 text-teal-600" />
+                      {p.totalDocumentos}
+                    </span>
+                  </td>
+                  <td className="py-2 px-2 text-center">
+                    {p.autosDisponiveis ? (
+                      <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 px-1.5 py-0.5 rounded-full">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Disponível
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-full">
+                        <Clock className="h-3 w-3" />
+                        Aguardando
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminJudit() {
   const { data: contagem } = trpc.juditProblemas.contagem.useQuery(undefined, {
     refetchInterval: 60_000,
@@ -1059,7 +1198,7 @@ export default function AdminJudit() {
 
       {/* Tabs das 5 seções operacionais */}
       <Tabs defaultValue="fila" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="fila" className="flex items-center gap-1.5">
             <ListChecks className="h-4 w-4" />
             <span className="hidden sm:inline">Fila de Consulta</span>
@@ -1089,6 +1228,11 @@ export default function AdminJudit() {
             <ShieldCheck className="h-4 w-4" />
             <span className="hidden sm:inline">Qualidade</span>
             <span className="sm:hidden">Qual.</span>
+          </TabsTrigger>
+          <TabsTrigger value="autos" className="flex items-center gap-1.5">
+            <Paperclip className="h-4 w-4" />
+            <span className="hidden sm:inline">Autos</span>
+            <span className="sm:hidden">Autos</span>
           </TabsTrigger>
         </TabsList>
 
@@ -1161,6 +1305,20 @@ export default function AdminJudit() {
             </CardHeader>
             <CardContent>
               <SecaoQualidade />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="autos">
+          <Card className="border shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Paperclip className="h-4 w-4 text-teal-600" />
+                Autos Processuais
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <SecaoAutos />
             </CardContent>
           </Card>
         </TabsContent>

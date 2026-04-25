@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +25,10 @@ import {
   FileText,
   Lock,
   CheckCircle2,
-  Circle,
+  Paperclip,
+  TrendingUp,
+  Gavel,
+  RotateCcw,
 } from "lucide-react";
 import { STATUS_RESUMIDO_LABELS, STATUS_CORES } from "@shared/const";
 
@@ -50,6 +54,22 @@ const STATUS_FINAIS = new Set([
   "concluido_perdido",
   "arquivado_encerrado",
 ]);
+
+// Textos descritivos por status em linguagem simples para o cliente
+const STATUS_DESCRICAO: Record<string, string> = {
+  em_analise_inicial: "Seu processo foi recebido e está sendo analisado pela equipe jurídica.",
+  protocolado: "O processo foi protocolado no tribunal e aguarda distribuição ao juiz.",
+  em_andamento: "O processo está em andamento no tribunal. O juiz está analisando as peças.",
+  aguardando_documentos: "O processo aguarda entrega de documentos ou informações adicionais.",
+  aguardando_audiencia: "Uma audiência foi marcada. Aguardamos a data para a realização.",
+  aguardando_sentenca: "O juiz está analisando o caso e em breve proferirá a sentença.",
+  em_recurso: "O processo está em recurso na instância superior. Aguardamos a decisão.",
+  acordo_negociacao: "Estamos em fase de negociação para um acordo favorável.",
+  cumprimento_de_sentenca: "A sentença foi favorável! Estamos na fase de recebimento do valor.",
+  concluido_ganho: "Parabéns! O processo foi concluído com resultado favorável.",
+  concluido_perdido: "O processo foi encerrado. Entre em contato com seu advogado para orientações.",
+  arquivado_encerrado: "O processo foi arquivado. Entre em contato com seu advogado para mais detalhes.",
+};
 
 function formatarCpf(valor: string): string {
   const d = valor.replace(/\D/g, "").slice(0, 11);
@@ -86,22 +106,35 @@ function formatarData(data: Date | string | null | undefined): string {
   });
 }
 
-// Indicador de progresso visual dos 12 status
+function formatarDataSimples(data: Date | string | null | undefined): string {
+  if (!data) return "";
+  const d = new Date(data);
+  return d.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+// Indicador de progresso visual com Framer Motion e textos descritivos
 function IndicadorProgresso({ statusAtual }: { statusAtual: string }) {
-  const idxAtual = STATUS_PROGRESSO.indexOf(statusAtual);
   const isFinal = STATUS_FINAIS.has(statusAtual);
   const isGanho = statusAtual === "concluido_ganho";
   const isPerdido = statusAtual === "concluido_perdido" || statusAtual === "arquivado_encerrado";
+  const isRecurso = statusAtual === "em_recurso";
+  const isCumprimento = statusAtual === "cumprimento_de_sentenca";
 
-  // Para status finais, mostrar apenas o badge colorido
+  const descricao = STATUS_DESCRICAO[statusAtual] ?? "Processo em andamento.";
+
+  // Para status finais, mostrar badge colorido com mensagem
   if (isFinal) {
     return (
-      <div className={`flex items-center gap-2 p-3 rounded-lg ${
+      <div className={`flex items-start gap-3 p-3 rounded-lg ${
         isGanho ? "bg-green-50 border border-green-200" :
         isPerdido ? "bg-red-50 border border-red-200" :
         "bg-slate-50 border border-slate-200"
       }`}>
-        <CheckCircle2 className={`w-5 h-5 flex-shrink-0 ${
+        <CheckCircle2 className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
           isGanho ? "text-green-600" : "text-red-500"
         }`} />
         <div>
@@ -110,42 +143,97 @@ function IndicadorProgresso({ statusAtual }: { statusAtual: string }) {
           }`}>
             {STATUS_RESUMIDO_LABELS[statusAtual]}
           </p>
-          <p className="text-xs text-muted-foreground">Processo encerrado</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{descricao}</p>
         </div>
       </div>
     );
   }
 
-  // Para status em andamento, mostrar barra de progresso simplificada
+  // Caso especial: em recurso — mostrar ícone específico
+  if (isRecurso) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+          <RotateCcw className="w-5 h-5 flex-shrink-0 mt-0.5 text-amber-600" />
+          <div>
+            <p className="text-sm font-semibold text-amber-800">Processo em recurso</p>
+            <p className="text-xs text-amber-700 mt-0.5">{descricao}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Caso especial: cumprimento de sentença — destaque positivo
+  if (isCumprimento) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-start gap-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+          <TrendingUp className="w-5 h-5 flex-shrink-0 mt-0.5 text-emerald-600" />
+          <div>
+            <p className="text-sm font-semibold text-emerald-800">Fase de recebimento do valor</p>
+            <p className="text-xs text-emerald-700 mt-0.5">{descricao}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Para status em andamento, mostrar barra de progresso animada com Framer Motion
   // Usar apenas os 9 primeiros status (excluindo os 3 finais)
   const statusEmAndamento = STATUS_PROGRESSO.slice(0, 9);
   const idxEmAndamento = statusEmAndamento.indexOf(statusAtual);
-  const progresso = idxEmAndamento >= 0 ? Math.round(((idxEmAndamento + 1) / 9) * 100) : 0;
+  const progresso = idxEmAndamento >= 0 ? Math.round(((idxEmAndamento + 1) / 9) * 100) : 10;
+
+  // Cor da barra baseada no progresso
+  const corBarra =
+    progresso < 34 ? "bg-blue-500" :
+    progresso < 67 ? "bg-indigo-500" :
+    "bg-violet-500";
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>Progresso do processo</span>
-        <span className="font-medium text-foreground">{progresso}%</span>
+    <div className="space-y-3">
+      {/* Texto descritivo */}
+      <div className="flex items-start gap-2 p-2.5 rounded-lg bg-blue-50 border border-blue-100">
+        <Gavel className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-600" />
+        <p className="text-xs text-blue-800 leading-relaxed">{descricao}</p>
       </div>
-      <div className="w-full bg-muted rounded-full h-2">
-        <div
-          className="bg-primary h-2 rounded-full transition-all duration-500"
-          style={{ width: `${progresso}%` }}
-        />
-      </div>
-      <div className="flex justify-between text-xs text-muted-foreground">
-        <span>Início</span>
-        <span>Conclusão</span>
+
+      {/* Barra de progresso */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>Progresso do processo</span>
+          <span className="font-semibold text-foreground">{progresso}%</span>
+        </div>
+        <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+          <motion.div
+            className={`${corBarra} h-2.5 rounded-full`}
+            initial={{ width: 0 }}
+            animate={{ width: `${progresso}%` }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+          />
+        </div>
+        <div className="flex justify-between text-xs text-muted-foreground">
+          <span>Início</span>
+          <span>Conclusão</span>
+        </div>
       </div>
     </div>
   );
+}
+
+interface DocumentoProcesso {
+  nome: string;
+  extensao: string | null;
+  dataDocumento: Date | string | null;
 }
 
 interface ProcessoResultado {
   indice: number;
   statusResumido: string;
   ultimaAtualizacao: Date | string | null;
+  autosDisponiveis: boolean;
+  documentos: DocumentoProcesso[];
   // Advogado vinculado ao processo (novo sistema)
   advogado: {
     nome: string | null;
@@ -158,6 +246,32 @@ interface ProcessoResultado {
     whatsapp: string | null;
     email: string | null;
   } | null;
+}
+
+function BadgeExtensao({ extensao }: { extensao: string | null }) {
+  const ext = (extensao ?? "").toLowerCase().replace(".", "");
+  if (ext === "pdf") {
+    return (
+      <span className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 uppercase tracking-wide">
+        PDF
+      </span>
+    );
+  }
+  if (ext === "doc" || ext === "docx") {
+    return (
+      <span className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 uppercase tracking-wide">
+        DOC
+      </span>
+    );
+  }
+  if (ext) {
+    return (
+      <span className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 uppercase tracking-wide">
+        {ext}
+      </span>
+    );
+  }
+  return null;
 }
 
 function CardProcesso({ processo, total }: { processo: ProcessoResultado; total: number }) {
@@ -185,6 +299,12 @@ function CardProcesso({ processo, total }: { processo: ProcessoResultado; total:
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {processo.autosDisponiveis && (
+              <span title="Documentos disponíveis" className="hidden sm:flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                <Paperclip className="w-3 h-3" />
+                Docs
+              </span>
+            )}
             <Badge className={`${cor} border-0 text-xs hidden sm:flex`}>{label}</Badge>
             {aberto ? (
               <ChevronUp className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
@@ -204,6 +324,40 @@ function CardProcesso({ processo, total }: { processo: ProcessoResultado; total:
             <Badge className={`${cor} border-0 mb-3`}>{label}</Badge>
             <IndicadorProgresso statusAtual={processo.statusResumido} />
           </div>
+
+          {/* Documentos do processo */}
+          {processo.autosDisponiveis && processo.documentos.length > 0 && (
+            <>
+              <Separator />
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                  <Paperclip className="w-3.5 h-3.5" />
+                  Documentos do processo disponíveis
+                </p>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                  {processo.documentos.map((doc, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-2 p-2 bg-white rounded border border-border/50 text-xs"
+                    >
+                      <BadgeExtensao extensao={doc.extensao} />
+                      <span className="flex-1 text-foreground truncate" title={doc.nome}>
+                        {doc.nome}
+                      </span>
+                      {doc.dataDocumento && (
+                        <span className="text-muted-foreground flex-shrink-0">
+                          {formatarDataSimples(doc.dataDocumento)}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {processo.documentos.length} documento{processo.documentos.length !== 1 ? "s" : ""} registrado{processo.documentos.length !== 1 ? "s" : ""}. Para acesso ao conteúdo, entre em contato com seu advogado.
+                </p>
+              </div>
+            </>
+          )}
 
           <Separator />
 
@@ -300,7 +454,6 @@ export default function Home() {
     setErroValidacao("");
     setErroTelefone("");
     let valido = true;
-
     const cpfLimpo = cpf.replace(/\D/g, "");
     if (cpfLimpo.length !== 11) {
       setErroValidacao("Digite um CPF completo com 11 dígitos.");
@@ -309,12 +462,10 @@ export default function Home() {
       setErroValidacao("CPF inválido. Verifique os dígitos e tente novamente.");
       valido = false;
     }
-
     if (!validarTelefone(telefone)) {
       setErroTelefone("Digite um telefone válido com DDD (ex: (11) 99999-0000).");
       valido = false;
     }
-
     if (!valido) return;
     setCpfConsulta(cpf);
     setTelefoneConsulta(telefone);
@@ -399,72 +550,47 @@ export default function Home() {
                       inputMode="numeric"
                       placeholder="000.000.000-00"
                       value={cpf}
-                      onChange={(e) => {
-                        setCpf(formatarCpf(e.target.value));
-                        setErroValidacao("");
-                        if (cpfConsulta) setCpfConsulta(null);
-                      }}
-                      className="text-xl tracking-widest h-13 font-mono text-center"
+                      onChange={(e) => setCpf(formatarCpf(e.target.value))}
                       maxLength={14}
-                      autoComplete="off"
-                      autoFocus
+                      className={erroValidacao ? "border-destructive" : ""}
+                      disabled={isLoading}
                     />
                     {erroValidacao && (
-                      <p className="text-sm text-destructive flex items-center gap-1.5 mt-1">
-                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                        {erroValidacao}
-                      </p>
+                      <Alert variant="destructive" className="py-2">
+                        <AlertCircle className="h-3.5 w-3.5" />
+                        <AlertDescription className="text-xs">{erroValidacao}</AlertDescription>
+                      </Alert>
                     )}
                   </div>
-
                   <div className="space-y-1.5">
-                    <label htmlFor="telefone" className="text-sm font-medium text-foreground flex items-center gap-1.5">
-                      <Phone className="w-3.5 h-3.5 text-muted-foreground" />
-                      Telefone / Celular
+                    <label htmlFor="telefone" className="text-sm font-medium text-foreground">
+                      Telefone cadastrado
                     </label>
                     <Input
                       id="telefone"
-                      type="tel"
+                      type="text"
                       inputMode="numeric"
-                      placeholder="(00) 00000-0000"
+                      placeholder="(11) 99999-0000"
                       value={telefone}
-                      onChange={(e) => {
-                        setTelefone(formatarTelefone(e.target.value));
-                        setErroTelefone("");
-                        if (telefoneConsulta) setTelefoneConsulta(null);
-                      }}
-                      className="text-base h-11 font-mono"
+                      onChange={(e) => setTelefone(formatarTelefone(e.target.value))}
                       maxLength={15}
-                      autoComplete="tel"
+                      className={erroTelefone ? "border-destructive" : ""}
+                      disabled={isLoading}
                     />
                     {erroTelefone && (
-                      <p className="text-sm text-destructive flex items-center gap-1.5 mt-1">
-                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                        {erroTelefone}
-                      </p>
+                      <Alert variant="destructive" className="py-2">
+                        <AlertCircle className="h-3.5 w-3.5" />
+                        <AlertDescription className="text-xs">{erroTelefone}</AlertDescription>
+                      </Alert>
                     )}
                   </div>
-
-                  <div className="flex items-start gap-2 p-3 bg-muted/40 rounded-lg text-xs text-muted-foreground border border-border/40">
-                    <Shield className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-green-600" />
-                    <span>
-                      Consulta protegida. Seu IP, CPF e telefone são registrados de forma segura para
-                      controle de acesso. Limite de consultas por período aplicado.
-                    </span>
-                  </div>
-
                   {error && (
-                    <Alert variant="destructive" className="py-3">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription className="text-sm">{erroMsg}</AlertDescription>
+                    <Alert variant="destructive" className="py-2">
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      <AlertDescription className="text-xs">{erroMsg}</AlertDescription>
                     </Alert>
                   )}
-
-                  <Button
-                    type="submit"
-                    className="w-full h-11 text-sm font-semibold"
-                    disabled={isLoading || cpf.replace(/\D/g, "").length < 11}
-                  >
+                  <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? (
                       <span className="flex items-center gap-2">
                         <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -495,9 +621,7 @@ export default function Home() {
                       {data.processos.length === 1 ? "processo" : "processos"}
                     </Badge>
                   </div>
-
                   <Separator />
-
                   {data.processos.length === 0 ? (
                     <div className="text-center py-6 text-muted-foreground">
                       <FileText className="w-10 h-10 mx-auto mb-2 opacity-30" />
@@ -508,7 +632,7 @@ export default function Home() {
                       {data.processos.map((p) => (
                         <CardProcesso
                           key={p.indice}
-                          processo={p}
+                          processo={p as ProcessoResultado}
                           total={data.processos.length}
                         />
                       ))}

@@ -746,3 +746,13 @@
 - [x] Frontend: dialog de confirmação com custo estimado antes do download
 - [x] Frontend: ícone de clipe (Paperclip) na coluna CNJ para processos com autos disponíveis
 - [x] Frontend: componente AutosProcessuaisCard no ProcessoDetalhe com lista de documentos e links de download
+
+## Melhorias Portal do Cliente + Aba Autos no AdminJudit
+- [x] Portal do cliente: barra de progresso animada com Framer Motion (motion.div com initial/animate)
+- [x] Portal do cliente: textos descritivos por status (mensagem personalizada para cada um dos 12 status)
+- [x] Portal do cliente: índice de documentos por processo (lista de documentos quando autosDisponiveis=true)
+- [x] AdminJudit: nova aba "Autos" com 4 cards de métricas (solicitados, disponíveis, total docs, custo)
+- [x] AdminJudit: aviso sobre endpoint de download da Judit retornando 502
+- [x] AdminJudit: tabela de processos com autos solicitados (CNJ, cliente, advogado, data, docs, status)
+- [x] Backend: rota admin.listarProcessosComAutos com join em clientes e users
+- [x] 50 testes Vitest passando
