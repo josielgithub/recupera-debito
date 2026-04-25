@@ -1141,7 +1141,9 @@ function SecaoAutos() {
                 <tr key={p.id} className="border-b border-border/40 hover:bg-muted/20">
                   <td className="py-2 px-2">
                     <a
-                      href={`/admin/processos/${p.id}`}
+                      href={`/admin/processo/${encodeURIComponent(p.cnj)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="text-primary hover:underline font-mono text-xs"
                     >
                       {formatCnj(p.cnj)}

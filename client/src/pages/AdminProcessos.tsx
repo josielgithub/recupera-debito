@@ -495,7 +495,7 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
   }
 
   function irParaDetalhe(cnj: string) {
-    setLocation(`/admin/processo/${encodeURIComponent(cnj)}`);
+    window.open(`/admin/processo/${encodeURIComponent(cnj)}`, '_blank', 'noopener,noreferrer');
   }
 
   function salvarStatus() {

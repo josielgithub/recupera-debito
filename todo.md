@@ -756,3 +756,9 @@
 - [x] AdminJudit: tabela de processos com autos solicitados (CNJ, cliente, advogado, data, docs, status)
 - [x] Backend: rota admin.listarProcessosComAutos com join em clientes e users
 - [x] 50 testes Vitest passando
+
+## Correção: Abrir ProcessoDetalhe em nova aba
+- [x] AdminProcessos.tsx: botão ExternalLink (irParaDetalhe) usa window.open(..., '_blank') em vez de setLocation
+- [x] AdminJudit.tsx (aba Autos): link do CNJ recebe target="_blank" rel="noopener noreferrer" e URL corrigida para /admin/processo/:cnj
+- [x] Ícone Eye (visualização rápida) mantido sem alteração
+- [x] TypeScript sem erros
