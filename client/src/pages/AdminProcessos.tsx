@@ -70,6 +70,12 @@ import {
 import { STATUS_RESUMIDO_LABELS, STATUS_CORES } from "@shared/const";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 interface ProcessoRow {
@@ -905,12 +911,19 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
                           aria-label={`Selecionar processo ${p.cnj}`}
                         />
                       </TableCell>
-                      <TableCell className="text-xs font-mono text-muted-foreground max-w-[160px] truncate" onClick={(e) => e.stopPropagation()}>
+                      <TableCell className="text-xs font-mono max-w-[160px] truncate" onClick={(e) => e.stopPropagation()}>
                         <span className="flex items-center gap-1">
                           {(p as any).autosDisponiveis && (
                             <span title="Autos disponíveis"><Paperclip className="w-3 h-3 text-amber-500 flex-shrink-0" /></span>
                           )}
-                          {p.cnj}
+                          <a
+                            href={`/admin/processo/${encodeURIComponent(p.cnj)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline font-mono text-xs"
+                          >
+                            {p.cnj}
+                          </a>
                         </span>
                       </TableCell>
                       <TableCell className="text-xs">
@@ -932,24 +945,46 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <div className="flex gap-0.5">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0"
-                            onClick={() => abrirDetalhes(p.cnj)}
-                            title="Ver detalhes rápidos"
-                          >
-                            <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0"
-                            onClick={() => irParaDetalhe(p.cnj)}
-                            title="Abrir página completa de detalhes"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-                          </Button>
+                          <TooltipProvider delayDuration={300}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <a
+                                  href={`/admin/processo/${encodeURIComponent(p.cnj)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-accent transition-colors"
+                                  onClick={(e) => {
+                                    if (!e.ctrlKey && !e.metaKey) {
+                                      e.preventDefault();
+                                      abrirDetalhes(p.cnj);
+                                    }
+                                  }}
+                                >
+                                  <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                                </a>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs">
+                                Ver detalhes rápidos (Ctrl+Click abre em nova aba)
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <TooltipProvider delayDuration={300}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 w-7 p-0"
+                                  onClick={() => irParaDetalhe(p.cnj)}
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs">
+                                Abrir em nova aba
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                           <Button
                             variant="ghost"
                             size="sm"
