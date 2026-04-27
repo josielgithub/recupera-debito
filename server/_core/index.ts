@@ -90,7 +90,9 @@ function selecionarMelhorResultado(
         ...rd,
         steps,
         parties,
-        attachments: (rd.attachments as unknown[]) ?? (entry.attachments as unknown[]) ?? [],
+        // Attachments ficam em page_data[i].response_data.attachments (rd = entry.response_data)
+        // Fallback para page_data[i].attachments caso a Judit envie no nível raiz da entrada
+        attachments: (rd.attachments as unknown[] | undefined) ?? (entry.attachments as unknown[] | undefined) ?? [],
       };
     }
   }
