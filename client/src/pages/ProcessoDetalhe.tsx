@@ -885,7 +885,19 @@ function AutosProcessuaisCard({ processoId, autosDisponiveis }: { processoId: nu
   }
 
   const totalComUrl = autos.filter((a: any) => a.urlS3 && a.urlS3.trim().length > 0).length;
-  const totalPending = autos.filter((a: any) => a.statusAnexo === "pending").length;
+  const totalDone = autos.filter((a: any) => a.statusAnexo === "done" || !a.statusAnexo).length;
+
+  // Badge colorido por extensão de arquivo
+  function ExtBadge({ ext }: { ext?: string }) {
+    if (!ext) return null;
+    const e = ext.toLowerCase();
+    let cls = "text-xs uppercase px-1.5 py-0 h-4 font-mono border-0 ";
+    if (e === "pdf") cls += "bg-red-100 text-red-700";
+    else if (e === "docx" || e === "doc") cls += "bg-blue-100 text-blue-700";
+    else if (e === "html" || e === "htm") cls += "bg-green-100 text-green-700";
+    else cls += "bg-gray-100 text-gray-600";
+    return <Badge className={cls}>{e}</Badge>;
+  }
 
   return (
     <Card className="border-amber-200 dark:border-amber-800">
@@ -898,25 +910,20 @@ function AutosProcessuaisCard({ processoId, autosDisponiveis }: { processoId: nu
           </Badge>
           {totalComUrl > 0 && (
             <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 border-green-200">
-              {totalComUrl} no S3
+              {totalComUrl} disponíve{totalComUrl === 1 ? "l" : "is"}
             </Badge>
           )}
-          {totalPending > 0 && (
-            <Badge variant="outline" className="text-xs text-amber-700 border-amber-300">
-              {totalPending} pendentes
+          {totalDone > totalComUrl && (
+            <Badge variant="outline" className="text-xs text-gray-600 border-gray-300">
+              {totalDone - totalComUrl} não baixado{totalDone - totalComUrl !== 1 ? "s" : ""}
             </Badge>
           )}
         </CardTitle>
-        {totalPending > 0 && (
-          <p className="text-xs text-muted-foreground mt-1">
-            Arquivos pendentes ainda estão sendo processados pela Judit. Tente baixar novamente em alguns minutos.
-          </p>
-        )}
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
           {autos.map((auto: any) => {
-            const isPending = auto.statusAnexo === "pending";
+            const isDone = auto.statusAnexo === "done" || !auto.statusAnexo;
             const hasUrl = auto.urlS3 && auto.urlS3.trim().length > 0;
             const isDownloading = downloadingId === auto.id;
             return (
@@ -925,18 +932,23 @@ function AutosProcessuaisCard({ processoId, autosDisponiveis }: { processoId: nu
                 className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-amber-50/50 dark:bg-amber-950/20 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <FileDown className={`w-4 h-4 flex-shrink-0 ${isPending ? "text-muted-foreground" : "text-amber-600"}`} />
+                  <FileDown className={`w-4 h-4 flex-shrink-0 ${isDone ? "text-amber-600" : "text-muted-foreground"}`} />
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-foreground truncate">{auto.nomeArquivo}</p>
                     <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                      {auto.extensao && (
-                        <Badge variant="outline" className="text-xs uppercase px-1.5 py-0 h-4 font-mono">
-                          {auto.extensao}
+                      <ExtBadge ext={auto.extensao} />
+                      {/* Badge de status do arquivo */}
+                      {hasUrl ? (
+                        <Badge className="text-xs bg-green-100 text-green-700 border-0 px-1.5 py-0 h-4">
+                          Disponível
                         </Badge>
-                      )}
-                      {isPending && (
-                        <Badge variant="outline" className="text-xs text-amber-600 border-amber-300 px-1.5 py-0 h-4">
-                          pendente
+                      ) : isDone ? (
+                        <Badge className="text-xs bg-gray-100 text-gray-600 border-0 px-1.5 py-0 h-4">
+                          Não baixado
+                        </Badge>
+                      ) : (
+                        <Badge className="text-xs bg-amber-100 text-amber-700 border-0 px-1.5 py-0 h-4">
+                          Indisponível
                         </Badge>
                       )}
                       {auto.tamanhoBytes && (
@@ -952,22 +964,22 @@ function AutosProcessuaisCard({ processoId, autosDisponiveis }: { processoId: nu
                 </div>
                 {hasUrl ? (
                   <a href={auto.urlS3} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
-                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 bg-background">
+                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 bg-green-50 border-green-300 text-green-700 hover:bg-green-100">
                       <Download className="w-3.5 h-3.5" />
-                      Abrir
+                      Baixar
                     </Button>
                   </a>
-                ) : (
+                ) : isDone ? (
                   <Button
                     variant="outline"
                     size="sm"
                     className="h-7 text-xs gap-1.5 bg-background flex-shrink-0"
-                    disabled={isDownloading || isPending}
+                    disabled={isDownloading}
                     onClick={() => {
                       setDownloadingId(auto.id);
                       downloadMutation.mutate({ processoId, autoId: auto.id });
                     }}
-                    title={isPending ? "Arquivo ainda sendo processado pela Judit" : "Baixar da Judit e salvar no S3"}
+                    title="Baixar da Judit e salvar no S3"
                   >
                     {isDownloading ? (
                       <>
@@ -981,6 +993,10 @@ function AutosProcessuaisCard({ processoId, autosDisponiveis }: { processoId: nu
                       </>
                     )}
                   </Button>
+                ) : (
+                  <Badge className="text-xs bg-amber-100 text-amber-700 border-0 flex-shrink-0">
+                    Indisponível
+                  </Badge>
                 )}
               </div>
             );

@@ -916,6 +916,7 @@ export async function downloadAnexoJudit(
       headers: {
         "api-key": JUDIT_API_KEY,
       },
+      redirect: "follow", // Judit redireciona para URL pré-assinada do S3
     });
 
     if (!res.ok) {
