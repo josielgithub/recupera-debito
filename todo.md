@@ -762,3 +762,8 @@
 - [x] AdminJudit.tsx (aba Autos): link do CNJ recebe target="_blank" rel="noopener noreferrer" e URL corrigida para /admin/processo/:cnj
 - [x] Ícone Eye (visualização rápida) mantido sem alteração
 - [x] TypeScript sem erros
+
+## Correções e Melhorias AutosProcessuaisCard (2026-04-27)
+- [x] Corrigir isDone: habilitar botão para status pending/done/null, desabilitar só para error/corrupted
+- [x] Botão "Baixar todos" com progresso sequencial e toast de conclusão
+- [x] Badge de instância por documento (1ª=azul, 2ª=roxo, 3ª=verde)

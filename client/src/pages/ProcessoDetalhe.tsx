@@ -820,6 +820,8 @@ function AutosProcessuaisCard({ processoId, autosDisponiveis }: { processoId: nu
   
   const utils = trpc.useUtils();
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [baixandoTodos, setBaixandoTodos] = useState(false);
+  const [progressoBaixarTodos, setProgressoBaixarTodos] = useState<{ atual: number; total: number } | null>(null);
 
   const { data: autos, isLoading } = trpc.admin.getAutosProcesso.useQuery(
     { processoId },
@@ -842,6 +844,47 @@ function AutosProcessuaisCard({ processoId, autosDisponiveis }: { processoId: nu
       toast.error("Erro ao baixar arquivo: " + err.message);
     },
   });
+
+  // Baixar todos sequencialmente
+  async function baixarTodos() {
+    if (!autos) return;
+    const pendentes = autos.filter((a: any) => {
+      const isIndisponivel = a.statusAnexo === "error" || a.statusAnexo === "corrupted";
+      const hasUrl = a.urlS3 && a.urlS3.trim().length > 0;
+      return !isIndisponivel && !hasUrl;
+    });
+    if (pendentes.length === 0) return;
+    setBaixandoTodos(true);
+    setProgressoBaixarTodos({ atual: 0, total: pendentes.length });
+    let sucesso = 0;
+    let falha = 0;
+    for (let i = 0; i < pendentes.length; i++) {
+      const auto = pendentes[i];
+      setProgressoBaixarTodos({ atual: i + 1, total: pendentes.length });
+      try {
+        const result = await new Promise<{ url: string }>((resolve, reject) => {
+          downloadMutation.mutate(
+            { processoId, autoId: auto.id },
+            { onSuccess: resolve, onError: reject }
+          );
+        });
+        utils.admin.getAutosProcesso.setData({ processoId }, (old: any) => {
+          if (!old) return old;
+          return old.map((a: any) => a.id === auto.id ? { ...a, urlS3: result.url } : a);
+        });
+        sucesso++;
+      } catch {
+        falha++;
+      }
+    }
+    setBaixandoTodos(false);
+    setProgressoBaixarTodos(null);
+    if (falha === 0) {
+      toast.success(`${sucesso} documento${sucesso !== 1 ? "s" : ""} baixado${sucesso !== 1 ? "s" : ""} com sucesso`);
+    } else {
+      toast.warning(`${sucesso} baixado${sucesso !== 1 ? "s" : ""}, ${falha} com erro`);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -885,7 +928,12 @@ function AutosProcessuaisCard({ processoId, autosDisponiveis }: { processoId: nu
   }
 
   const totalComUrl = autos.filter((a: any) => a.urlS3 && a.urlS3.trim().length > 0).length;
-  const totalDone = autos.filter((a: any) => a.statusAnexo === "done" || !a.statusAnexo).length;
+  // Disponíveis para download = não são error/corrupted e não têm URL ainda
+  const totalParaBaixar = autos.filter((a: any) => {
+    const isIndisponivel = a.statusAnexo === "error" || a.statusAnexo === "corrupted";
+    const hasUrl = a.urlS3 && a.urlS3.trim().length > 0;
+    return !isIndisponivel && !hasUrl;
+  }).length;
 
   // Badge colorido por extensão de arquivo
   function ExtBadge({ ext }: { ext?: string }) {
@@ -899,31 +947,70 @@ function AutosProcessuaisCard({ processoId, autosDisponiveis }: { processoId: nu
     return <Badge className={cls}>{e}</Badge>;
   }
 
+  // Badge colorido por instância
+  function InstanciaBadge({ instancia }: { instancia?: number | null }) {
+    if (!instancia) return null;
+    const labels: Record<number, string> = { 1: "1ª inst.", 2: "2ª inst.", 3: "3ª inst." };
+    const colors: Record<number, string> = {
+      1: "bg-blue-100 text-blue-700",
+      2: "bg-purple-100 text-purple-700",
+      3: "bg-green-100 text-green-700",
+    };
+    const label = labels[instancia] ?? `${instancia}ª inst.`;
+    const color = colors[instancia] ?? "bg-gray-100 text-gray-600";
+    return <Badge className={`text-xs px-1.5 py-0 h-4 border-0 ${color}`}>{label}</Badge>;
+  }
+
   return (
     <Card className="border-amber-200 dark:border-amber-800">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2 flex-wrap">
-          <Paperclip className="w-4 h-4 text-amber-500" />
-          Autos Processuais
-          <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-800 border-amber-200">
-            {autos.length} {autos.length === 1 ? "arquivo" : "arquivos"}
-          </Badge>
-          {totalComUrl > 0 && (
-            <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 border-green-200">
-              {totalComUrl} disponíve{totalComUrl === 1 ? "l" : "is"}
+        <div className="flex items-start justify-between gap-2">
+          <CardTitle className="text-base flex items-center gap-2 flex-wrap">
+            <Paperclip className="w-4 h-4 text-amber-500" />
+            Autos Processuais
+            <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-800 border-amber-200">
+              {autos.length} {autos.length === 1 ? "arquivo" : "arquivos"}
             </Badge>
+            {totalComUrl > 0 && (
+              <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 border-green-200">
+                {totalComUrl} disponíve{totalComUrl === 1 ? "l" : "is"}
+              </Badge>
+            )}
+            {totalParaBaixar > 0 && (
+              <Badge variant="outline" className="text-xs text-gray-600 border-gray-300">
+                {totalParaBaixar} não baixado{totalParaBaixar !== 1 ? "s" : ""}
+              </Badge>
+            )}
+          </CardTitle>
+          {/* Botão Baixar todos */}
+          {totalParaBaixar > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1.5 bg-background flex-shrink-0"
+              disabled={baixandoTodos || !!downloadingId}
+              onClick={baixarTodos}
+            >
+              {baixandoTodos && progressoBaixarTodos ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Baixando {progressoBaixarTodos.atual} de {progressoBaixarTodos.total}...
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5" />
+                  Baixar todos ({totalParaBaixar})
+                </>
+              )}
+            </Button>
           )}
-          {totalDone > totalComUrl && (
-            <Badge variant="outline" className="text-xs text-gray-600 border-gray-300">
-              {totalDone - totalComUrl} não baixado{totalDone - totalComUrl !== 1 ? "s" : ""}
-            </Badge>
-          )}
-        </CardTitle>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
           {autos.map((auto: any) => {
-            const isDone = auto.statusAnexo === "done" || !auto.statusAnexo;
+            // Habilitar download para qualquer status exceto error/corrupted
+            const isIndisponivel = auto.statusAnexo === "error" || auto.statusAnexo === "corrupted";
             const hasUrl = auto.urlS3 && auto.urlS3.trim().length > 0;
             const isDownloading = downloadingId === auto.id;
             return (
@@ -932,23 +1019,24 @@ function AutosProcessuaisCard({ processoId, autosDisponiveis }: { processoId: nu
                 className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-amber-50/50 dark:bg-amber-950/20 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <FileDown className={`w-4 h-4 flex-shrink-0 ${isDone ? "text-amber-600" : "text-muted-foreground"}`} />
+                  <FileDown className={`w-4 h-4 flex-shrink-0 ${isIndisponivel ? "text-muted-foreground" : "text-amber-600"}`} />
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-foreground truncate">{auto.nomeArquivo}</p>
                     <div className="flex items-center gap-2 flex-wrap mt-0.5">
                       <ExtBadge ext={auto.extensao} />
+                      <InstanciaBadge instancia={auto.instancia} />
                       {/* Badge de status do arquivo */}
                       {hasUrl ? (
                         <Badge className="text-xs bg-green-100 text-green-700 border-0 px-1.5 py-0 h-4">
                           Disponível
                         </Badge>
-                      ) : isDone ? (
-                        <Badge className="text-xs bg-gray-100 text-gray-600 border-0 px-1.5 py-0 h-4">
-                          Não baixado
-                        </Badge>
-                      ) : (
+                      ) : isIndisponivel ? (
                         <Badge className="text-xs bg-amber-100 text-amber-700 border-0 px-1.5 py-0 h-4">
                           Indisponível
+                        </Badge>
+                      ) : (
+                        <Badge className="text-xs bg-gray-100 text-gray-600 border-0 px-1.5 py-0 h-4">
+                          Não baixado
                         </Badge>
                       )}
                       {auto.tamanhoBytes && (
@@ -969,12 +1057,12 @@ function AutosProcessuaisCard({ processoId, autosDisponiveis }: { processoId: nu
                       Baixar
                     </Button>
                   </a>
-                ) : isDone ? (
+                ) : !isIndisponivel ? (
                   <Button
                     variant="outline"
                     size="sm"
                     className="h-7 text-xs gap-1.5 bg-background flex-shrink-0"
-                    disabled={isDownloading}
+                    disabled={isDownloading || baixandoTodos}
                     onClick={() => {
                       setDownloadingId(auto.id);
                       downloadMutation.mutate({ processoId, autoId: auto.id });
