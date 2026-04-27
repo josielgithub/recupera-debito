@@ -106,6 +106,16 @@ async function processarResultadoJudit(
   requestId: string,
   resultado: Record<string, unknown>
 ): Promise<void> {
+  return processarResultadoJuditExterno(requestId, resultado);
+}
+
+/**
+ * Versão exportável de processarResultadoJudit para uso em rotas tRPC.
+ */
+export async function processarResultadoJuditExterno(
+  requestId: string,
+  resultado: Record<string, unknown>
+): Promise<void> {
   // Extrair CNJ do resultado
   const cnj = (
     resultado.lawsuit_cnj ??

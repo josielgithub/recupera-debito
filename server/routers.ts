@@ -1354,6 +1354,129 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         return { ok: true };
       }),
 
+    // ─── Monitoramento de Webhook ─────────────────────────────────────────────
+    statusWebhook: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      const { getDb } = await import("./db");
+      const { juditRequests } = await import("../drizzle/schema");
+      const { desc, eq, and, gte } = await import("drizzle-orm");
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+      // Último request que foi completado (webhook processado com sucesso)
+      const [ultimoCompleto] = await db
+        .select({ updatedAt: juditRequests.updatedAt, cnj: juditRequests.cnj })
+        .from(juditRequests)
+        .where(eq(juditRequests.status, "completed"))
+        .orderBy(desc(juditRequests.updatedAt))
+        .limit(1);
+
+      // Contar requests processando há mais de 2 horas (possível problema)
+      const duasHorasAtras = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      const [{ total: totalProcessandoAntigos }] = await db
+        .select({ total: (await import("drizzle-orm")).count() })
+        .from(juditRequests)
+        .where(
+          and(
+            eq(juditRequests.status, "processing"),
+            (await import("drizzle-orm")).lt(juditRequests.updatedAt, duasHorasAtras)
+          )
+        );
+
+      // Contar requests das últimas 24h
+      const ontemAtras = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const [{ total: totalUltimas24h }] = await db
+        .select({ total: (await import("drizzle-orm")).count() })
+        .from(juditRequests)
+        .where(gte(juditRequests.updatedAt, ontemAtras));
+
+      // Contar requests completados nas últimas 24h
+      const [{ total: completadosUltimas24h }] = await db
+        .select({ total: (await import("drizzle-orm")).count() })
+        .from(juditRequests)
+        .where(
+          and(
+            eq(juditRequests.status, "completed"),
+            gte(juditRequests.updatedAt, ontemAtras)
+          )
+        );
+
+      const agora = new Date();
+      const ultimoWebhookEm = ultimoCompleto?.updatedAt ?? null;
+      const horasDesdeUltimoWebhook = ultimoWebhookEm
+        ? (agora.getTime() - new Date(ultimoWebhookEm).getTime()) / (1000 * 60 * 60)
+        : null;
+
+      return {
+        ultimoWebhookEm,
+        horasDesdeUltimoWebhook,
+        ultimoCnj: ultimoCompleto?.cnj ?? null,
+        totalProcessandoAntigos: Number(totalProcessandoAntigos),
+        totalUltimas24h: Number(totalUltimas24h),
+        completadosUltimas24h: Number(completadosUltimas24h),
+        alerta: horasDesdeUltimoWebhook !== null && horasDesdeUltimoWebhook > 24,
+        alertaMensagem: horasDesdeUltimoWebhook !== null && horasDesdeUltimoWebhook > 24
+          ? `Nenhum webhook recebido há ${Math.round(horasDesdeUltimoWebhook)}h — verifique se o deploy está atualizado`
+          : null,
+      };
+    }),
+
+    // ─── Reprocessar Autos Pendentes ─────────────────────────────────────────────
+    /**
+     * Busca request_ids com status "processing" no banco, consulta o resultado
+     * na API Judit e salva os metadados de attachments sem criar nova requisição.
+     * Útil quando o webhook chegou no site publicado mas o banco local ficou desatualizado.
+     */
+    reprocessarAutosJudit: protectedProcedure
+      .input(z.object({ limite: z.number().min(1).max(50).default(10) }).optional())
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const limite = input?.limite ?? 10;
+        const { getDb } = await import("./db");
+        const { juditRequests } = await import("../drizzle/schema");
+        const { eq, isNotNull } = await import("drizzle-orm");
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+        // Buscar requests com status "processing" (webhook não chegou ou não foi processado)
+        const pendentes = await db
+          .select({ id: juditRequests.id, requestId: juditRequests.requestId, cnj: juditRequests.cnj })
+          .from(juditRequests)
+          .where(eq(juditRequests.status, "processing"))
+          .limit(limite);
+
+        if (pendentes.length === 0) {
+          return { reprocessados: 0, erros: 0, detalhes: [] };
+        }
+
+        const { obterResultadoJudit } = await import("./judit");
+        const { processarResultadoJuditExterno } = await import("./_core/index");
+
+        const detalhes: Array<{ cnj: string; requestId: string; status: string; attachments: number }> = [];
+        let reprocessados = 0;
+        let erros = 0;
+
+        for (const req of pendentes) {
+          try {
+            const resultado = await obterResultadoJudit(req.requestId);
+            if (!resultado) {
+              detalhes.push({ cnj: req.cnj, requestId: req.requestId, status: "sem_resultado", attachments: 0 });
+              continue;
+            }
+            const resultadoTyped = resultado as Record<string, unknown>;
+            const attachments = (resultadoTyped.attachments as unknown[]) ?? [];
+            await processarResultadoJuditExterno(req.requestId, resultadoTyped);
+            reprocessados++;
+            detalhes.push({ cnj: req.cnj, requestId: req.requestId, status: "ok", attachments: attachments.length });
+          } catch (err) {
+            erros++;
+            detalhes.push({ cnj: req.cnj, requestId: req.requestId, status: `erro: ${String(err).slice(0, 80)}`, attachments: 0 });
+          }
+        }
+
+        return { reprocessados, erros, detalhes };
+      }),
+
     // ─── Gestão de Admins ─────────────────────────────────────────────────────
     promoverAdmin: protectedProcedure
       .input(z.object({ usuarioId: z.number() }))

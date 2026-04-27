@@ -778,3 +778,10 @@
 - [x] Melhoria 1: retornar attachmentId na rota getAutosProcesso e usar como critério primário no DocumentosCard
 - [x] Melhoria 2: normalizar nomeArquivo para uppercase no webhook e no cruzamento
 - [x] Melhoria 3: attachment_id já preenchido em todos os 780 registros (0 vazios) — sem atualização necessária
+
+## Correção Webhook Judit e Reprocessamento (2026-04-27)
+- [ ] Passo 1: publicar checkpoint atualizado no site recuperadeb-futgbwve.manus.space
+- [ ] Passo 1: publicar checkpoint atualizado no site recuperadeb-futgbwve.manus.space
+- [x] Passo 2: criar rota admin.reprocessarAutosJudit e reprocessar 7 processos pendentes
+- [x] Passo 3: card de monitoramento de webhook no AdminJudit (último webhook, status do deploy)
+- [ ] Passo 4: testar fluxo completo com 1 processo novo após publicação

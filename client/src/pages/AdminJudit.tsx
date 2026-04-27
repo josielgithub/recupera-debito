@@ -1,6 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { trpc } from "@/lib/trpc";
-import { useTransition } from "react";
 import { SecaoQualidade } from "./AdminJudit-Qualidade";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1047,6 +1046,93 @@ function SecaoProblemas() {
 }
 
 // ─── Seção Autos Processuais ─────────────────────────────────────────────────
+// ─── Monitoramento de Webhook ────────────────────────────────────────────────
+function CardMonitoramentoWebhook() {
+  const { data, isLoading, refetch } = trpc.admin.statusWebhook.useQuery(undefined, {
+    refetchInterval: 60_000,
+  });
+  const [reprocessando, setReprocessando] = useState(false);
+  const reprocessarMutation = trpc.admin.reprocessarAutosJudit.useMutation({
+    onSuccess: (res) => {
+      toast.success(`Reprocessamento concluído: ${res.reprocessados} processados, ${res.erros} erros`);
+      refetch();
+    },
+    onError: (e) => toast.error(`Erro: ${e.message}`),
+    onSettled: () => setReprocessando(false),
+  });
+
+  if (isLoading) return null;
+
+  const formatDataHora = (d: Date | string | null | undefined) => {
+    if (!d) return "Nunca";
+    return new Date(d).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  };
+
+  const alerta = data?.alerta || !data?.ultimoWebhookEm;
+  const alertaMensagem = data?.alertaMensagem ?? (data?.ultimoWebhookEm ? null : "Nenhum webhook recebido ainda — verifique se o deploy está atualizado");
+
+  return (
+    <div className={`p-4 rounded-lg border mb-4 ${
+      alerta ? "bg-amber-50 border-amber-200" : "bg-green-50 border-green-200"
+    }`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-2">
+          {alerta ? (
+            <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          ) : (
+            <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+          )}
+          <div>
+            <p className={`text-sm font-semibold ${alerta ? "text-amber-800" : "text-green-800"}`}>
+              {alerta ? "Atenção: Webhook" : "Webhook ativo"}
+            </p>
+            {alertaMensagem && (
+              <p className="text-xs text-amber-700 mt-0.5">{alertaMensagem}</p>
+            )}
+            <div className="mt-1 grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1 text-xs">
+              <div>
+                <span className="text-muted-foreground">Último webhook:</span>{" "}
+                <span className="font-medium">{formatDataHora(data?.ultimoWebhookEm)}</span>
+              </div>
+              {data?.ultimoCnj && (
+                <div>
+                  <span className="text-muted-foreground">Último CNJ:</span>{" "}
+                  <span className="font-mono font-medium">{data.ultimoCnj}</span>
+                </div>
+              )}
+              <div>
+                <span className="text-muted-foreground">Completados 24h:</span>{" "}
+                <span className="font-medium">{data?.completadosUltimas24h ?? 0}</span>
+              </div>
+              {(data?.totalProcessandoAntigos ?? 0) > 0 && (
+                <div>
+                  <span className="text-amber-700 font-medium">{data?.totalProcessandoAntigos} req. travados (&gt;2h)</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="shrink-0 text-xs h-7"
+          disabled={reprocessando}
+          onClick={() => {
+            setReprocessando(true);
+            reprocessarMutation.mutate();
+          }}
+        >
+          {reprocessando ? (
+            <><RefreshCw className="h-3 w-3 mr-1 animate-spin" />Reprocessando...</>
+          ) : (
+            <><RotateCcw className="h-3 w-3 mr-1" />Reprocessar pendentes</>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function SecaoAutos() {
   const { data, isLoading, error } = trpc.admin.listarProcessosComAutos.useQuery(undefined, {
     refetchInterval: 60_000,
@@ -1088,6 +1174,9 @@ function SecaoAutos() {
 
   return (
     <div className="space-y-6">
+      {/* Card de monitoramento de webhook */}
+      <CardMonitoramentoWebhook />
+
       {/* Cards de métricas */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="p-3 bg-teal-50 rounded-lg border border-teal-100">
