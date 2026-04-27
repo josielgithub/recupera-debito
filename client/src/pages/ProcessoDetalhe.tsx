@@ -1182,13 +1182,22 @@ export default function ProcessoDetalhe() {
       // Resultado chegou — parar polling
       setPollingRequestId(null);
       setPollingTentativa(0);
-      if (result.status === "done" && result.baixados > 0) {
+      if (result.status === "done" && result.baixados > 0 && (result.pendentes ?? 0) > 0) {
+        toast.success(`${result.baixados} documento${result.baixados !== 1 ? "s" : ""} baixado${result.baixados !== 1 ? "s" : ""} com sucesso! ${result.pendentes} ainda sendo processados pela Judit.`);
+        utils.admin.processoDetalhe.invalidate({ cnj });
+      } else if (result.status === "done" && result.baixados > 0) {
         toast.success(`${result.baixados} documento${result.baixados !== 1 ? "s" : ""} baixado${result.baixados !== 1 ? "s" : ""} com sucesso!`);
         utils.admin.processoDetalhe.invalidate({ cnj });
-      } else if (result.status === "done" && result.baixados === 0) {
-        toast.warning(`Autos processados, mas nenhum documento pôde ser baixado (${result.erros} erro${result.erros !== 1 ? "s" : ""}).`);
+      } else if (result.status === "done" && (result.pendentes ?? 0) > 0) {
+        toast.warning(`${result.pendentes} documento${(result.pendentes ?? 0) !== 1 ? "s" : ""} identificado${(result.pendentes ?? 0) !== 1 ? "s" : ""}. Aguardando processamento pela Judit — os arquivos ficarão disponíveis quando o status mudar para 'done'.`);
+        utils.admin.processoDetalhe.invalidate({ cnj });
+      } else if (result.status === "done" && result.erros > 0) {
+        toast.warning(`Documentos identificados mas download não disponível para este tribunal ainda (${result.erros} erro${result.erros !== 1 ? "s" : ""}).`);
+        utils.admin.processoDetalhe.invalidate({ cnj });
+      } else if (result.status === "no_attachments" || result.status === "no_valid_attachments") {
+        toast.warning("Nenhum documento encontrado para este processo na Judit.");
       } else {
-        toast.warning(`Autos recebidos, mas sem documentos válidos (IDs inválidos ou formato não suportado).`);
+        toast.warning("Autos recebidos sem documentos disponíveis no momento.");
       }
     },
     onError: () => {

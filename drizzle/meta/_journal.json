@@ -169,6 +169,13 @@
       "when": 1777056049025,
       "tag": "0023_tense_silver_sable",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1777317851308,
+      "tag": "0024_odd_iron_patriot",
+      "breakpoints": true
     }
   ]
 }

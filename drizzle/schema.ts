@@ -233,8 +233,9 @@ export const processoAutos = mysqlTable("processo_autos", {
   nomeArquivo: varchar("nome_arquivo", { length: 512 }).notNull(),
   extensao: varchar("extensao", { length: 20 }),
   tamanhoBytes: int("tamanho_bytes"),
-  urlS3: varchar("url_s3", { length: 1024 }).notNull(),  // URL completa no S3
-  fileKey: varchar("file_key", { length: 1024 }).notNull(), // chave no S3
+  urlS3: varchar("url_s3", { length: 1024 }),  // URL completa no S3 (null se download falhou ou pending)
+  fileKey: varchar("file_key", { length: 1024 }), // chave no S3 (null se download falhou ou pending)
+  downloadErro: varchar("download_erro", { length: 256 }),  // motivo do erro de download (ex: "404 - endpoint não disponível")
   tipo: varchar("tipo", { length: 128 }),  // Sentença, Decisão, Petição, Alvará, etc
   dataDocumento: timestamp("data_documento"),
   instancia: int("instancia").default(1),  // instância do processo (1, 2, 3)

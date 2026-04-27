@@ -1380,13 +1380,20 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         }
         const pageData = (json.page_data as Record<string, unknown>[]) ?? [];
         const lawsuitEntry = pageData.find(e => e.response_type === "lawsuit");
-        if (!lawsuitEntry) return { status: "no_attachments" as const, baixados: 0, erros: 0 };
+        if (!lawsuitEntry) return { status: "no_attachments" as const, baixados: 0, erros: 0, pendentes: 0, totalRaw: 0 };
         const rd = (lawsuitEntry.response_data as Record<string, unknown>) ?? {};
         const rawAttachments = (rd.attachments as Record<string, unknown>[]) ?? [];
-        const attachments = rawAttachments.filter(a => String(a.attachment_id ?? "").length > 6);
-        if (attachments.length === 0) {
-          return { status: "no_valid_attachments" as const, baixados: 0, erros: 0, totalRaw: rawAttachments.length };
+        // Filtro: apenas attachment_id não-vazio (sem filtro de tamanho)
+        const allValid = rawAttachments.filter(a => {
+          const id = String(a.attachment_id ?? "").trim();
+          return id !== "" && id !== "null" && id !== "undefined";
+        });
+        if (allValid.length === 0) {
+          return { status: "no_valid_attachments" as const, baixados: 0, erros: 0, pendentes: 0, totalRaw: rawAttachments.length };
         }
+        // Separar done vs pending
+        const doneAtts = allValid.filter(a => String(a.status ?? "") === "done");
+        const pendingAtts = allValid.filter(a => String(a.status ?? "") !== "done");
         const { getDb } = await import("./db");
         const { processos: processosTable } = await import("../drizzle/schema");
         const { eq } = await import("drizzle-orm");
@@ -1398,36 +1405,50 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         const existentesIds = new Set(existentes.map(a => String(a.attachmentId)));
         let baixados = 0;
         let erros = 0;
+        let metadadosSalvos = 0;
         const instancia = 1;
-        for (const att of attachments) {
+        // Processar attachments com status=done — tentar download
+        for (const att of doneAtts) {
           const attachmentId = String(att.attachment_id ?? "");
           if (existentesIds.has(attachmentId)) continue;
           const nome = String(att.attachment_name ?? `doc_${attachmentId}`).trim().toUpperCase();
           const ext = String(att.extension ?? "pdf").toLowerCase();
           const dataDoc = att.attachment_date ? new Date(att.attachment_date as string) : undefined;
+          const corrompido = Boolean(att.corrupted ?? false);
           try {
             const result = await downloadAnexoJudit(processo.cnj, instancia, attachmentId);
-            if (!result || result.buffer.length < 100) { erros++; continue; }
+            if (!result || result.buffer.length < 100) {
+              await insertProcessoAuto({ processoId: input.processoId, attachmentId, nomeArquivo: nome, extensao: ext, urlS3: null, fileKey: null, downloadErro: "Resposta vazia ou muito pequena", dataDocumento: dataDoc, statusAnexo: "done", instancia, corrompido });
+              erros++; continue;
+            }
             const fileKey = `autos/${processo.cnj.replace(/[^\w]/g, "_")}/${attachmentId}.${ext}`;
             const { url } = await storagePut(fileKey, result.buffer, result.contentType);
-            await insertProcessoAuto({
-              processoId: input.processoId,
-              attachmentId,
-              nomeArquivo: nome,
-              extensao: ext,
-              tamanhoBytes: result.buffer.length,
-              urlS3: url,
-              fileKey,
-              dataDocumento: dataDoc,
-            });
+            await insertProcessoAuto({ processoId: input.processoId, attachmentId, nomeArquivo: nome, extensao: ext, tamanhoBytes: result.buffer.length, urlS3: url, fileKey, dataDocumento: dataDoc, statusAnexo: "done", instancia, corrompido });
             baixados++;
-          } catch (err) {
-            console.error(`[Autos] Erro ao baixar anexo ${attachmentId}:`, err);
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            const erroMsg = msg.includes("404") ? "404 - endpoint não disponível para este tribunal" : msg.substring(0, 200);
+            console.error(`[Autos] Erro ao baixar anexo ${attachmentId}:`, msg);
+            if (!existentesIds.has(attachmentId)) {
+              await insertProcessoAuto({ processoId: input.processoId, attachmentId, nomeArquivo: nome, extensao: ext, urlS3: null, fileKey: null, downloadErro: erroMsg, dataDocumento: dataDoc, statusAnexo: "done", instancia, corrompido });
+            }
             erros++;
           }
         }
+        // Salvar metadados de attachments pending (sem tentar download)
+        for (const att of pendingAtts) {
+          const attachmentId = String(att.attachment_id ?? "");
+          if (existentesIds.has(attachmentId)) continue;
+          const nome = String(att.attachment_name ?? `doc_${attachmentId}`).trim().toUpperCase();
+          const ext = String(att.extension ?? "pdf").toLowerCase();
+          const dataDoc = att.attachment_date ? new Date(att.attachment_date as string) : undefined;
+          const corrompido = Boolean(att.corrupted ?? false);
+          await insertProcessoAuto({ processoId: input.processoId, attachmentId, nomeArquivo: nome, extensao: ext, urlS3: null, fileKey: null, downloadErro: null, dataDocumento: dataDoc, statusAnexo: String(att.status ?? "pending"), instancia, corrompido });
+          metadadosSalvos++;
+        }
         if (baixados > 0) await marcarAutosDisponiveis(input.processoId);
-        return { status: "done" as const, baixados, erros, totalRaw: rawAttachments.length, totalValidos: attachments.length };
+        console.log(`[Autos] CNJ ${processo.cnj}: ${baixados} baixados, ${erros} erros, ${metadadosSalvos} metadados pending salvos`);
+        return { status: "done" as const, baixados, erros, pendentes: metadadosSalvos, totalRaw: rawAttachments.length, totalValidos: allValid.length, totalDone: doneAtts.length, totalPending: pendingAtts.length };
       }),
     // ─── Processar Pendentes (Fluxo 2) ───────────────────────────────────────────────
     processarAutosPendentes: protectedProcedure.mutation(async ({ ctx }) => {
@@ -1476,28 +1497,50 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
           if (!lawsuitEntry) { aguardando++; detalhes.push({ cnj: processo.cnj, status: "no_lawsuit_entry" }); continue; }
           const rd = (lawsuitEntry.response_data as Record<string, unknown>) ?? {};
           const rawAttachments = (rd.attachments as Record<string, unknown>[]) ?? [];
-          const attachments = rawAttachments.filter(a => String(a.attachment_id ?? "").length > 6);
-          if (attachments.length === 0) { aguardando++; detalhes.push({ cnj: processo.cnj, status: "no_valid_attachments", baixados: 0 }); continue; }
+          const allValid = rawAttachments.filter(a => { const id = String(a.attachment_id ?? "").trim(); return id !== "" && id !== "null" && id !== "undefined"; });
+          if (allValid.length === 0) { aguardando++; detalhes.push({ cnj: processo.cnj, status: "no_valid_attachments", baixados: 0 }); continue; }
+          const doneAtts2 = allValid.filter(a => String(a.status ?? "") === "done");
+          const pendingAtts2 = allValid.filter(a => String(a.status ?? "") !== "done");
           const existentes = await listProcessoAutos(processo.id);
           const existentesIds = new Set(existentes.map(a => String(a.attachmentId)));
           let baixados = 0;
+          let metadadosSalvos2 = 0;
           const instancia = 1;
-          for (const att of attachments) {
+          for (const att of doneAtts2) {
             const attachmentId = String(att.attachment_id ?? "");
             if (existentesIds.has(attachmentId)) continue;
             const nome = String(att.attachment_name ?? `doc_${attachmentId}`).trim().toUpperCase();
             const ext = String(att.extension ?? "pdf").toLowerCase();
             const dataDoc = att.attachment_date ? new Date(att.attachment_date as string) : undefined;
+            const corrompido = Boolean(att.corrupted ?? false);
             try {
               const result = await downloadAnexoJudit(processo.cnj, instancia, attachmentId);
-              if (!result || result.buffer.length < 100) continue;
+              if (!result || result.buffer.length < 100) {
+                await insertProcessoAuto({ processoId: processo.id, attachmentId, nomeArquivo: nome, extensao: ext, urlS3: null, fileKey: null, downloadErro: "Resposta vazia", dataDocumento: dataDoc, statusAnexo: "done", instancia, corrompido });
+                continue;
+              }
               const fileKey = `autos/${processo.cnj.replace(/[^\w]/g, "_")}/${attachmentId}.${ext}`;
               const { url } = await storagePut(fileKey, result.buffer, result.contentType);
-              await insertProcessoAuto({ processoId: processo.id, attachmentId, nomeArquivo: nome, extensao: ext, tamanhoBytes: result.buffer.length, urlS3: url, fileKey, dataDocumento: dataDoc });
+              await insertProcessoAuto({ processoId: processo.id, attachmentId, nomeArquivo: nome, extensao: ext, tamanhoBytes: result.buffer.length, urlS3: url, fileKey, dataDocumento: dataDoc, statusAnexo: "done", instancia, corrompido });
               baixados++;
-            } catch { /* ignorar erros individuais */ }
+            } catch (err2: unknown) {
+              const msg2 = err2 instanceof Error ? err2.message : String(err2);
+              const erroMsg2 = msg2.includes("404") ? "404 - endpoint não disponível para este tribunal" : msg2.substring(0, 200);
+              if (!existentesIds.has(attachmentId)) await insertProcessoAuto({ processoId: processo.id, attachmentId, nomeArquivo: nome, extensao: ext, urlS3: null, fileKey: null, downloadErro: erroMsg2, dataDocumento: dataDoc, statusAnexo: "done", instancia, corrompido });
+            }
+          }
+          for (const att of pendingAtts2) {
+            const attachmentId = String(att.attachment_id ?? "");
+            if (existentesIds.has(attachmentId)) continue;
+            const nome = String(att.attachment_name ?? `doc_${attachmentId}`).trim().toUpperCase();
+            const ext = String(att.extension ?? "pdf").toLowerCase();
+            const dataDoc = att.attachment_date ? new Date(att.attachment_date as string) : undefined;
+            const corrompido = Boolean(att.corrupted ?? false);
+            await insertProcessoAuto({ processoId: processo.id, attachmentId, nomeArquivo: nome, extensao: ext, urlS3: null, fileKey: null, downloadErro: null, dataDocumento: dataDoc, statusAnexo: String(att.status ?? "pending"), instancia, corrompido });
+            metadadosSalvos2++;
           }
           if (baixados > 0) { await marcarAutosDisponiveis(processo.id); processados++; detalhes.push({ cnj: processo.cnj, status: "processado", baixados }); }
+          else if (metadadosSalvos2 > 0) { aguardando++; detalhes.push({ cnj: processo.cnj, status: `${metadadosSalvos2}_pending_salvos`, baixados: 0 }); }
           else { aguardando++; detalhes.push({ cnj: processo.cnj, status: "sem_downloads", baixados: 0 }); }
         } catch (err) {
           erros++; detalhes.push({ cnj: processo.cnj, status: "erro" });

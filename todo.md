@@ -793,3 +793,11 @@
 - [x] Fluxo 1: botão "Baixar autos" no ProcessoDetalhe com polling 30s/20 tentativas
 - [x] Fluxo 2: botão "Processar pendentes" no AdminJudit para processos com autos_solicitado_em e autosDisponiveis=false
 - [x] Registrar custo R$3,50 no judit_consulta_log ao iniciar download individual
+
+## Correção Filtro attachment_id e Suporte a IDs Curtos (2026-04-27)
+
+- [x] Passo 1: remover filtro length > 6 — usar apenas attachment_id != null/vazio + status === "done"
+- [x] Passo 2: salvar metadados de attachments pending no banco (sem download); mostrar mensagem correta
+- [x] Passo 3: verificar schema processo_autos para attachment_id curtos (varchar 128 — ok)
+- [x] Passo 4: tentar download com IDs curtos; se 404, salvar metadados com urlS3=null e download_erro
+- [x] Passo 5: melhorar mensagens de erro no frontend (remover "formato não suportado")

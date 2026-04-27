@@ -2597,14 +2597,32 @@ export async function insertProcessoAuto(data: {
   nomeArquivo: string;
   extensao?: string;
   tamanhoBytes?: number;
-  urlS3: string;
-  fileKey: string;
+  urlS3?: string | null;
+  fileKey?: string | null;
+  downloadErro?: string | null;
   tipo?: string;
   dataDocumento?: Date;
+  statusAnexo?: string;
+  instancia?: number;
+  corrompido?: boolean;
 }): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  await db.insert(processoAutos).values(data);
+  await db.insert(processoAutos).values({
+    processoId: data.processoId,
+    attachmentId: data.attachmentId,
+    nomeArquivo: data.nomeArquivo,
+    extensao: data.extensao,
+    tamanhoBytes: data.tamanhoBytes,
+    urlS3: data.urlS3 ?? null,
+    fileKey: data.fileKey ?? null,
+    downloadErro: data.downloadErro ?? null,
+    tipo: data.tipo,
+    dataDocumento: data.dataDocumento,
+    statusAnexo: data.statusAnexo ?? "done",
+    instancia: data.instancia ?? 1,
+    corrompido: data.corrompido ?? false,
+  });
 }
 
 export async function listProcessoAutos(processoId: number) {
