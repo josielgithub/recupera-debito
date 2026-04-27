@@ -773,3 +773,8 @@
 - [x] Cruzar payload Judit com tabela processo_autos por attachment_name
 - [x] Botão Baixar todos para Caso 2 (não baixados)
 - [x] Remover seções antigas "Documentos" e "Autos Processuais" separadas
+
+## Melhorias Cruzamento Documentos (2026-04-27)
+- [x] Melhoria 1: retornar attachmentId na rota getAutosProcesso e usar como critério primário no DocumentosCard
+- [x] Melhoria 2: normalizar nomeArquivo para uppercase no webhook e no cruzamento
+- [x] Melhoria 3: attachment_id já preenchido em todos os 780 registros (0 vazios) — sem atualização necessária

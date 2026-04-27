@@ -717,12 +717,17 @@ function DocumentosCard({
     return <Badge className={`text-xs px-1.5 py-0 h-4 border-0 ${color}`}>{label}</Badge>;
   }
 
-  // Cruzar payload da Judit com registros da tabela processo_autos por attachment_name
-  const autosMap = new Map<string, any>();
+  // Cruzar payload da Judit com registros da tabela processo_autos
+  // Critério primário: attachmentId (ID numérico da Judit)
+  // Fallback: nomeArquivo normalizado (UPPERCASE, sem espaços extras)
+  const autosMapById = new Map<string, any>();
+  const autosMapByName = new Map<string, any>();
   if (autos) {
     for (const a of autos as any[]) {
-      if (a.nomeArquivo) autosMap.set(a.nomeArquivo.trim().toUpperCase(), a);
-      if (a.attachmentId) autosMap.set(String(a.attachmentId), a);
+      // Critério primário: attachment_id
+      if (a.attachmentId) autosMapById.set(String(a.attachmentId), a);
+      // Fallback: nome normalizado
+      if (a.nomeArquivo) autosMapByName.set(a.nomeArquivo.trim().toUpperCase(), a);
     }
   }
 
@@ -887,10 +892,10 @@ function DocumentosCard({
               {filtrados.map((att, i) => {
                 const cat = categorizarDocumento(att);
                 const nomeJudit = att.attachment_name ?? att.content ?? "Documento sem nome";
-                // Tentar cruzar com processo_autos por nome ou attachment_id
+                // Cruzamento: attachment_id como critério primário, nome normalizado como fallback
                 const autoRecord =
-                  autosMap.get(nomeJudit.trim().toUpperCase()) ??
-                  (att.attachment_id ? autosMap.get(String(att.attachment_id)) : undefined);
+                  (att.attachment_id ? autosMapById.get(String(att.attachment_id)) : undefined) ??
+                  autosMapByName.get(nomeJudit.trim().toUpperCase());
 
                 const hasUrl = autoRecord?.urlS3 && autoRecord.urlS3.trim().length > 0;
                 const isIndisponivel = autoRecord?.statusAnexo === "error" || autoRecord?.statusAnexo === "corrupted";

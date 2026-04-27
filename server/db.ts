@@ -2610,7 +2610,28 @@ export async function insertProcessoAuto(data: {
 export async function listProcessoAutos(processoId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(processoAutos).where(eq(processoAutos.processoId, processoId)).orderBy(desc(processoAutos.createdAt));
+  // Retorna todos os campos incluindo attachmentId para cruzamento no frontend
+  return db
+    .select({
+      id: processoAutos.id,
+      processoId: processoAutos.processoId,
+      attachmentId: processoAutos.attachmentId,
+      nomeArquivo: processoAutos.nomeArquivo,
+      extensao: processoAutos.extensao,
+      tamanhoBytes: processoAutos.tamanhoBytes,
+      urlS3: processoAutos.urlS3,
+      fileKey: processoAutos.fileKey,
+      tipo: processoAutos.tipo,
+      dataDocumento: processoAutos.dataDocumento,
+      instancia: processoAutos.instancia,
+      statusAnexo: processoAutos.statusAnexo,
+      corrompido: processoAutos.corrompido,
+      stepId: processoAutos.stepId,
+      createdAt: processoAutos.createdAt,
+    })
+    .from(processoAutos)
+    .where(eq(processoAutos.processoId, processoId))
+    .orderBy(desc(processoAutos.createdAt));
 }
 
 export async function marcarAutosDisponiveis(processoId: number): Promise<void> {

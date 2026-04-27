@@ -154,7 +154,8 @@ async function processarResultadoJudit(
       for (const att of attachments) {
         const attachment = att as Record<string, unknown>;
         const attachmentId = String(attachment.id ?? attachment.attachment_id ?? "");
-        const nomeArquivo = String(attachment.name ?? attachment.attachment_name ?? attachment.filename ?? "documento");
+        // Normalizar nome para UPPERCASE e sem espaços extras (garante cruzamento confiável)
+        const nomeArquivo = String(attachment.name ?? attachment.attachment_name ?? attachment.filename ?? "documento").trim().toUpperCase();
         // A Judit retorna extensão como campo separado
         const extensao = String(
           attachment.extension ?? attachment.ext ??
