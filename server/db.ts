@@ -379,6 +379,18 @@ export async function listAllProcessos(page = 1, pageSize = 50, filtros?: Filtro
   } else if (filtros?.advogado && filtros.advogado.trim()) {
     condicoes.push(sql`${processos.advogado} LIKE ${'%' + filtros.advogado.trim() + '%'}`);
   }
+  // Filtro de busca textual — feito no banco para funcionar com paginação
+  if (filtros?.busca && filtros.busca.trim()) {
+    const termo = '%' + filtros.busca.trim() + '%';
+    condicoes.push(
+      or(
+        sql`${processos.cnj} LIKE ${termo}`,
+        sql`${clientes.nome} LIKE ${termo}`,
+        sql`${clientes.cpf} LIKE ${termo}`,
+        sql`${parceiros.nomeEscritorio} LIKE ${termo}`
+      ) as ReturnType<typeof and>
+    );
+  }
 
   const whereClause = condicoes.length > 0 ? and(...condicoes) : undefined;
 
@@ -431,20 +443,7 @@ export async function listAllProcessos(page = 1, pageSize = 50, filtros?: Filtro
     (whereClause ? countQuery.where(whereClause) : countQuery),
   ]);
 
-  // Filtro de busca textual em memória (CNJ, nome, CPF, parceiro)
-  let resultado = rows;
-  if (filtros?.busca && filtros.busca.trim()) {
-    const termo = filtros.busca.trim().toLowerCase();
-    resultado = rows.filter(
-      (p) =>
-        p.cnj.toLowerCase().includes(termo) ||
-        (p.clienteNome ?? "").toLowerCase().includes(termo) ||
-        (p.clienteCpf ?? "").includes(termo) ||
-        (p.parceiroNome ?? "").toLowerCase().includes(termo)
-    );
-  }
-
-  return { processos: resultado, total: Number(countRows[0]?.count ?? 0) };
+  return { processos: rows, total: Number(countRows[0]?.count ?? 0) };
 }
 
 // ─── Rate Limit ────────────────────────────────────────────────────────────
