@@ -767,3 +767,9 @@
 - [x] Corrigir isDone: habilitar botão para status pending/done/null, desabilitar só para error/corrupted
 - [x] Botão "Baixar todos" com progresso sequencial e toast de conclusão
 - [x] Badge de instância por documento (1ª=azul, 2ª=roxo, 3ª=verde)
+
+## Unificação Seções Documentos + Autos Processuais (2026-04-27)
+- [x] Criar componente DocumentosCard unificado com 4 casos (Disponível/Não baixado/Solicitar/Indisponível)
+- [x] Cruzar payload Judit com tabela processo_autos por attachment_name
+- [x] Botão Baixar todos para Caso 2 (não baixados)
+- [x] Remover seções antigas "Documentos" e "Autos Processuais" separadas

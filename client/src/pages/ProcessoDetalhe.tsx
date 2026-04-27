@@ -639,12 +639,92 @@ function DocIcon({ tipo }: { tipo: string }) {
   return <FileText className="w-4 h-4" />;
 }
 
-// ─── Componente de Documentos ─────────────────────────────────────────────────
-function DocumentosCard({ attachments }: { attachments: JuditAttachment[] }) {
+// ─── Componente Unificado de Documentos ────────────────────────────────────────
+function DocumentosCard({
+  attachments,
+  processoId,
+  autosDisponiveis,
+  autosJaSolicitados,
+}: {
+  attachments: JuditAttachment[];
+  processoId?: number;
+  autosDisponiveis?: boolean;
+  autosJaSolicitados?: boolean;
+}) {
+  const utils = trpc.useUtils();
   const [expandido, setExpandido] = useState(true);
   const [filtro, setFiltro] = useState<string>("todos");
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [baixandoTodos, setBaixandoTodos] = useState(false);
+  const [progressoBaixarTodos, setProgressoBaixarTodos] = useState<{ atual: number; total: number } | null>(null);
+
+  // Buscar registros da tabela processo_autos (arquivos já baixados ou em processo)
+  const { data: autos, isLoading: autosLoading } = trpc.admin.getAutosProcesso.useQuery(
+    { processoId: processoId! },
+    { enabled: !!processoId }
+  );
+
+  const downloadMutation = trpc.admin.downloadAnexo.useMutation({
+    onSuccess: (result, variables) => {
+      utils.admin.getAutosProcesso.setData({ processoId: processoId! }, (old: any) => {
+        if (!old) return old;
+        return old.map((a: any) =>
+          a.id === variables.autoId ? { ...a, urlS3: result.url } : a
+        );
+      });
+      window.open(result.url, "_blank");
+      setDownloadingId(null);
+    },
+    onError: (err) => {
+      setDownloadingId(null);
+      toast.error("Erro ao baixar arquivo: " + err.message);
+    },
+  });
 
   if (!attachments || attachments.length === 0) return null;
+
+  // Helpers de formatação
+  function formatBytes(bytes?: number): string {
+    if (!bytes) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  // Badge colorido por extensão de arquivo
+  function ExtBadge({ ext }: { ext?: string }) {
+    if (!ext) return null;
+    const e = ext.toLowerCase();
+    let cls = "text-xs uppercase px-1.5 py-0 h-4 font-mono border-0 ";
+    if (e === "pdf") cls += "bg-red-100 text-red-700";
+    else if (e === "docx" || e === "doc") cls += "bg-blue-100 text-blue-700";
+    else if (e === "html" || e === "htm") cls += "bg-green-100 text-green-700";
+    else cls += "bg-gray-100 text-gray-600";
+    return <Badge className={cls}>{e}</Badge>;
+  }
+
+  // Badge colorido por instância
+  function InstanciaBadge({ instancia }: { instancia?: number | null }) {
+    if (!instancia) return null;
+    const labels: Record<number, string> = { 1: "1ª inst.", 2: "2ª inst.", 3: "3ª inst." };
+    const colors: Record<number, string> = {
+      1: "bg-blue-100 text-blue-700",
+      2: "bg-purple-100 text-purple-700",
+      3: "bg-green-100 text-green-700",
+    };
+    const label = labels[instancia] ?? `${instancia}ª inst.`;
+    const color = colors[instancia] ?? "bg-gray-100 text-gray-600";
+    return <Badge className={`text-xs px-1.5 py-0 h-4 border-0 ${color}`}>{label}</Badge>;
+  }
+
+  // Cruzar payload da Judit com registros da tabela processo_autos por attachment_name
+  const autosMap = new Map<string, any>();
+  if (autos) {
+    for (const a of autos as any[]) {
+      if (a.nomeArquivo) autosMap.set(a.nomeArquivo.trim().toUpperCase(), a);
+      if (a.attachmentId) autosMap.set(String(a.attachmentId), a);
+    }
+  }
 
   // Ordenar: mais recentes primeiro
   const ordenados = [...attachments].sort((a, b) => {
@@ -663,11 +743,60 @@ function DocumentosCard({ attachments }: { attachments: JuditAttachment[] }) {
 
   const relevantes = ordenados.filter(a => PRIORIDADE.includes(categorizarDocumento(a).tipo));
 
+  // Contar documentos por caso para o header
+  const totalDisponiveis = (autos as any[] ?? []).filter((a: any) => a.urlS3 && a.urlS3.trim().length > 0).length;
+  const totalNaoBaixados = (autos as any[] ?? []).filter((a: any) => {
+    const isIndisp = a.statusAnexo === "error" || a.statusAnexo === "corrupted";
+    const hasUrl = a.urlS3 && a.urlS3.trim().length > 0;
+    return !isIndisp && !hasUrl;
+  }).length;
+
+  // Baixar todos os documentos do Caso 2 sequencialmente
+  async function baixarTodos() {
+    if (!autos) return;
+    const pendentes = (autos as any[]).filter((a: any) => {
+      const isIndisp = a.statusAnexo === "error" || a.statusAnexo === "corrupted";
+      const hasUrl = a.urlS3 && a.urlS3.trim().length > 0;
+      return !isIndisp && !hasUrl;
+    });
+    if (pendentes.length === 0) return;
+    setBaixandoTodos(true);
+    setProgressoBaixarTodos({ atual: 0, total: pendentes.length });
+    let sucesso = 0;
+    let falha = 0;
+    for (let i = 0; i < pendentes.length; i++) {
+      const auto = pendentes[i];
+      setProgressoBaixarTodos({ atual: i + 1, total: pendentes.length });
+      try {
+        const result = await new Promise<{ url: string }>((resolve, reject) => {
+          downloadMutation.mutate(
+            { processoId: processoId!, autoId: auto.id },
+            { onSuccess: resolve, onError: reject }
+          );
+        });
+        utils.admin.getAutosProcesso.setData({ processoId: processoId! }, (old: any) => {
+          if (!old) return old;
+          return old.map((a: any) => a.id === auto.id ? { ...a, urlS3: result.url } : a);
+        });
+        sucesso++;
+      } catch {
+        falha++;
+      }
+    }
+    setBaixandoTodos(false);
+    setProgressoBaixarTodos(null);
+    if (falha === 0) {
+      toast.success(`${sucesso} documento${sucesso !== 1 ? "s" : ""} baixado${sucesso !== 1 ? "s" : ""} com sucesso`);
+    } else {
+      toast.warning(`${sucesso} baixado${sucesso !== 1 ? "s" : ""}, ${falha} com erro`);
+    }
+  }
+
   return (
     <Card className="border-blue-200 dark:border-blue-800">
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-base flex items-center gap-2">
+        <div className="flex items-start justify-between gap-2 flex-wrap">
+          <CardTitle className="text-base flex items-center gap-2 flex-wrap">
             <FolderOpen className="w-4 h-4 text-blue-500" />
             Documentos
             <Badge variant="secondary" className="text-xs">
@@ -678,15 +807,47 @@ function DocumentosCard({ attachments }: { attachments: JuditAttachment[] }) {
                 {relevantes.length} relevante{relevantes.length > 1 ? "s" : ""}
               </Badge>
             )}
+            {totalDisponiveis > 0 && (
+              <Badge className="text-xs bg-green-100 text-green-800 border-green-200 hover:bg-green-100">
+                {totalDisponiveis} disponíve{totalDisponiveis === 1 ? "l" : "is"}
+              </Badge>
+            )}
+            {autosLoading && processoId && (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+            )}
           </CardTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setExpandido((v) => !v)}
-            className="h-7 w-7 p-0"
-          >
-            {expandido ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Botão Baixar todos (Caso 2) */}
+            {totalNaoBaixados > 0 && processoId && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1.5 bg-background"
+                disabled={baixandoTodos || !!downloadingId}
+                onClick={baixarTodos}
+              >
+                {baixandoTodos && progressoBaixarTodos ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Baixando {progressoBaixarTodos.atual} de {progressoBaixarTodos.total}...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3.5 h-3.5" />
+                    Baixar todos ({totalNaoBaixados})
+                  </>
+                )}
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setExpandido((v) => !v)}
+              className="h-7 w-7 p-0"
+            >
+              {expandido ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </Button>
+          </div>
         </div>
 
         {expandido && (
@@ -725,39 +886,56 @@ function DocumentosCard({ attachments }: { attachments: JuditAttachment[] }) {
             <div className="space-y-2">
               {filtrados.map((att, i) => {
                 const cat = categorizarDocumento(att);
-                const nome = att.attachment_name ?? att.content ?? "Documento sem nome";
-                const ext = nome.split(".").pop()?.toLowerCase();
-                const isPdf = ext === "pdf";
-                const isHtml = ext === "html" || ext === "htm";
+                const nomeJudit = att.attachment_name ?? att.content ?? "Documento sem nome";
+                // Tentar cruzar com processo_autos por nome ou attachment_id
+                const autoRecord =
+                  autosMap.get(nomeJudit.trim().toUpperCase()) ??
+                  (att.attachment_id ? autosMap.get(String(att.attachment_id)) : undefined);
+
+                const hasUrl = autoRecord?.urlS3 && autoRecord.urlS3.trim().length > 0;
+                const isIndisponivel = autoRecord?.statusAnexo === "error" || autoRecord?.statusAnexo === "corrupted";
+                const isNaoBaixado = autoRecord && !hasUrl && !isIndisponivel;
+                // Caso 3: no payload mas sem registro em processo_autos
+                const semRegistro = !autoRecord;
+                const isDownloading = downloadingId === autoRecord?.id;
+
+                // Extensão do arquivo
+                const ext = autoRecord?.extensao ?? nomeJudit.split(".").pop()?.toLowerCase();
 
                 return (
                   <div
                     key={att.attachment_id ?? i}
                     className="flex items-start gap-3 p-3 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors"
                   >
-                    {/* Ícone e badge de tipo */}
+                    {/* Ícone de tipo de documento */}
                     <div className={`shrink-0 mt-0.5 p-1.5 rounded-md border ${cat.cor}`}>
                       <DocIcon tipo={cat.tipo} />
                     </div>
 
-                    {/* Informações */}
+                    {/* Informações do documento */}
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
-                        <span className="text-sm font-medium text-foreground truncate max-w-xs">
-                          {nome}
-                        </span>
-                        <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${cat.cor}`}>
-                          {cat.label}
-                        </span>
-                        {att.status === "pending" && (
-                          <span className="text-xs px-1.5 py-0.5 rounded border bg-amber-50 text-amber-700 border-amber-200">
-                            Pendente
-                          </span>
+                        <span className="text-sm font-medium text-foreground truncate max-w-xs">{nomeJudit}</span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${cat.cor}`}>{cat.label}</span>
+                        {/* Badge de extensão */}
+                        {ext && <ExtBadge ext={ext} />}
+                        {/* Badge de instância */}
+                        {autoRecord?.instancia && <InstanciaBadge instancia={autoRecord.instancia} />}
+                        {/* Badge de status */}
+                        {hasUrl && (
+                          <Badge className="text-xs bg-green-100 text-green-700 border-0 px-1.5 py-0 h-4">Disponível</Badge>
                         )}
-                        {att.status === "done" && (
-                          <span className="text-xs px-1.5 py-0.5 rounded border bg-green-50 text-green-700 border-green-200">
-                            Disponível
-                          </span>
+                        {isNaoBaixado && (
+                          <Badge className="text-xs bg-gray-100 text-gray-600 border-0 px-1.5 py-0 h-4">Não baixado</Badge>
+                        )}
+                        {isIndisponivel && (
+                          <Badge className="text-xs bg-red-100 text-red-700 border-0 px-1.5 py-0 h-4">Indisponível</Badge>
+                        )}
+                        {semRegistro && autosJaSolicitados && (
+                          <Badge className="text-xs bg-red-100 text-red-700 border-0 px-1.5 py-0 h-4">Não disponível</Badge>
+                        )}
+                        {semRegistro && !autosJaSolicitados && (
+                          <Badge className="text-xs bg-amber-100 text-amber-700 border-0 px-1.5 py-0 h-4">Solicitar</Badge>
                         )}
                       </div>
                       <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
@@ -770,327 +948,64 @@ function DocumentosCard({ attachments }: { attachments: JuditAttachment[] }) {
                         {att.attachment_id && (
                           <span className="font-mono opacity-60">ID: {att.attachment_id}</span>
                         )}
-                        {(isPdf || isHtml) && (
-                          <span className="uppercase font-mono opacity-60">{ext}</span>
+                        {autoRecord?.tamanhoBytes && (
+                          <span>{formatBytes(autoRecord.tamanhoBytes)}</span>
                         )}
                       </div>
                     </div>
 
-                    {/* Botão de ação */}
-                    <div className="shrink-0">
-                      {att.status === "done" ? (
+                    {/* Botões de ação */}
+                    <div className="shrink-0 flex gap-1.5">
+                      {/* Caso 1: já baixado — botões Abrir e Baixar */}
+                      {hasUrl && (
+                        <>
+                          <a href={autoRecord.urlS3} target="_blank" rel="noopener noreferrer">
+                            <Button variant="outline" size="sm" className="h-7 text-xs gap-1 bg-green-50 border-green-300 text-green-700 hover:bg-green-100">
+                              <ExternalLink className="w-3 h-3" />
+                              Abrir
+                            </Button>
+                          </a>
+                          <a href={autoRecord.urlS3} download>
+                            <Button variant="outline" size="sm" className="h-7 text-xs gap-1 bg-background">
+                              <Download className="w-3 h-3" />
+                              Baixar
+                            </Button>
+                          </a>
+                        </>
+                      )}
+                      {/* Caso 2: existe em processo_autos mas sem URL — botão Baixar */}
+                      {isNaoBaixado && processoId && (
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-7 gap-1.5 text-xs"
-                          title="Download disponível"
+                          className="h-7 text-xs gap-1 bg-background"
+                          disabled={isDownloading || baixandoTodos}
+                          onClick={() => {
+                            setDownloadingId(autoRecord.id);
+                            downloadMutation.mutate({ processoId: processoId!, autoId: autoRecord.id });
+                          }}
+                          title="Baixar da Judit e salvar no S3"
                         >
-                          <Download className="w-3 h-3" />
-                          Baixar
+                          {isDownloading ? (
+                            <><Loader2 className="w-3 h-3 animate-spin" />Baixando...</>
+                          ) : (
+                            <><Download className="w-3 h-3" />Baixar</>
+                          )}
                         </Button>
-                      ) : (
-                        <span className="text-xs text-muted-foreground italic">
-                          Solicitar via Judit
-                        </span>
                       )}
+                      {/* Caso 3: sem registro e autos não solicitados — botão Solicitar */}
+                      {semRegistro && !autosJaSolicitados && (
+                        <span className="text-xs text-muted-foreground italic self-center">Solicitar autos</span>
+                      )}
+                      {/* Caso 4: indisponível — sem botão */}
                     </div>
                   </div>
                 );
               })}
             </div>
           )}
-
-          {/* Aviso sobre download */}
-          <div className="mt-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
-            <p className="text-xs text-amber-800 dark:text-amber-300">
-              <strong>Sobre os documentos:</strong> Os documentos listados são os attachments indexados pela Judit.
-              Documentos com status <strong>"Pendente"</strong> ainda não foram baixados pelo sistema de captura.
-              Para obter o arquivo, é necessário solicitar o download via API da Judit (funcionalidade a ser habilitada).
-            </p>
-          </div>
         </CardContent>
       )}
-    </Card>
-  );
-}
-
-
-// ─── Componente de Autos Processuais (S3) ─────────────────────────────────────
-function AutosProcessuaisCard({ processoId, autosDisponiveis }: { processoId: number; autosDisponiveis?: boolean }) {
-  
-  const utils = trpc.useUtils();
-  const [downloadingId, setDownloadingId] = useState<number | null>(null);
-  const [baixandoTodos, setBaixandoTodos] = useState(false);
-  const [progressoBaixarTodos, setProgressoBaixarTodos] = useState<{ atual: number; total: number } | null>(null);
-
-  const { data: autos, isLoading } = trpc.admin.getAutosProcesso.useQuery(
-    { processoId },
-    { enabled: !!processoId }
-  );
-
-  const downloadMutation = trpc.admin.downloadAnexo.useMutation({
-    onSuccess: (result, variables) => {
-      utils.admin.getAutosProcesso.setData({ processoId }, (old: any) => {
-        if (!old) return old;
-        return old.map((a: any) =>
-          a.id === variables.autoId ? { ...a, urlS3: result.url } : a
-        );
-      });
-      window.open(result.url, "_blank");
-      setDownloadingId(null);
-    },
-    onError: (err) => {
-      setDownloadingId(null);
-      toast.error("Erro ao baixar arquivo: " + err.message);
-    },
-  });
-
-  // Baixar todos sequencialmente
-  async function baixarTodos() {
-    if (!autos) return;
-    const pendentes = autos.filter((a: any) => {
-      const isIndisponivel = a.statusAnexo === "error" || a.statusAnexo === "corrupted";
-      const hasUrl = a.urlS3 && a.urlS3.trim().length > 0;
-      return !isIndisponivel && !hasUrl;
-    });
-    if (pendentes.length === 0) return;
-    setBaixandoTodos(true);
-    setProgressoBaixarTodos({ atual: 0, total: pendentes.length });
-    let sucesso = 0;
-    let falha = 0;
-    for (let i = 0; i < pendentes.length; i++) {
-      const auto = pendentes[i];
-      setProgressoBaixarTodos({ atual: i + 1, total: pendentes.length });
-      try {
-        const result = await new Promise<{ url: string }>((resolve, reject) => {
-          downloadMutation.mutate(
-            { processoId, autoId: auto.id },
-            { onSuccess: resolve, onError: reject }
-          );
-        });
-        utils.admin.getAutosProcesso.setData({ processoId }, (old: any) => {
-          if (!old) return old;
-          return old.map((a: any) => a.id === auto.id ? { ...a, urlS3: result.url } : a);
-        });
-        sucesso++;
-      } catch {
-        falha++;
-      }
-    }
-    setBaixandoTodos(false);
-    setProgressoBaixarTodos(null);
-    if (falha === 0) {
-      toast.success(`${sucesso} documento${sucesso !== 1 ? "s" : ""} baixado${sucesso !== 1 ? "s" : ""} com sucesso`);
-    } else {
-      toast.warning(`${sucesso} baixado${sucesso !== 1 ? "s" : ""}, ${falha} com erro`);
-    }
-  }
-
-  if (isLoading) {
-    return (
-      <Card className="border-amber-200 dark:border-amber-800">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Paperclip className="w-4 h-4 text-amber-500" />
-            Autos Processuais
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Carregando documentos...
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-  if (!autos || autos.length === 0) {
-    if (!autosDisponiveis) return null;
-    return (
-      <Card className="border-amber-200 dark:border-amber-800">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Paperclip className="w-4 h-4 text-amber-500" />
-            Autos Processuais
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">Nenhum documento disponível ainda.</p>
-        </CardContent>
-      </Card>
-    );
-  }
-  function formatBytes(bytes?: number): string {
-    if (!bytes) return "";
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-
-  const totalComUrl = autos.filter((a: any) => a.urlS3 && a.urlS3.trim().length > 0).length;
-  // Disponíveis para download = não são error/corrupted e não têm URL ainda
-  const totalParaBaixar = autos.filter((a: any) => {
-    const isIndisponivel = a.statusAnexo === "error" || a.statusAnexo === "corrupted";
-    const hasUrl = a.urlS3 && a.urlS3.trim().length > 0;
-    return !isIndisponivel && !hasUrl;
-  }).length;
-
-  // Badge colorido por extensão de arquivo
-  function ExtBadge({ ext }: { ext?: string }) {
-    if (!ext) return null;
-    const e = ext.toLowerCase();
-    let cls = "text-xs uppercase px-1.5 py-0 h-4 font-mono border-0 ";
-    if (e === "pdf") cls += "bg-red-100 text-red-700";
-    else if (e === "docx" || e === "doc") cls += "bg-blue-100 text-blue-700";
-    else if (e === "html" || e === "htm") cls += "bg-green-100 text-green-700";
-    else cls += "bg-gray-100 text-gray-600";
-    return <Badge className={cls}>{e}</Badge>;
-  }
-
-  // Badge colorido por instância
-  function InstanciaBadge({ instancia }: { instancia?: number | null }) {
-    if (!instancia) return null;
-    const labels: Record<number, string> = { 1: "1ª inst.", 2: "2ª inst.", 3: "3ª inst." };
-    const colors: Record<number, string> = {
-      1: "bg-blue-100 text-blue-700",
-      2: "bg-purple-100 text-purple-700",
-      3: "bg-green-100 text-green-700",
-    };
-    const label = labels[instancia] ?? `${instancia}ª inst.`;
-    const color = colors[instancia] ?? "bg-gray-100 text-gray-600";
-    return <Badge className={`text-xs px-1.5 py-0 h-4 border-0 ${color}`}>{label}</Badge>;
-  }
-
-  return (
-    <Card className="border-amber-200 dark:border-amber-800">
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-base flex items-center gap-2 flex-wrap">
-            <Paperclip className="w-4 h-4 text-amber-500" />
-            Autos Processuais
-            <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-800 border-amber-200">
-              {autos.length} {autos.length === 1 ? "arquivo" : "arquivos"}
-            </Badge>
-            {totalComUrl > 0 && (
-              <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 border-green-200">
-                {totalComUrl} disponíve{totalComUrl === 1 ? "l" : "is"}
-              </Badge>
-            )}
-            {totalParaBaixar > 0 && (
-              <Badge variant="outline" className="text-xs text-gray-600 border-gray-300">
-                {totalParaBaixar} não baixado{totalParaBaixar !== 1 ? "s" : ""}
-              </Badge>
-            )}
-          </CardTitle>
-          {/* Botão Baixar todos */}
-          {totalParaBaixar > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs gap-1.5 bg-background flex-shrink-0"
-              disabled={baixandoTodos || !!downloadingId}
-              onClick={baixarTodos}
-            >
-              {baixandoTodos && progressoBaixarTodos ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Baixando {progressoBaixarTodos.atual} de {progressoBaixarTodos.total}...
-                </>
-              ) : (
-                <>
-                  <Download className="w-3.5 h-3.5" />
-                  Baixar todos ({totalParaBaixar})
-                </>
-              )}
-            </Button>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-2">
-          {autos.map((auto: any) => {
-            // Habilitar download para qualquer status exceto error/corrupted
-            const isIndisponivel = auto.statusAnexo === "error" || auto.statusAnexo === "corrupted";
-            const hasUrl = auto.urlS3 && auto.urlS3.trim().length > 0;
-            const isDownloading = downloadingId === auto.id;
-            return (
-              <div
-                key={auto.id}
-                className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-amber-50/50 dark:bg-amber-950/20 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <FileDown className={`w-4 h-4 flex-shrink-0 ${isIndisponivel ? "text-muted-foreground" : "text-amber-600"}`} />
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{auto.nomeArquivo}</p>
-                    <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                      <ExtBadge ext={auto.extensao} />
-                      <InstanciaBadge instancia={auto.instancia} />
-                      {/* Badge de status do arquivo */}
-                      {hasUrl ? (
-                        <Badge className="text-xs bg-green-100 text-green-700 border-0 px-1.5 py-0 h-4">
-                          Disponível
-                        </Badge>
-                      ) : isIndisponivel ? (
-                        <Badge className="text-xs bg-amber-100 text-amber-700 border-0 px-1.5 py-0 h-4">
-                          Indisponível
-                        </Badge>
-                      ) : (
-                        <Badge className="text-xs bg-gray-100 text-gray-600 border-0 px-1.5 py-0 h-4">
-                          Não baixado
-                        </Badge>
-                      )}
-                      {auto.tamanhoBytes && (
-                        <span className="text-xs text-muted-foreground">{formatBytes(auto.tamanhoBytes)}</span>
-                      )}
-                      {auto.dataDocumento && (
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(auto.dataDocumento).toLocaleDateString("pt-BR")}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                {hasUrl ? (
-                  <a href={auto.urlS3} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
-                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 bg-green-50 border-green-300 text-green-700 hover:bg-green-100">
-                      <Download className="w-3.5 h-3.5" />
-                      Baixar
-                    </Button>
-                  </a>
-                ) : !isIndisponivel ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs gap-1.5 bg-background flex-shrink-0"
-                    disabled={isDownloading || baixandoTodos}
-                    onClick={() => {
-                      setDownloadingId(auto.id);
-                      downloadMutation.mutate({ processoId, autoId: auto.id });
-                    }}
-                    title="Baixar da Judit e salvar no S3"
-                  >
-                    {isDownloading ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        Baixando...
-                      </>
-                    ) : (
-                      <>
-                        <Download className="w-3.5 h-3.5" />
-                        Baixar
-                      </>
-                    )}
-                  </Button>
-                ) : (
-                  <Badge className="text-xs bg-amber-100 text-amber-700 border-0 flex-shrink-0">
-                    Indisponível
-                  </Badge>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </CardContent>
     </Card>
   );
 }
@@ -1477,9 +1392,14 @@ export default function ProcessoDetalhe() {
         </Card>
       )}
 
-      {/* ─── Documentos (Sentença, Alvará, Decisão etc.) ─── */}
+      {/* ─── Documentos (unificado: payload Judit + processo_autos) ─── */}
       {payload.attachments && payload.attachments.length > 0 && (
-        <DocumentosCard attachments={payload.attachments} />
+        <DocumentosCard
+          attachments={payload.attachments}
+          processoId={(data as any).id}
+          autosDisponiveis={(data as any).autosDisponiveis}
+          autosJaSolicitados={!!(data as any).autosDisponiveis || !!(data as any).autosSolicitadoEm}
+        />
       )}
 
       {/* ─── Histórico Completo de Movimentações ─── */}
@@ -1564,8 +1484,7 @@ export default function ProcessoDetalhe() {
       {/* Análise IA da Judit */}
       <AnaliseIACard cnj={cnj} aiSummaryInicial={(data as any).aiSummary} aiSummaryUpdatedAt={(data as any).aiSummaryUpdatedAt} />
 
-      {/* Autos Processuais do S3 */}
-      {(data as any).id && <AutosProcessuaisCard processoId={(data as any).id} autosDisponiveis={(data as any).autosDisponiveis} />}
+      {/* AutosProcessuaisCard removido — unificado em DocumentosCard */}
       {/* Payload bruto (expansível) */}
       <Card>
         <CardHeader className="pb-3">
