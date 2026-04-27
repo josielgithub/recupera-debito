@@ -61,6 +61,10 @@ function selecionarMelhorResultado(
 
     // Pular entradas de IA
     if (entry.response_type === "ia") continue;
+    // Extrair attachments apenas de entradas lawsuit (aúnica que contém autos processuais)
+    const entryAttachments = entry.response_type === "lawsuit"
+      ? ((entry.response_data as Record<string, unknown> | undefined)?.attachments as unknown[] | undefined) ?? (entry.attachments as unknown[] | undefined) ?? []
+      : [];
 
     // Verificar lawsuit_not_found
     const isNotFound =
@@ -90,9 +94,7 @@ function selecionarMelhorResultado(
         ...rd,
         steps,
         parties,
-        // Attachments ficam em page_data[i].response_data.attachments (rd = entry.response_data)
-        // Fallback para page_data[i].attachments caso a Judit envie no nível raiz da entrada
-        attachments: (rd.attachments as unknown[] | undefined) ?? (entry.attachments as unknown[] | undefined) ?? [],
+        attachments: entryAttachments,
       };
     }
   }
