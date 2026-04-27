@@ -1294,14 +1294,30 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         .leftJoin(clientesTable, eq(processosTable.clienteId, clientesTable.id))
         .where(isNotNull(processosTable.autosSolicitadoEm))
         .orderBy(sql`${processosTable.autosSolicitadoEm} DESC`);
-      // Contar documentos por processo
+      // Contar documentos e pendentes por processo (2 counts por processo em paralelo)
       const resultado = await Promise.all(
         processosComAutos.map(async (p) => {
+          const { isNull, or } = await import("drizzle-orm");
           const [countResult] = await db
             .select({ total: count() })
             .from(processoAutosTable)
             .where(eq(processoAutosTable.processoId, p.id));
-          return { ...p, totalDocumentos: countResult?.total ?? 0 };
+          const { and: andOp, or: orOp, isNull: isNullOp } = await import("drizzle-orm");
+          const [pendentesResult] = await db
+            .select({ total: count() })
+            .from(processoAutosTable)
+            .where(andOp(
+              eq(processoAutosTable.processoId, p.id),
+              orOp(
+                eq(processoAutosTable.statusAnexo, "pending"),
+                andOp(
+                  eq(processoAutosTable.statusAnexo, "done"),
+                  isNullOp(processoAutosTable.urlS3),
+                  isNullOp(processoAutosTable.downloadErro)
+                )
+              )
+            ));
+          return { ...p, totalDocumentos: countResult?.total ?? 0, totalPendentes: pendentesResult?.total ?? 0 };
         })
       );
       // Buscar nomes dos advogados (users com advogadoId)
@@ -1325,6 +1341,7 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
           autosSolicitadoEm: p.autosSolicitadoEm,
           autosDisponivelEm: p.autosDisponivelEm,
           totalDocumentos: p.totalDocumentos,
+          totalPendentes: p.totalPendentes,
         })),
         metricas: { totalSolicitados, totalComAutos, totalDocumentos, custoTotal },
       };
@@ -1733,6 +1750,18 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
           }
         }
         console.log(`[Autos] verificarTodosAutosPendentes: ${totalAtualizados} atualizados, ${totalPendentes} ainda pending`);
+        if (totalAtualizados > 0) {
+          try {
+            const { notifyOwner } = await import("./_core/notification");
+            const processosAtualizados = byProcesso.size;
+            await notifyOwner({
+              title: `✅ ${totalAtualizados} novos documentos disponíveis`,
+              content: `${totalAtualizados} novo${totalAtualizados !== 1 ? "s" : ""} documento${totalAtualizados !== 1 ? "s" : ""} disponível${totalAtualizados !== 1 ? "is" : ""} em ${processosAtualizados} processo${processosAtualizados !== 1 ? "s" : ""}. Acesse a aba Autos para visualizar.`,
+            });
+          } catch (notifErr) {
+            console.error("[Autos] Falha ao enviar notificação:", notifErr);
+          }
+        }
         return { atualizados: totalAtualizados, pendentes: totalPendentes };
       }),
 

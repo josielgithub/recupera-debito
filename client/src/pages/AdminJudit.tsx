@@ -1275,6 +1275,7 @@ function SecaoAutos() {
                 <th className="text-left py-2 px-2 text-xs font-semibold text-muted-foreground hidden sm:table-cell">Advogado</th>
                 <th className="text-left py-2 px-2 text-xs font-semibold text-muted-foreground">Solicitado em</th>
                 <th className="text-center py-2 px-2 text-xs font-semibold text-muted-foreground">Docs</th>
+                <th className="text-center py-2 px-2 text-xs font-semibold text-muted-foreground">Pendentes</th>
                 <th className="text-center py-2 px-2 text-xs font-semibold text-muted-foreground">Status</th>
               </tr>
             </thead>
@@ -1305,6 +1306,15 @@ function SecaoAutos() {
                       <Paperclip className="h-3 w-3 text-teal-600" />
                       {p.totalDocumentos}
                     </span>
+                  </td>
+                  <td className="py-2 px-2 text-center">
+                    {(p.totalPendentes ?? 0) > 0 ? (
+                      <span className="inline-flex items-center justify-center min-w-[1.5rem] text-xs font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full">
+                        {p.totalPendentes}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
                   </td>
                   <td className="py-2 px-2 text-center">
                     {p.autosDisponiveis ? (
