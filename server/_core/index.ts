@@ -259,6 +259,9 @@ async function startServer() {
         const body = req.body as Record<string, unknown>;
         const origem = req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "desconhecido";
 
+        // [TEMPORÁRIO] Log completo do payload para diagnóstico da estrutura real da Judit
+        console.log('[WEBHOOK DEBUG]', JSON.stringify(req.body).substring(0, 2000));
+
         // Log completo do payload recebido
         console.log(
           `[Judit Webhook] Recebido de ${origem}: ` +
