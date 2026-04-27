@@ -785,3 +785,11 @@
 - [x] Passo 2: criar rota admin.reprocessarAutosJudit e reprocessar 7 processos pendentes
 - [x] Passo 3: card de monitoramento de webhook no AdminJudit (último webhook, status do deploy)
 - [ ] Passo 4: testar fluxo completo com 1 processo novo após publicação
+
+## Fluxo de Download de Autos (Individual + Lote Pendentes)
+
+- [x] Criar rota tRPC admin.iniciarDownloadAutos (cria requisição Judit with_attachments=true, retorna request_id)
+- [x] Criar rota tRPC admin.verificarResultadoAutos (GET /responses, processa attachments com id.length>6 e status=done, salva S3+DB)
+- [x] Fluxo 1: botão "Baixar autos" no ProcessoDetalhe com polling 30s/20 tentativas
+- [x] Fluxo 2: botão "Processar pendentes" no AdminJudit para processos com autos_solicitado_em e autosDisponiveis=false
+- [x] Registrar custo R$3,50 no judit_consulta_log ao iniciar download individual

@@ -1329,6 +1329,183 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         metricas: { totalSolicitados, totalComAutos, totalDocumentos, custoTotal },
       };
     }),
+    // ─── Iniciar Download de Autos Individual ───────────────────────────────────────
+    iniciarDownloadAutos: protectedProcedure
+      .input(z.object({ processoId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { getDb } = await import("./db");
+        const { processos: processosTable } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const [processo] = await db.select().from(processosTable).where(eq(processosTable.id, input.processoId));
+        if (!processo) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado" });
+        if (processo.autosDisponiveis) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Autos já disponíveis para este processo" });
+        }
+        const requestId = await criarRequisicaoJudit(processo.cnj, processo.id, true);
+        await insertJuditConsultaLog({
+          processoCnj: processo.cnj,
+          requestId,
+          tipo: "download_autos",
+          custo: "3.50",
+          status: "sucesso",
+          aprovadoPorId: ctx.user.id,
+          isDuplicata: false,
+        });
+        await marcarAutosSolicitado(processo.id);
+        console.log(`[Autos] Download individual iniciado para CNJ ${processo.cnj} — requestId: ${requestId}`);
+        return { requestId, cnj: processo.cnj };
+      }),
+    // ─── Verificar Resultado e Processar Autos ────────────────────────────────────────
+    verificarResultadoAutos: protectedProcedure
+      .input(z.object({
+        requestId: z.string(),
+        processoId: z.number(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { storagePut } = await import("./storage");
+        const { downloadAnexoJudit } = await import("./judit");
+        const JUDIT_API_KEY = process.env.JUDIT_API_KEY ?? "";
+        const resp = await fetch(`https://requests.prod.judit.io/responses?request_id=${encodeURIComponent(input.requestId)}`, {
+          headers: { "api-key": JUDIT_API_KEY, "Content-Type": "application/json" },
+        });
+        if (!resp.ok) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Judit retornou HTTP ${resp.status}` });
+        const json = await resp.json() as Record<string, unknown>;
+        const requestStatus = (json.request_status as string) ?? "processing";
+        if (requestStatus !== "completed") {
+          return { status: "processing" as const, baixados: 0, erros: 0 };
+        }
+        const pageData = (json.page_data as Record<string, unknown>[]) ?? [];
+        const lawsuitEntry = pageData.find(e => e.response_type === "lawsuit");
+        if (!lawsuitEntry) return { status: "no_attachments" as const, baixados: 0, erros: 0 };
+        const rd = (lawsuitEntry.response_data as Record<string, unknown>) ?? {};
+        const rawAttachments = (rd.attachments as Record<string, unknown>[]) ?? [];
+        const attachments = rawAttachments.filter(a => String(a.attachment_id ?? "").length > 6);
+        if (attachments.length === 0) {
+          return { status: "no_valid_attachments" as const, baixados: 0, erros: 0, totalRaw: rawAttachments.length };
+        }
+        const { getDb } = await import("./db");
+        const { processos: processosTable } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const [processo] = await db.select().from(processosTable).where(eq(processosTable.id, input.processoId));
+        if (!processo) throw new TRPCError({ code: "NOT_FOUND" });
+        const existentes = await listProcessoAutos(input.processoId);
+        const existentesIds = new Set(existentes.map(a => String(a.attachmentId)));
+        let baixados = 0;
+        let erros = 0;
+        const instancia = 1;
+        for (const att of attachments) {
+          const attachmentId = String(att.attachment_id ?? "");
+          if (existentesIds.has(attachmentId)) continue;
+          const nome = String(att.attachment_name ?? `doc_${attachmentId}`).trim().toUpperCase();
+          const ext = String(att.extension ?? "pdf").toLowerCase();
+          const dataDoc = att.attachment_date ? new Date(att.attachment_date as string) : undefined;
+          try {
+            const result = await downloadAnexoJudit(processo.cnj, instancia, attachmentId);
+            if (!result || result.buffer.length < 100) { erros++; continue; }
+            const fileKey = `autos/${processo.cnj.replace(/[^\w]/g, "_")}/${attachmentId}.${ext}`;
+            const { url } = await storagePut(fileKey, result.buffer, result.contentType);
+            await insertProcessoAuto({
+              processoId: input.processoId,
+              attachmentId,
+              nomeArquivo: nome,
+              extensao: ext,
+              tamanhoBytes: result.buffer.length,
+              urlS3: url,
+              fileKey,
+              dataDocumento: dataDoc,
+            });
+            baixados++;
+          } catch (err) {
+            console.error(`[Autos] Erro ao baixar anexo ${attachmentId}:`, err);
+            erros++;
+          }
+        }
+        if (baixados > 0) await marcarAutosDisponiveis(input.processoId);
+        return { status: "done" as const, baixados, erros, totalRaw: rawAttachments.length, totalValidos: attachments.length };
+      }),
+    // ─── Processar Pendentes (Fluxo 2) ───────────────────────────────────────────────
+    processarAutosPendentes: protectedProcedure.mutation(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      const { getDb } = await import("./db");
+      const { processos: processosTable, juditRequests: juditRequestsTable } = await import("../drizzle/schema");
+      const { isNotNull, eq, and } = await import("drizzle-orm");
+      const { storagePut } = await import("./storage");
+      const { downloadAnexoJudit } = await import("./judit");
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const JUDIT_API_KEY = process.env.JUDIT_API_KEY ?? "";
+      const pendentes = await db
+        .select()
+        .from(processosTable)
+        .where(and(
+          isNotNull(processosTable.autosSolicitadoEm),
+          eq(processosTable.autosDisponiveis, false),
+        ));
+      let processados = 0;
+      let aguardando = 0;
+      let erros = 0;
+      const detalhes: { cnj: string; status: string; baixados?: number }[] = [];
+      for (const processo of pendentes) {
+        const [req] = await db
+          .select()
+          .from(juditRequestsTable)
+          .where(and(
+            eq(juditRequestsTable.cnj, processo.cnj),
+            eq(juditRequestsTable.status, "completed"),
+          ))
+          .orderBy(juditRequestsTable.createdAt)
+          .limit(1);
+        if (!req) { aguardando++; detalhes.push({ cnj: processo.cnj, status: "sem_request_completed" }); continue; }
+        try {
+          const resp = await fetch(`https://requests.prod.judit.io/responses?request_id=${encodeURIComponent(req.requestId)}`, {
+            headers: { "api-key": JUDIT_API_KEY, "Content-Type": "application/json" },
+          });
+          if (!resp.ok) { aguardando++; detalhes.push({ cnj: processo.cnj, status: `http_${resp.status}` }); continue; }
+          const json = await resp.json() as Record<string, unknown>;
+          if ((json.request_status as string) !== "completed") {
+            aguardando++; detalhes.push({ cnj: processo.cnj, status: "processing" }); continue;
+          }
+          const pageData = (json.page_data as Record<string, unknown>[]) ?? [];
+          const lawsuitEntry = pageData.find(e => e.response_type === "lawsuit");
+          if (!lawsuitEntry) { aguardando++; detalhes.push({ cnj: processo.cnj, status: "no_lawsuit_entry" }); continue; }
+          const rd = (lawsuitEntry.response_data as Record<string, unknown>) ?? {};
+          const rawAttachments = (rd.attachments as Record<string, unknown>[]) ?? [];
+          const attachments = rawAttachments.filter(a => String(a.attachment_id ?? "").length > 6);
+          if (attachments.length === 0) { aguardando++; detalhes.push({ cnj: processo.cnj, status: "no_valid_attachments", baixados: 0 }); continue; }
+          const existentes = await listProcessoAutos(processo.id);
+          const existentesIds = new Set(existentes.map(a => String(a.attachmentId)));
+          let baixados = 0;
+          const instancia = 1;
+          for (const att of attachments) {
+            const attachmentId = String(att.attachment_id ?? "");
+            if (existentesIds.has(attachmentId)) continue;
+            const nome = String(att.attachment_name ?? `doc_${attachmentId}`).trim().toUpperCase();
+            const ext = String(att.extension ?? "pdf").toLowerCase();
+            const dataDoc = att.attachment_date ? new Date(att.attachment_date as string) : undefined;
+            try {
+              const result = await downloadAnexoJudit(processo.cnj, instancia, attachmentId);
+              if (!result || result.buffer.length < 100) continue;
+              const fileKey = `autos/${processo.cnj.replace(/[^\w]/g, "_")}/${attachmentId}.${ext}`;
+              const { url } = await storagePut(fileKey, result.buffer, result.contentType);
+              await insertProcessoAuto({ processoId: processo.id, attachmentId, nomeArquivo: nome, extensao: ext, tamanhoBytes: result.buffer.length, urlS3: url, fileKey, dataDocumento: dataDoc });
+              baixados++;
+            } catch { /* ignorar erros individuais */ }
+          }
+          if (baixados > 0) { await marcarAutosDisponiveis(processo.id); processados++; detalhes.push({ cnj: processo.cnj, status: "processado", baixados }); }
+          else { aguardando++; detalhes.push({ cnj: processo.cnj, status: "sem_downloads", baixados: 0 }); }
+        } catch (err) {
+          erros++; detalhes.push({ cnj: processo.cnj, status: "erro" });
+          console.error(`[Autos] Erro ao processar pendente CNJ ${processo.cnj}:`, err);
+        }
+      }
+      return { processados, aguardando, erros, total: pendentes.length, detalhes };
+    }),
     // ─── Configurações do Sistema ────────────────────────────────────────────────────
     getConfiguracoes: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });

@@ -1155,6 +1155,75 @@ function AnaliseIACard({
 export default function ProcessoDetalhe() {
   const params = useParams<{ cnj: string }>();
   const cnj = decodeURIComponent(params.cnj ?? "");
+  const utils = trpc.useUtils();
+
+  // ─── Estado de polling para download individual ───────────────────────────
+  const [pollingRequestId, setPollingRequestId] = useState<string | null>(null);
+  const [pollingTentativa, setPollingTentativa] = useState(0);
+  const MAX_TENTATIVAS = 20;
+
+  const iniciarDownloadMutation = trpc.admin.iniciarDownloadAutos.useMutation({
+    onSuccess: (result) => {
+      setPollingRequestId(result.requestId);
+      setPollingTentativa(1);
+      toast.info(`Requisição enviada para a Judit. Aguardando processamento...`);
+    },
+    onError: (err) => {
+      toast.error(`Erro ao iniciar download: ${err.message}`);
+    },
+  });
+
+  const verificarResultadoMutation = trpc.admin.verificarResultadoAutos.useMutation({
+    onSuccess: (result) => {
+      if (result.status === "processing") {
+        // Ainda processando — continua o polling
+        return;
+      }
+      // Resultado chegou — parar polling
+      setPollingRequestId(null);
+      setPollingTentativa(0);
+      if (result.status === "done" && result.baixados > 0) {
+        toast.success(`${result.baixados} documento${result.baixados !== 1 ? "s" : ""} baixado${result.baixados !== 1 ? "s" : ""} com sucesso!`);
+        utils.admin.processoDetalhe.invalidate({ cnj });
+      } else if (result.status === "done" && result.baixados === 0) {
+        toast.warning(`Autos processados, mas nenhum documento pôde ser baixado (${result.erros} erro${result.erros !== 1 ? "s" : ""}).`);
+      } else {
+        toast.warning(`Autos recebidos, mas sem documentos válidos (IDs inválidos ou formato não suportado).`);
+      }
+    },
+    onError: () => {
+      // Ignorar erros individuais de polling — tentar novamente
+    },
+  });
+
+  // Polling: a cada 30s, verificar se o resultado chegou
+  useEffect(() => {
+    if (!pollingRequestId || pollingTentativa === 0) return;
+    if (pollingTentativa > MAX_TENTATIVAS) {
+      setPollingRequestId(null);
+      setPollingTentativa(0);
+      toast.error("Tempo esgotado — a Judit não processou em 10 minutos. Tente novamente mais tarde.");
+      return;
+    }
+    const processoId = (data as any)?.id;
+    if (!processoId) return;
+    // Primeira tentativa: imediata; demais: aguardar 30s
+    if (pollingTentativa === 1) {
+      verificarResultadoMutation.mutate({ requestId: pollingRequestId, processoId });
+      return;
+    }
+    const timer = setTimeout(() => {
+      verificarResultadoMutation.mutate({ requestId: pollingRequestId, processoId });
+    }, 30_000);
+    return () => clearTimeout(timer);
+  }, [pollingRequestId, pollingTentativa]);
+
+  // Avançar tentativa após cada verificação (quando ainda processing)
+  useEffect(() => {
+    if (verificarResultadoMutation.data?.status === "processing" && pollingRequestId) {
+      setPollingTentativa((t) => t + 1);
+    }
+  }, [verificarResultadoMutation.data]);
 
   const { data, isLoading, error } = trpc.admin.processoDetalhe.useQuery(
     { cnj },
@@ -1235,6 +1304,31 @@ export default function ProcessoDetalhe() {
               )}
               {payload.secrecy_level != null && payload.secrecy_level > 0 && (
                 <Badge variant="destructive">Segredo de Justiça</Badge>
+              )}
+              {/* Botão de download individual — aparece quando autos não disponíveis */}
+              {!(data as any).autosDisponiveis && (
+                <div className="flex items-center gap-2">
+                  {pollingRequestId ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                      <span className="text-xs">Aguardando Judit... tentativa {pollingTentativa}/{MAX_TENTATIVAS}</span>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-50"
+                      disabled={iniciarDownloadMutation.isPending}
+                      onClick={() => iniciarDownloadMutation.mutate({ processoId: (data as any).id })}
+                    >
+                      {iniciarDownloadMutation.isPending ? (
+                        <><Loader2 className="w-3 h-3 animate-spin" />Solicitando...</>
+                      ) : (
+                        <><FileDown className="w-3 h-3" />Baixar autos deste processo</>
+                      )}
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           </div>

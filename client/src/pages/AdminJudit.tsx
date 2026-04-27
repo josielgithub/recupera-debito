@@ -1134,8 +1134,22 @@ function CardMonitoramentoWebhook() {
 }
 
 function SecaoAutos() {
+  const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.admin.listarProcessosComAutos.useQuery(undefined, {
     refetchInterval: 60_000,
+  });
+  const processarPendentesMutation = trpc.admin.processarAutosPendentes.useMutation({
+    onSuccess: (result) => {
+      if (result.processados > 0) {
+        toast.success(`${result.processados} processado${result.processados !== 1 ? "s" : ""}, ${result.aguardando} ainda aguardando.`);
+      } else {
+        toast.info(`Nenhum novo processo processado. ${result.aguardando} ainda aguardando resposta da Judit.`);
+      }
+      utils.admin.listarProcessosComAutos.invalidate();
+    },
+    onError: (err) => {
+      toast.error(`Erro ao processar pendentes: ${err.message}`);
+    },
   });
 
   function formatarData(d: Date | string | null | undefined) {
@@ -1197,13 +1211,24 @@ function SecaoAutos() {
         </div>
       </div>
 
-      {/* Aviso sobre endpoint Judit */}
-      <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-        <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-600" />
-        <div>
-          <p className="font-semibold">Endpoint de download da Judit retorna 502</p>
-          <p className="mt-0.5">A Judit registra os metadados dos documentos (nome, extensão, data), mas o endpoint de download de PDF ainda não está disponível via API. Os documentos estão listados mas sem conteúdo para download.</p>
-        </div>
+      {/* Botão Processar Pendentes */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          Processa os autos já solicitados que ainda não foram baixados.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5 border-teal-300 text-teal-700 hover:bg-teal-50"
+          disabled={processarPendentesMutation.isPending}
+          onClick={() => processarPendentesMutation.mutate()}
+        >
+          {processarPendentesMutation.isPending ? (
+            <><RefreshCw className="h-3.5 w-3.5 animate-spin" />Processando...</>
+          ) : (
+            <><Download className="h-3.5 w-3.5" />Processar pendentes</>
+          )}
+        </Button>
       </div>
 
       {/* Tabela de processos */}
