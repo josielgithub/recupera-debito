@@ -2645,6 +2645,7 @@ export async function listProcessoAutos(processoId: number) {
       statusAnexo: processoAutos.statusAnexo,
       corrompido: processoAutos.corrompido,
       stepId: processoAutos.stepId,
+      downloadErro: processoAutos.downloadErro,
       createdAt: processoAutos.createdAt,
     })
     .from(processoAutos)

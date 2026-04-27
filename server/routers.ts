@@ -1549,6 +1549,193 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
       }
       return { processados, aguardando, erros, total: pendentes.length, detalhes };
     }),
+    // ─── Verificar Attachments Pending de um Processo ─────────────────────────────
+    verificarAutosPendentes: protectedProcedure
+      .input(z.object({ processoId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { storagePut } = await import("./storage");
+        const { downloadAnexoJudit } = await import("./judit");
+        const { getDb } = await import("./db");
+        const { processos: processosTable, processoAutos: processoAutosTable } = await import("../drizzle/schema");
+        const { eq, and, or, isNull } = await import("drizzle-orm");
+        const JUDIT_API_KEY = process.env.JUDIT_API_KEY ?? "";
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        // Buscar processo
+        const [processo] = await db.select().from(processosTable).where(eq(processosTable.id, input.processoId));
+        if (!processo) throw new TRPCError({ code: "NOT_FOUND" });
+        // Buscar attachments pending do processo no banco
+        const pendingRows = await db
+          .select()
+          .from(processoAutosTable)
+          .where(and(
+            eq(processoAutosTable.processoId, input.processoId),
+            or(
+              eq(processoAutosTable.statusAnexo, "pending"),
+              and(eq(processoAutosTable.statusAnexo, "done"), isNull(processoAutosTable.urlS3)),
+            ),
+          ));
+        if (pendingRows.length === 0) {
+          return { atualizados: 0, aindaPending: 0, erros: 0, mensagem: "Nenhum documento pendente encontrado." };
+        }
+        // Buscar request_id mais recente completed para este CNJ
+        const { juditRequests: juditRequestsTable } = await import("../drizzle/schema");
+        const { desc } = await import("drizzle-orm");
+        const [req] = await db
+          .select()
+          .from(juditRequestsTable)
+          .where(and(eq(juditRequestsTable.cnj, processo.cnj), eq(juditRequestsTable.status, "completed")))
+          .orderBy(desc(juditRequestsTable.createdAt))
+          .limit(1);
+        if (!req) return { atualizados: 0, aindaPending: pendingRows.length, erros: 0, mensagem: "Nenhuma requisição completada encontrada para este processo." };
+        // Buscar payload atualizado da Judit
+        const resp = await fetch(`https://requests.prod.judit.io/responses?request_id=${encodeURIComponent(req.requestId)}`, {
+          headers: { "api-key": JUDIT_API_KEY, "Content-Type": "application/json" },
+        });
+        if (!resp.ok) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Judit retornou HTTP ${resp.status}` });
+        const json = await resp.json() as Record<string, unknown>;
+        const pageData = (json.page_data as Record<string, unknown>[]) ?? [];
+        const lawsuitEntry = pageData.find(e => e.response_type === "lawsuit");
+        if (!lawsuitEntry) return { atualizados: 0, aindaPending: pendingRows.length, erros: 0, mensagem: "Entrada lawsuit não encontrada no payload." };
+        const rd = (lawsuitEntry.response_data as Record<string, unknown>) ?? {};
+        const rawAttachments = (rd.attachments as Record<string, unknown>[]) ?? [];
+        // Criar mapa de attachment_id → status atual na Judit
+        const juditStatusMap = new Map<string, Record<string, unknown>>();
+        for (const a of rawAttachments) {
+          const id = String(a.attachment_id ?? "").trim();
+          if (id) juditStatusMap.set(id, a as Record<string, unknown>);
+        }
+        let atualizados = 0;
+        let aindaPending = 0;
+        let erros = 0;
+        const instancia = 1;
+        for (const row of pendingRows) {
+          const juditAtt = juditStatusMap.get(String(row.attachmentId));
+          if (!juditAtt) { aindaPending++; continue; }
+          const novoStatus = String(juditAtt.status ?? "");
+          if (novoStatus !== "done") { aindaPending++; continue; }
+          // Status mudou para done — tentar download
+          const ext = String(juditAtt.extension ?? row.extensao ?? "pdf").toLowerCase();
+          const corrompido = Boolean(juditAtt.corrupted ?? false);
+          try {
+            const result = await downloadAnexoJudit(processo.cnj, instancia, String(row.attachmentId));
+            if (!result || result.buffer.length < 100) {
+              await db.update(processoAutosTable)
+                .set({ statusAnexo: "done", downloadErro: "Resposta vazia ou muito pequena", corrompido })
+                .where(eq(processoAutosTable.id, row.id));
+              erros++; continue;
+            }
+            const fileKey = `autos/${processo.cnj.replace(/[^\w]/g, "_")}/${row.attachmentId}.${ext}`;
+            const { url } = await storagePut(fileKey, result.buffer, result.contentType);
+            await db.update(processoAutosTable)
+              .set({ statusAnexo: "done", urlS3: url, fileKey, tamanhoBytes: result.buffer.length, downloadErro: null, corrompido })
+              .where(eq(processoAutosTable.id, row.id));
+            atualizados++;
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            const erroMsg = msg.includes("404") ? "404 - endpoint não disponível para este tribunal" : msg.substring(0, 200);
+            await db.update(processoAutosTable)
+              .set({ statusAnexo: "done", downloadErro: erroMsg, corrompido })
+              .where(eq(processoAutosTable.id, row.id));
+            erros++;
+          }
+        }
+        if (atualizados > 0) await marcarAutosDisponiveis(input.processoId);
+        const mensagem = atualizados > 0
+          ? `${atualizados} novo${atualizados !== 1 ? "s" : ""} documento${atualizados !== 1 ? "s" : ""} disponível${atualizados !== 1 ? "is" : ""}.`
+          : aindaPending > 0
+            ? `Documentos ainda sendo processados pela Judit (${aindaPending} pendente${aindaPending !== 1 ? "s" : ""}).`
+            : "Nenhuma atualização disponível.";
+        console.log(`[Autos] verificarAutosPendentes CNJ ${processo.cnj}: ${atualizados} atualizados, ${aindaPending} ainda pending, ${erros} erros`);
+        return { atualizados, aindaPending, erros, mensagem };
+      }),
+    verificarTodosAutosPendentes: protectedProcedure
+      .mutation(async ({ ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { storagePut } = await import("./storage");
+        const { downloadAnexoJudit } = await import("./judit");
+        const { getDb } = await import("./db");
+        const { processos: processosTable, processoAutos: processoAutosTable } = await import("../drizzle/schema");
+        const { eq, and, or, isNull, isNotNull } = await import("drizzle-orm");
+        const JUDIT_API_KEY = process.env.JUDIT_API_KEY ?? "";
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        // Buscar todos os processos que têm attachments pending no banco
+        const pendingRows = await db
+          .select()
+          .from(processoAutosTable)
+          .where(and(
+            or(
+              eq(processoAutosTable.statusAnexo, "pending"),
+              and(eq(processoAutosTable.statusAnexo, "done"), isNull(processoAutosTable.urlS3))
+            ),
+            isNotNull(processoAutosTable.attachmentId)
+          ));
+        if (pendingRows.length === 0) return { atualizados: 0, pendentes: 0 };
+        // Agrupar por processoId
+        const byProcesso = new Map<number, typeof pendingRows>();
+        for (const row of pendingRows) {
+          if (!byProcesso.has(row.processoId)) byProcesso.set(row.processoId, []);
+          byProcesso.get(row.processoId)!.push(row);
+        }
+        let totalAtualizados = 0;
+        let totalPendentes = 0;
+        for (const [processoId, rows] of Array.from(byProcesso.entries())) {
+          const [processo] = await db.select().from(processosTable).where(eq(processosTable.id, processoId));
+          if (!processo) continue;
+          // Buscar resultado atual na Judit via judit_requests completed
+          const { juditRequests } = await import("../drizzle/schema");
+          const juditReqs = await db
+            .select()
+            .from(juditRequests)
+            .where(and(eq(juditRequests.cnj, processo.cnj), eq(juditRequests.status, "completed")))
+            .orderBy(juditRequests.createdAt)
+            .limit(1);
+          if (!juditReqs.length) { totalPendentes += rows.length; continue; }
+          const requestId = juditReqs[0].requestId;
+          let pageData: any[] = [];
+          try {
+            const resp = await fetch(`https://requests.prod.judit.io/responses?request_id=${requestId}`, {
+              headers: { "api-key": JUDIT_API_KEY }
+            });
+            const json = await resp.json() as any;
+            pageData = json.page_data ?? [];
+          } catch { totalPendentes += rows.length; continue; }
+          const lawsuitEntry = pageData.find((e: any) => e.response_type === "lawsuit");
+          if (!lawsuitEntry) { totalPendentes += rows.length; continue; }
+          const juditAtts: any[] = (lawsuitEntry.response_data?.attachments ?? lawsuitEntry.attachments ?? []);
+          const juditMap = new Map<string, any>();
+          for (const a of juditAtts) { if (a.attachment_id) juditMap.set(String(a.attachment_id), a); }
+          for (const row of rows) {
+            if (!row.attachmentId) { totalPendentes++; continue; }
+            const juditAtt = juditMap.get(row.attachmentId);
+            if (!juditAtt || juditAtt.status !== "done") { totalPendentes++; continue; }
+            try {
+              const dlResult = await downloadAnexoJudit(processo.cnj, row.instancia ?? 1, row.attachmentId);
+              if (!dlResult || dlResult.buffer.length < 100) { totalPendentes++; continue; }
+              const ext = row.extensao ?? "pdf";
+              const fileKey = `processo-autos/${processoId}/${row.attachmentId}-${Date.now()}.${ext}`;
+              const { url: urlS3 } = await storagePut(fileKey, dlResult.buffer, dlResult.contentType || `application/${ext}`);
+              await db.update(processoAutosTable)
+                .set({ urlS3, fileKey, tamanhoBytes: dlResult.buffer.length, statusAnexo: "done" })
+                .where(eq(processoAutosTable.id, row.id));
+              totalAtualizados++;
+            } catch { totalPendentes++; }
+          }
+        }
+        if (totalAtualizados > 0) {
+          // Atualizar autosDisponiveis para processos que agora têm docs disponíveis
+          for (const processoId of Array.from(byProcesso.keys())) {
+            const docs = await db.select().from(processoAutosTable)
+              .where(and(eq(processoAutosTable.processoId, processoId), isNotNull(processoAutosTable.urlS3)));
+            if (docs.length > 0) await marcarAutosDisponiveis(processoId);
+          }
+        }
+        console.log(`[Autos] verificarTodosAutosPendentes: ${totalAtualizados} atualizados, ${totalPendentes} ainda pending`);
+        return { atualizados: totalAtualizados, pendentes: totalPendentes };
+      }),
+
     // ─── Configurações do Sistema ────────────────────────────────────────────────────
     getConfiguracoes: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });

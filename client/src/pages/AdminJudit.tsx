@@ -1138,6 +1138,19 @@ function SecaoAutos() {
   const { data, isLoading, error } = trpc.admin.listarProcessosComAutos.useQuery(undefined, {
     refetchInterval: 60_000,
   });
+  const verificarTodosMutation = trpc.admin.verificarTodosAutosPendentes.useMutation({
+    onSuccess: (result) => {
+      if (result.atualizados > 0) {
+        toast.success(`${result.atualizados} processo${result.atualizados !== 1 ? "s" : ""} atualizado${result.atualizados !== 1 ? "s" : ""}. ${result.pendentes ?? 0} ainda aguardando.`);
+      } else {
+        toast.info(`Nenhum documento novo disponível. ${result.pendentes ?? 0} ainda aguardando processamento pela Judit.`);
+      }
+      utils.admin.listarProcessosComAutos.invalidate();
+    },
+    onError: (err) => {
+      toast.error(`Erro ao verificar pendentes: ${err.message}`);
+    },
+  });
   const processarPendentesMutation = trpc.admin.processarAutosPendentes.useMutation({
     onSuccess: (result) => {
       if (result.processados > 0) {
@@ -1211,24 +1224,39 @@ function SecaoAutos() {
         </div>
       </div>
 
-      {/* Botão Processar Pendentes */}
-      <div className="flex items-center justify-between">
+      {/* Botões de ação */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-sm text-muted-foreground">
           Processa os autos já solicitados que ainda não foram baixados.
         </p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1.5 border-teal-300 text-teal-700 hover:bg-teal-50"
-          disabled={processarPendentesMutation.isPending}
-          onClick={() => processarPendentesMutation.mutate()}
-        >
-          {processarPendentesMutation.isPending ? (
-            <><RefreshCw className="h-3.5 w-3.5 animate-spin" />Processando...</>
-          ) : (
-            <><Download className="h-3.5 w-3.5" />Processar pendentes</>
-          )}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-50"
+            disabled={verificarTodosMutation.isPending}
+            onClick={() => verificarTodosMutation.mutate()}
+          >
+            {verificarTodosMutation.isPending ? (
+              <><RefreshCw className="h-3.5 w-3.5 animate-spin" />Verificando...</>
+            ) : (
+              <><RefreshCw className="h-3.5 w-3.5" />Verificar todos os pendentes</>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 border-teal-300 text-teal-700 hover:bg-teal-50"
+            disabled={processarPendentesMutation.isPending}
+            onClick={() => processarPendentesMutation.mutate()}
+          >
+            {processarPendentesMutation.isPending ? (
+              <><RefreshCw className="h-3.5 w-3.5 animate-spin" />Processando...</>
+            ) : (
+              <><Download className="h-3.5 w-3.5" />Processar pendentes</>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Tabela de processos */}
