@@ -1408,9 +1408,8 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         if (allValid.length === 0) {
           return { status: "no_valid_attachments" as const, baixados: 0, erros: 0, pendentes: 0, totalRaw: rawAttachments.length };
         }
-        // Separar done vs pending
-        const doneAtts = allValid.filter(a => String(a.status ?? "") === "done");
-        const pendingAtts = allValid.filter(a => String(a.status ?? "") !== "done");
+        // Tentar download para TODOS os attachments válidos (independente do status)
+        // Tribunais com IDs longos (TJBA, TJSP etc.) funcionam mesmo com status=pending
         const { getDb } = await import("./db");
         const { processos: processosTable } = await import("../drizzle/schema");
         const { eq } = await import("drizzle-orm");
@@ -1424,8 +1423,8 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         let erros = 0;
         let metadadosSalvos = 0;
         const instancia = 1;
-        // Processar attachments com status=done — tentar download
-        for (const att of doneAtts) {
+        // Processar TODOS os attachments — tentar download independente do status
+        for (const att of allValid) {
           const attachmentId = String(att.attachment_id ?? "");
           if (existentesIds.has(attachmentId)) continue;
           const nome = String(att.attachment_name ?? `doc_${attachmentId}`).trim().toUpperCase();
@@ -1452,20 +1451,9 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
             erros++;
           }
         }
-        // Salvar metadados de attachments pending (sem tentar download)
-        for (const att of pendingAtts) {
-          const attachmentId = String(att.attachment_id ?? "");
-          if (existentesIds.has(attachmentId)) continue;
-          const nome = String(att.attachment_name ?? `doc_${attachmentId}`).trim().toUpperCase();
-          const ext = String(att.extension ?? "pdf").toLowerCase();
-          const dataDoc = att.attachment_date ? new Date(att.attachment_date as string) : undefined;
-          const corrompido = Boolean(att.corrupted ?? false);
-          await insertProcessoAuto({ processoId: input.processoId, attachmentId, nomeArquivo: nome, extensao: ext, urlS3: null, fileKey: null, downloadErro: null, dataDocumento: dataDoc, statusAnexo: String(att.status ?? "pending"), instancia, corrompido });
-          metadadosSalvos++;
-        }
         if (baixados > 0) await marcarAutosDisponiveis(input.processoId);
-        console.log(`[Autos] CNJ ${processo.cnj}: ${baixados} baixados, ${erros} erros, ${metadadosSalvos} metadados pending salvos`);
-        return { status: "done" as const, baixados, erros, pendentes: metadadosSalvos, totalRaw: rawAttachments.length, totalValidos: allValid.length, totalDone: doneAtts.length, totalPending: pendingAtts.length };
+        console.log(`[Autos] CNJ ${processo.cnj}: ${baixados} baixados, ${erros} erros (todos tentados independente do status)`);
+        return { status: "done" as const, baixados, erros, pendentes: 0, totalRaw: rawAttachments.length, totalValidos: allValid.length, totalDone: baixados, totalPending: erros };
       }),
     // ─── Processar Pendentes (Fluxo 2) ───────────────────────────────────────────────
     processarAutosPendentes: protectedProcedure.mutation(async ({ ctx }) => {
@@ -1630,8 +1618,7 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         for (const row of pendingRows) {
           const juditAtt = juditStatusMap.get(String(row.attachmentId));
           if (!juditAtt) { aindaPending++; continue; }
-          const novoStatus = String(juditAtt.status ?? "");
-          if (novoStatus !== "done") { aindaPending++; continue; }
+          // Tentar download independente do status (IDs longos funcionam mesmo com pending)
           // Status mudou para done — tentar download
           const ext = String(juditAtt.extension ?? row.extensao ?? "pdf").toLowerCase();
           const corrompido = Boolean(juditAtt.corrupted ?? false);
@@ -1727,7 +1714,8 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
           for (const row of rows) {
             if (!row.attachmentId) { totalPendentes++; continue; }
             const juditAtt = juditMap.get(row.attachmentId);
-            if (!juditAtt || juditAtt.status !== "done") { totalPendentes++; continue; }
+            // Tentar download independente do status (IDs longos funcionam mesmo com pending)
+            if (!juditAtt) { totalPendentes++; continue; }
             try {
               const dlResult = await downloadAnexoJudit(processo.cnj, row.instancia ?? 1, row.attachmentId);
               if (!dlResult || dlResult.buffer.length < 100) { totalPendentes++; continue; }
