@@ -1579,9 +1579,9 @@ export default function ProcessoDetalhe() {
       )}
 
       {/* ─── Documentos (unificado: payload Judit + processo_autos) ─── */}
-      {payload.attachments && payload.attachments.length > 0 && (
+      {((payload.attachments && payload.attachments.length > 0) || (data as any).autosDisponiveis || (data as any).autosSolicitadoEm) && (
         <DocumentosCard
-          attachments={payload.attachments}
+          attachments={payload.attachments ?? []}
           processoId={(data as any).id}
           autosDisponiveis={(data as any).autosDisponiveis}
           autosJaSolicitados={!!(data as any).autosDisponiveis || !!(data as any).autosSolicitadoEm}
