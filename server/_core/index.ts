@@ -216,10 +216,11 @@ export async function processarResultadoJuditExterno(
         }
       }
 
-      // Marcar processo como tendo autos disponíveis
+      // NÃO marcar autosDisponiveis=true aqui — apenas metadados foram salvos (status=pending, sem urlS3).
+      // autosDisponiveis só deve ser true quando houver documentos baixados com sucesso (urlS3 preenchida).
+      // O admin deve usar "Verificar novamente" ou "Verificar todos os pendentes" para baixar os arquivos.
       if (autosCount > 0) {
-        await marcarAutosDisponiveis(processoDb.id);
-        console.log(`[Judit Webhook] ✅ ${autosCount} metadado(s) registrado(s) para CNJ ${cnj} — autosDisponiveis=true`);
+        console.log(`[Judit Webhook] 📎 ${autosCount} metadado(s) registrado(s) para CNJ ${cnj} — aguardando download (autosDisponiveis permanece false)`);
       }
     }
   }
