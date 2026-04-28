@@ -1346,7 +1346,73 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         metricas: { totalSolicitados, totalComAutos, totalDocumentos, custoTotal },
       };
     }),
-    // ─── Iniciar Download de Autos Individual ───────────────────────────────────────
+    // ─── Taxa de Download por Tribunal (dinâmico) ───────────────────────────────────────
+    taxaDownloadPorTribunal: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      const { getDb } = await import("./db");
+      const { processoAutos: processoAutosTable, processos: processosTable } = await import("../drizzle/schema");
+      const { eq, sql, count, isNotNull, isNull } = await import("drizzle-orm");
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+      // Buscar todos os processo_autos com o CNJ do processo associado
+      const rows = await db
+        .select({
+          cnj: processosTable.cnj,
+          urlS3: processoAutosTable.urlS3,
+          downloadErro: processoAutosTable.downloadErro,
+        })
+        .from(processoAutosTable)
+        .innerJoin(processosTable, eq(processoAutosTable.processoId, processosTable.id));
+
+      // Agrupar por tribunal (extraído do CNJ)
+      const TRIBUNAL_MAP: Record<string, string> = {
+        "8.05": "TJBA", "8.07": "TJCE", "8.10": "TJGO", "8.11": "TJMT",
+        "8.12": "TJMS", "8.15": "TJMG", "8.16": "TJPR", "8.17": "TJPE",
+        "8.18": "TJPB", "8.20": "TJRN", "8.22": "TJAL", "8.24": "TJSE",
+        "8.25": "TJRO", "8.26": "TJSP",
+      };
+
+      function extractCodigo(cnj: string): string {
+        const digits = cnj.replace(/\D/g, "");
+        if (digits.length !== 20) return "";
+        const j = digits[13];
+        const tt = parseInt(digits.slice(14, 16));
+        return `${j}.${tt}`;
+      }
+
+      const map = new Map<string, { total: number; sucesso: number; erro404: number; outroErro: number }>();
+
+      for (const row of rows) {
+        const codigo = extractCodigo(row.cnj);
+        if (!codigo) continue;
+        if (!map.has(codigo)) map.set(codigo, { total: 0, sucesso: 0, erro404: 0, outroErro: 0 });
+        const entry = map.get(codigo)!;
+        entry.total++;
+        if (row.urlS3) {
+          entry.sucesso++;
+        } else if (row.downloadErro && row.downloadErro.startsWith("404")) {
+          entry.erro404++;
+        } else if (row.downloadErro) {
+          entry.outroErro++;
+        }
+      }
+
+      const result = Array.from(map.entries())
+        .map(([codigo, stats]) => ({
+          codigo,
+          sigla: TRIBUNAL_MAP[codigo] ?? codigo,
+          total: stats.total,
+          sucesso: stats.sucesso,
+          erro404: stats.erro404,
+          outroErro: stats.outroErro,
+          taxa: stats.total > 0 ? Math.round((stats.sucesso / stats.total) * 100) : 0,
+        }))
+        .sort((a, b) => b.total - a.total);
+
+      return result;
+    }),
+    // ─── Iniciar Download de Autos Individual ──────────────────────────────────────────────────────
     iniciarDownloadAutos: protectedProcedure
       .input(z.object({ processoId: z.number() }))
       .mutation(async ({ input, ctx }) => {

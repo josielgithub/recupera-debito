@@ -1,4 +1,4 @@
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useTransition, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { SecaoQualidade } from "./AdminJudit-Qualidade";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1200,6 +1200,15 @@ function SecaoAutos() {
   const { data, isLoading, error } = trpc.admin.listarProcessosComAutos.useQuery(undefined, {
     refetchInterval: 60_000,
   });
+  const { data: taxasData } = trpc.admin.taxaDownloadPorTribunal.useQuery(undefined, {
+    refetchInterval: 120_000,
+  });
+  // Mapa de taxa dinâmica por código de tribunal
+  const taxasDinamicas = useMemo(() => {
+    const m = new Map<string, number>();
+    if (taxasData) taxasData.forEach(t => m.set(t.codigo, t.taxa));
+    return m;
+  }, [taxasData]);
   const verificarTodosMutation = trpc.admin.verificarTodosAutosPendentes.useMutation({
     onSuccess: (result) => {
       if (result.atualizados > 0) {
@@ -1296,46 +1305,75 @@ function SecaoAutos() {
         </div>
       </div>
 
-      {/* Filtro por tribunal */}
-      {tribunaisUnicos.length > 1 && (
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-sm text-muted-foreground">Filtrar por tribunal:</span>
-          <Select value={filtroTribunal} onValueChange={setFiltroTribunal}>
-            <SelectTrigger className="w-44 h-8 text-xs">
-              <SelectValue placeholder="Todos os tribunais" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos ({todosProcessos.length})</SelectItem>
-              {tribunaisUnicos.map(codigo => {
-                const sigla = TRIBUNAL_MAP[codigo] ?? codigo;
-                const taxa = TRIBUNAL_TAXA[codigo] ?? 50;
-                const count = todosProcessos.filter(p => extractCodigoTribunal(p.cnj) === codigo).length;
-                let badgeCls = "ml-1 text-[10px] px-1 py-0 rounded font-mono ";
-                if (taxa < 20) badgeCls += "bg-red-100 text-red-700";
-                else if (taxa < 80) badgeCls += "bg-amber-100 text-amber-700";
-                else badgeCls += "bg-green-100 text-green-700";
-                return (
-                  <SelectItem key={codigo} value={codigo}>
-                    <span className="flex items-center gap-1.5">
-                      {sigla}
-                      <span className={badgeCls}>{taxa}%</span>
-                      <span className="text-muted-foreground text-[10px]">({count})</span>
-                    </span>
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
-          {filtroTribunal !== "todos" && (
-            <button
-              className="text-xs text-muted-foreground hover:text-foreground underline"
-              onClick={() => setFiltroTribunal("todos")}
-            >
-              Limpar filtro
-            </button>
-          )}
-        </div>
-      )}
+      {/* Filtro por tribunal + Exportar CSV */}
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        {tribunaisUnicos.length > 1 && (
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-sm text-muted-foreground">Filtrar por tribunal:</span>
+            <Select value={filtroTribunal} onValueChange={setFiltroTribunal}>
+              <SelectTrigger className="w-48 h-8 text-xs">
+                <SelectValue placeholder="Todos os tribunais" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos ({todosProcessos.length})</SelectItem>
+                {tribunaisUnicos.map(codigo => {
+                  const sigla = TRIBUNAL_MAP[codigo] ?? codigo;
+                  const taxa = taxasDinamicas.has(codigo) ? taxasDinamicas.get(codigo)! : (TRIBUNAL_TAXA[codigo] ?? 50);
+                  const count = todosProcessos.filter(p => extractCodigoTribunal(p.cnj) === codigo).length;
+                  let badgeCls = "ml-1 text-[10px] px-1 py-0 rounded font-mono ";
+                  if (taxa < 20) badgeCls += "bg-red-100 text-red-700";
+                  else if (taxa < 80) badgeCls += "bg-amber-100 text-amber-700";
+                  else badgeCls += "bg-green-100 text-green-700";
+                  return (
+                    <SelectItem key={codigo} value={codigo}>
+                      <span className="flex items-center gap-1.5">
+                        {sigla}
+                        <span className={badgeCls}>{taxa}%</span>
+                        <span className="text-muted-foreground text-[10px]">({count})</span>
+                      </span>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+            {filtroTribunal !== "todos" && (
+              <button
+                className="text-xs text-muted-foreground hover:text-foreground underline"
+                onClick={() => setFiltroTribunal("todos")}
+              >
+                Limpar filtro
+              </button>
+            )}
+          </div>
+        )}
+        {/* Botão Exportar relatório CSV */}
+        {taxasData && taxasData.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5 border-green-300 text-green-700 hover:bg-green-50 shrink-0"
+            onClick={() => {
+              const hoje = new Date().toISOString().slice(0, 10);
+              const header = "Tribunal,Sigla,Total Docs,Docs Disponíveis,Erros 404,Erros Outros,Taxa de Sucesso %";
+              const rows = taxasData.map(t =>
+                `${t.codigo},${t.sigla},${t.total},${t.sucesso},${t.erro404},${t.outroErro},${t.taxa}%`
+              );
+              const csv = [header, ...rows].join("\n");
+              const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `relatorio-autos-${hoje}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+              toast.success("Relatório exportado com sucesso!");
+            }}
+          >
+            <Download className="h-3.5 w-3.5" />
+            Exportar relatório
+          </Button>
+        )}
+      </div>
 
       {/* Botões de ação */}
       <div className="flex items-center justify-between flex-wrap gap-2">

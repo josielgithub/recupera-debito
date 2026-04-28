@@ -811,3 +811,9 @@
 - [x] ProcessoDetalhe: toast "Tentando download mesmo com status pendente" para IDs longos
 - [x] ProcessoDetalhe: mensagem específica para tribunais com 404 conhecido (TJPR, TJBA, TJRO)
 - [x] ProcessoDetalhe: ocultar botão "Verificar novamente" para tribunais com 404 conhecido
+
+## Melhorias dinâmicas de tribunal (Abr 2026)
+
+- [x] Criar rota tRPC admin.taxaDownloadPorTribunal (cálculo dinâmico em tempo real)
+- [x] Atualizar filtro dropdown da aba Autos para usar rota dinâmica
+- [x] Adicionar botão "Exportar relatório CSV" na aba Autos do AdminJudit
