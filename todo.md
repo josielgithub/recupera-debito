@@ -801,3 +801,13 @@
 - [x] Passo 3: verificar schema processo_autos para attachment_id curtos (varchar 128 — ok)
 - [x] Passo 4: tentar download com IDs curtos; se 404, salvar metadados com urlS3=null e download_erro
 - [x] Passo 5: melhorar mensagens de erro no frontend (remover "formato não suportado")
+
+## Melhorias pós-processamento em massa (Abr 2026)
+
+- [x] Reprocessar 52 attachments com erro diferente de 404 (timeout/instabilidade)
+- [x] AdminJudit: coluna Tribunal com sigla extraída do CNJ
+- [x] AdminJudit: filtro dropdown por tribunal acima da tabela
+- [x] AdminJudit: badge colorido por taxa de sucesso (verde >79%, âmbar 20-79%, vermelho <20%)
+- [x] ProcessoDetalhe: toast "Tentando download mesmo com status pendente" para IDs longos
+- [x] ProcessoDetalhe: mensagem específica para tribunais com 404 conhecido (TJPR, TJBA, TJRO)
+- [x] ProcessoDetalhe: ocultar botão "Verificar novamente" para tribunais com 404 conhecido

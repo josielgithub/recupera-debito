@@ -1045,6 +1045,67 @@ function SecaoProblemas() {
   );
 }
 
+// ─── Mapeamento de tribunais ────────────────────────────────────────────────
+const TRIBUNAL_MAP: Record<string, string> = {
+  "8.05": "TJBA",
+  "8.07": "TJCE",
+  "8.10": "TJGO",
+  "8.11": "TJMT",
+  "8.12": "TJMS",
+  "8.15": "TJMG",
+  "8.16": "TJPR",
+  "8.17": "TJPE",
+  "8.18": "TJPB",
+  "8.20": "TJRN",
+  "8.22": "TJAL",
+  "8.24": "TJSE",
+  "8.25": "TJRO",
+  "8.26": "TJSP",
+};
+
+// Taxa de sucesso por tribunal (baseada no processamento em massa)
+const TRIBUNAL_TAXA: Record<string, number> = {
+  "8.05": 7,   // TJBA — 404 alto
+  "8.07": 97,  // TJCE
+  "8.10": 90,  // TJGO
+  "8.11": 86,  // TJMT
+  "8.12": 95,  // TJMS
+  "8.15": 60,  // TJMG
+  "8.16": 1,   // TJPR — 404 alto
+  "8.17": 95,  // TJPE
+  "8.18": 94,  // TJPB
+  "8.20": 94,  // TJRN
+  "8.22": 92,  // TJAL
+  "8.24": 80,  // TJSE
+  "8.25": 8,   // TJRO — 404 alto
+  "8.26": 73,  // TJSP
+};
+
+function extractCodigoTribunal(cnj: string): string {
+  const m = cnj.match(/\d{7}-\d{2}\.\d{4}\.(\d+\.\d+)\.\d+/);
+  return m ? m[1] : "";
+}
+
+function getSiglaTribunal(cnj: string): string {
+  const codigo = extractCodigoTribunal(cnj);
+  return TRIBUNAL_MAP[codigo] ?? codigo;
+}
+
+function TribunalBadge({ cnj }: { cnj: string }) {
+  const codigo = extractCodigoTribunal(cnj);
+  const sigla = TRIBUNAL_MAP[codigo] ?? codigo;
+  const taxa = TRIBUNAL_TAXA[codigo] ?? 50;
+  let cls = "text-xs px-1.5 py-0 h-5 font-mono border-0 ";
+  if (taxa < 20) cls += "bg-red-100 text-red-700";
+  else if (taxa < 80) cls += "bg-amber-100 text-amber-700";
+  else cls += "bg-green-100 text-green-700";
+  return (
+    <Badge className={cls} title={`Código: ${codigo} — Taxa de download: ${taxa}%`}>
+      {sigla}
+    </Badge>
+  );
+}
+
 // ─── Seção Autos Processuais ─────────────────────────────────────────────────
 // ─── Monitoramento de Webhook ────────────────────────────────────────────────
 function CardMonitoramentoWebhook() {
@@ -1135,6 +1196,7 @@ function CardMonitoramentoWebhook() {
 
 function SecaoAutos() {
   const utils = trpc.useUtils();
+  const [filtroTribunal, setFiltroTribunal] = useState<string>("todos");
   const { data, isLoading, error } = trpc.admin.listarProcessosComAutos.useQuery(undefined, {
     refetchInterval: 60_000,
   });
@@ -1197,7 +1259,17 @@ function SecaoAutos() {
   }
 
   const metricas = data?.metricas ?? { totalSolicitados: 0, totalComAutos: 0, totalDocumentos: 0, custoTotal: 0 };
-  const processos = data?.processos ?? [];
+  const todosProcessos = data?.processos ?? [];
+
+  // Extrair tribunais únicos para o filtro
+  const tribunaisUnicos = Array.from(
+    new Set(todosProcessos.map(p => extractCodigoTribunal(p.cnj)).filter(Boolean))
+  ).sort();
+
+  // Aplicar filtro por tribunal
+  const processos = filtroTribunal === "todos"
+    ? todosProcessos
+    : todosProcessos.filter(p => extractCodigoTribunal(p.cnj) === filtroTribunal);
 
   return (
     <div className="space-y-6">
@@ -1223,6 +1295,47 @@ function SecaoAutos() {
           <p className="text-2xl font-bold text-orange-800">R$ {metricas.custoTotal.toFixed(2).replace(".", ",")}</p>
         </div>
       </div>
+
+      {/* Filtro por tribunal */}
+      {tribunaisUnicos.length > 1 && (
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-sm text-muted-foreground">Filtrar por tribunal:</span>
+          <Select value={filtroTribunal} onValueChange={setFiltroTribunal}>
+            <SelectTrigger className="w-44 h-8 text-xs">
+              <SelectValue placeholder="Todos os tribunais" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos ({todosProcessos.length})</SelectItem>
+              {tribunaisUnicos.map(codigo => {
+                const sigla = TRIBUNAL_MAP[codigo] ?? codigo;
+                const taxa = TRIBUNAL_TAXA[codigo] ?? 50;
+                const count = todosProcessos.filter(p => extractCodigoTribunal(p.cnj) === codigo).length;
+                let badgeCls = "ml-1 text-[10px] px-1 py-0 rounded font-mono ";
+                if (taxa < 20) badgeCls += "bg-red-100 text-red-700";
+                else if (taxa < 80) badgeCls += "bg-amber-100 text-amber-700";
+                else badgeCls += "bg-green-100 text-green-700";
+                return (
+                  <SelectItem key={codigo} value={codigo}>
+                    <span className="flex items-center gap-1.5">
+                      {sigla}
+                      <span className={badgeCls}>{taxa}%</span>
+                      <span className="text-muted-foreground text-[10px]">({count})</span>
+                    </span>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+          {filtroTribunal !== "todos" && (
+            <button
+              className="text-xs text-muted-foreground hover:text-foreground underline"
+              onClick={() => setFiltroTribunal("todos")}
+            >
+              Limpar filtro
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Botões de ação */}
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -1271,9 +1384,10 @@ function SecaoAutos() {
             <thead>
               <tr className="border-b border-border">
                 <th className="text-left py-2 px-2 text-xs font-semibold text-muted-foreground">CNJ</th>
+                <th className="text-left py-2 px-2 text-xs font-semibold text-muted-foreground hidden md:table-cell">Tribunal</th>
                 <th className="text-left py-2 px-2 text-xs font-semibold text-muted-foreground">Cliente</th>
                 <th className="text-left py-2 px-2 text-xs font-semibold text-muted-foreground hidden sm:table-cell">Advogado</th>
-                <th className="text-left py-2 px-2 text-xs font-semibold text-muted-foreground">Solicitado em</th>
+                <th className="text-left py-2 px-2 text-xs font-semibold text-muted-foreground hidden lg:table-cell">Solicitado em</th>
                 <th className="text-center py-2 px-2 text-xs font-semibold text-muted-foreground">Docs</th>
                 <th className="text-center py-2 px-2 text-xs font-semibold text-muted-foreground">Pendentes</th>
                 <th className="text-center py-2 px-2 text-xs font-semibold text-muted-foreground">Status</th>
@@ -1292,13 +1406,16 @@ function SecaoAutos() {
                       {formatCnj(p.cnj)}
                     </a>
                   </td>
+                  <td className="py-2 px-2 hidden md:table-cell">
+                    <TribunalBadge cnj={p.cnj} />
+                  </td>
                   <td className="py-2 px-2 text-xs max-w-[120px] truncate" title={p.nomeCliente ?? ""}>
                     {p.nomeCliente ?? "-"}
                   </td>
                   <td className="py-2 px-2 text-xs hidden sm:table-cell">
                     {p.advogadoNome ?? <span className="text-muted-foreground">-</span>}
                   </td>
-                  <td className="py-2 px-2 text-xs">
+                  <td className="py-2 px-2 text-xs hidden lg:table-cell">
                     {formatarData(p.autosSolicitadoEm)}
                   </td>
                   <td className="py-2 px-2 text-center">

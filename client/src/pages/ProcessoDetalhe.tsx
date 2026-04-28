@@ -103,8 +103,51 @@ interface JuditPayload {
   crawler?: { source_name?: string; updated_at?: string };
   attachments?: JuditAttachment[];
 }
+// ─── Mapeamento de tribunais ────────────────────────────────────────────────
+const TRIBUNAL_MAP_DETALHE: Record<string, string> = {
+  "8.05": "TJBA", "8.07": "TJCE", "8.10": "TJGO", "8.11": "TJMT",
+  "8.12": "TJMS", "8.15": "TJMG", "8.16": "TJPR", "8.17": "TJPE",
+  "8.18": "TJPB", "8.20": "TJRN", "8.22": "TJAL", "8.24": "TJSE",
+  "8.25": "TJRO", "8.26": "TJSP",
+};
+// Tribunais com taxa de download < 20% (404 definitivo)
+const TRIBUNAIS_SEM_DOWNLOAD = ["8.16", "8.05", "8.25"]; // TJPR, TJBA, TJRO
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+function extractCodigoTribunalCnj(cnj: string): string {
+  const m = cnj.replace(/\D/g, "").match(/^\d{7}\d{2}\d{4}(\d)(\d{2})\d{4}$/);
+  // Formato CNJ: NNNNNNN-DD.AAAA.J.TT.OOOO — posições 14-15 (0-indexed) = tribunal
+  const digits = cnj.replace(/\D/g, "");
+  if (digits.length === 20) {
+    const j = digits[13]; // órgão
+    const tt = digits.slice(14, 16); // tribunal
+    return `${j}.${tt.replace(/^0/, "")}`.replace(/^(\d)\.(\d+)$/, (_, a, b) => `${a}.${parseInt(b)}`).replace(/^(\d)\.(\d)$/, "$1.0$2");
+  }
+  return "";
+}
+
+function getCodigoTribunalFormatado(cnj: string): string {
+  const digits = cnj.replace(/\D/g, "");
+  if (digits.length !== 20) return "";
+  const j = digits[13];
+  const tt = parseInt(digits.slice(14, 16));
+  return `${j}.${tt}`;
+}
+
+function getSiglaTribunalDetalhe(cnj: string): string {
+  const codigo = getCodigoTribunalFormatado(cnj);
+  return TRIBUNAL_MAP_DETALHE[codigo] ?? codigo;
+}
+
+function isTribunalSemDownload(cnj: string): boolean {
+  const codigo = getCodigoTribunalFormatado(cnj);
+  return TRIBUNAIS_SEM_DOWNLOAD.includes(codigo);
+}
+
+function hasLongAttachmentIds(attachments: JuditAttachment[]): boolean {
+  return attachments.some(a => a.attachment_id && String(a.attachment_id).length >= 9);
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────────────────────────
 function formatDate(dateStr?: string | null): string {
   if (!dateStr) return "—";
   try {
@@ -638,19 +681,23 @@ function DocIcon({ tipo }: { tipo: string }) {
   if (tipo === "acordao") return <BookOpen className="w-4 h-4" />;
   return <FileText className="w-4 h-4" />;
 }
-
-// ─── Componente Unificado de Documentos ────────────────────────────────────────
+// ─── Componente Unificado de Documentos ──────────────────────────────────────────
 function DocumentosCard({
   attachments,
   processoId,
   autosDisponiveis,
   autosJaSolicitados,
+  cnj,
 }: {
   attachments: JuditAttachment[];
   processoId?: number;
   autosDisponiveis?: boolean;
   autosJaSolicitados?: boolean;
+  cnj?: string;
 }) {
+  const sigla = cnj ? getSiglaTribunalDetalhe(cnj) : "";
+  const semDownload = cnj ? isTribunalSemDownload(cnj) : false;
+  const temIdLongo = hasLongAttachmentIds(attachments);
   const utils = trpc.useUtils();
   const [expandido, setExpandido] = useState(true);
   const [filtro, setFiltro] = useState<string>("todos");
@@ -853,7 +900,7 @@ function DocumentosCard({
             )}
           </CardTitle>
           <div className="flex items-center gap-2">
-            {hasPending && processoId && (
+            {hasPending && processoId && !semDownload && (
               <Button
                 variant="outline"
                 size="sm"
@@ -861,6 +908,9 @@ function DocumentosCard({
                 disabled={verificando}
                 onClick={() => {
                   setVerificando(true);
+                  if (temIdLongo) {
+                    toast.info("Tentando download mesmo com status pendente — aguarde alguns instantes");
+                  }
                   verificarPendentesMutation.mutate({ processoId: processoId! });
                 }}
               >
@@ -1066,25 +1116,41 @@ function DocumentosCard({
           )}
           {hasPending && processoId && (
             <div className="mt-3 pt-3 border-t">
-              <p className="text-xs text-muted-foreground mb-2">
-                {totalAguardando} documento{totalAguardando !== 1 ? "s" : ""} aguardando processamento pela Judit.
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs gap-1.5"
-                disabled={verificando}
-                onClick={() => {
-                  setVerificando(true);
-                  verificarPendentesMutation.mutate({ processoId: processoId! });
-                }}
-              >
-                {verificando ? (
-                  <><Loader2 className="w-3.5 h-3.5 animate-spin" />Verificando na Judit...</>
-                ) : (
-                  <><RefreshCw className="w-3.5 h-3.5" />Verificar novamente</>
-                )}
-              </Button>
+              {semDownload ? (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200">
+                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-medium text-red-800">
+                      Documentos identificados, mas download não disponível para o tribunal {sigla || "deste processo"} ainda.
+                    </p>
+                    <p className="text-xs text-red-700 mt-0.5">
+                      Entre em contato com o suporte da Judit para habilitar o download para este tribunal.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    {totalAguardando} documento{totalAguardando !== 1 ? "s" : ""} aguardando{temIdLongo ? " — tentando download mesmo com status pendente" : " processamento pela Judit"}.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1.5"
+                    disabled={verificando}
+                    onClick={() => {
+                      setVerificando(true);
+                      verificarPendentesMutation.mutate({ processoId: processoId! });
+                    }}
+                  >
+                    {verificando ? (
+                      <><Loader2 className="w-3.5 h-3.5 animate-spin" />Verificando na Judit...</>
+                    ) : (
+                      <><RefreshCw className="w-3.5 h-3.5" />Verificar novamente</>
+                    )}
+                  </Button>
+                </>
+              )}
             </div>
           )}
         </CardContent>
@@ -1585,6 +1651,7 @@ export default function ProcessoDetalhe() {
           processoId={(data as any).id}
           autosDisponiveis={(data as any).autosDisponiveis}
           autosJaSolicitados={!!(data as any).autosDisponiveis || !!(data as any).autosSolicitadoEm}
+          cnj={cnj}
         />
       )}
 
