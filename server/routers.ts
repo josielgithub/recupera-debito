@@ -275,6 +275,7 @@ export const appRouter = router({
         semInvestidor: z.boolean().optional(),
         advogado: z.string().optional(),
         advogadoId: z.number().nullable().optional(),
+        comAutos: z.boolean().optional(),
       }))
       .query(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
@@ -289,6 +290,7 @@ export const appRouter = router({
           semInvestidor: input.semInvestidor,
           advogado: input.advogado,
           advogadoId: input.advogadoId,
+          comAutos: input.comAutos,
         });
       }),
 

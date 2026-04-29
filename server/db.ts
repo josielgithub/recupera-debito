@@ -344,6 +344,7 @@ interface FiltrosProcessos {
   semInvestidor?: boolean;
   advogado?: string;
   advogadoId?: number | null; // null = sem advogado vinculado
+  comAutos?: boolean; // true = apenas processos com autosDisponiveis = true
 }
 
 export async function listAllProcessos(page = 1, pageSize = 50, filtros?: FiltrosProcessos) {
@@ -409,6 +410,11 @@ export async function listAllProcessos(page = 1, pageSize = 50, filtros?: Filtro
     return dir === "asc" ? asc(expr) : desc(expr);
   })();
 
+  // Filtro de autos disponíveis
+  if (filtros?.comAutos) {
+    condicoes.push(eq(processos.autosDisponiveis, true));
+  }
+
   const baseQuery = db
     .select({
       id: processos.id,
@@ -423,6 +429,9 @@ export async function listAllProcessos(page = 1, pageSize = 50, filtros?: Filtro
       clienteNome: clientes.nome,
       clienteCpf: clientes.cpf,
       parceiroNome: parceiros.nomeEscritorio,
+      autosDisponiveis: processos.autosDisponiveis,
+      autosSolicitadoEm: processos.autosSolicitadoEm,
+      totalDocumentos: sql<number>`(SELECT COUNT(*) FROM processo_autos WHERE processo_autos.processo_id = ${processos.id})`,
     })
     .from(processos)
     .leftJoin(clientes, eq(processos.clienteId, clientes.id))

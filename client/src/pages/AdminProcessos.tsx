@@ -64,6 +64,7 @@ import {
   ThumbsUp,
   ThumbsDown,
   Paperclip,
+  Clock,
   Download,
   FileDown,
 } from "lucide-react";
@@ -89,6 +90,9 @@ interface ProcessoRow {
   clienteNome: string | null;
   clienteCpf: string | null;
   parceiroNome: string | null;
+  autosDisponiveis?: boolean;
+  autosSolicitadoEm?: Date | string | null;
+  totalDocumentos?: number;
 }
 
 interface Filtros {
@@ -98,9 +102,10 @@ interface Filtros {
   busca: string;
   investidorId: string; // "" = todos, "_sem" = sem investidor, "123" = id específico
   advogadoId: string;   // "" = todos, "_sem" = sem advogado, "123" = id específico
+  comAutos: boolean;
 }
 
-const FILTROS_VAZIOS: Filtros = { status: [], dataInicio: "", dataFim: "", busca: "", investidorId: "", advogadoId: "" };
+const FILTROS_VAZIOS: Filtros = { status: [], dataInicio: "", dataFim: "", busca: "", investidorId: "", advogadoId: "", comAutos: false };
 
 const STATUS_OPTIONS = Object.entries(STATUS_RESUMIDO_LABELS);
 
@@ -315,6 +320,7 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
     !!filtrosAplicados.busca,
     !!filtrosAplicados.investidorId,
     !!filtrosAplicados.advogadoId,
+    filtrosAplicados.comAutos,
   ].filter(Boolean).length;
 
   const vincularInvestidorLoteMutation = trpc.admin.vincularInvestidorEmLote.useMutation({
@@ -346,6 +352,7 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
       : filtrosAplicados.advogadoId
       ? parseInt(filtrosAplicados.advogadoId)
       : undefined,
+    comAutos: filtrosAplicados.comAutos || undefined,
   });
 
   const atualizarLoteMutation = trpc.admin.atualizarStatusEmLote.useMutation({
@@ -484,6 +491,7 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
   function removerFiltro(campo: keyof Filtros) {
     const novos = { ...filtrosAplicados };
     if (campo === "status") novos.status = [];
+    else if (campo === "comAutos") novos.comAutos = false;
     else novos[campo] = "";
     if (campo === "busca") setBuscaImediata("");
     setFiltros(novos);
@@ -531,6 +539,28 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
                 <AlertTriangle className="w-3.5 h-3.5 mr-1.5" />
                 Revisão manual
                 {modoRevisaoManual && <X className="w-3 h-3 ml-1.5" />}
+              </Button>
+
+              {/* Botão filtro rápido: Com autos */}
+              <Button
+                variant={filtrosAplicados.comAutos ? "default" : "outline"}
+                size="sm"
+                className={`h-8 text-xs ${
+                  filtrosAplicados.comAutos
+                    ? "bg-blue-600 hover:bg-blue-700 border-blue-600 text-white"
+                    : "border-blue-300 text-blue-700 hover:bg-blue-50"
+                }`}
+                onClick={() => {
+                  const novo = !filtrosAplicados.comAutos;
+                  const novos = { ...filtrosAplicados, comAutos: novo };
+                  setFiltros(novos);
+                  setFiltrosAplicados(novos);
+                  setPagina(1);
+                }}
+              >
+                <Paperclip className="w-3.5 h-3.5 mr-1.5" />
+                Com autos
+                {filtrosAplicados.comAutos && <X className="w-3 h-3 ml-1.5" />}
               </Button>
 
               {/* Botão de filtro avançado */}
@@ -743,6 +773,15 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
                   </button>
                 </Badge>
               )}
+              {filtrosAplicados.comAutos && (
+                <Badge variant="secondary" className="text-xs gap-1 pr-1 bg-blue-50 text-blue-700 border-blue-200">
+                  <Paperclip className="w-3 h-3" />
+                  Com autos
+                  <button onClick={() => removerFiltro("comAutos")} className="ml-0.5 hover:text-destructive">
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              )}
               <button
                 onClick={limparFiltros}
                 className="text-xs text-muted-foreground hover:text-destructive transition-colors"
@@ -913,9 +952,33 @@ export default function AdminProcessos({ filtroStatusInicial, filtroInvestidorId
                       </TableCell>
                       <TableCell className="text-xs font-mono max-w-[160px] truncate" onClick={(e) => e.stopPropagation()}>
                         <span className="flex items-center gap-1">
-                          {(p as any).autosDisponiveis && (
-                            <span title="Autos disponíveis"><Paperclip className="w-3 h-3 text-amber-500 flex-shrink-0" /></span>
-                          )}
+                          {p.autosDisponiveis ? (
+                            <TooltipProvider delayDuration={200}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="cursor-default">
+                                    <Paperclip className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">
+                                  Autos disponíveis — {p.totalDocumentos ?? 0} documento{(p.totalDocumentos ?? 0) !== 1 ? "s" : ""}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          ) : p.autosSolicitadoEm ? (
+                            <TooltipProvider delayDuration={200}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="cursor-default">
+                                    <Clock className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">
+                                  Autos solicitados em {new Date(p.autosSolicitadoEm).toLocaleDateString("pt-BR")} — aguardando
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          ) : null}
                           <a
                             href={`/admin/processo/${encodeURIComponent(p.cnj)}`}
                             target="_blank"

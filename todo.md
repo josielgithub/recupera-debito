@@ -817,3 +817,11 @@
 - [x] Criar rota tRPC admin.taxaDownloadPorTribunal (cálculo dinâmico em tempo real)
 - [x] Atualizar filtro dropdown da aba Autos para usar rota dinâmica
 - [x] Adicionar botão "Exportar relatório CSV" na aba Autos do AdminJudit
+
+## Indicadores visuais de autos na tabela AdminProcessos (Abr 2026)
+
+- [x] Verificar/incluir autosDisponiveis e autosSolicitadoEm na query de listagem
+- [x] Incluir totalDocumentos (count de processo_autos) na query de listagem
+- [x] Adicionar ícone clipe azul (autos disponíveis) com tooltip na coluna CNJ
+- [x] Adicionar ícone relógio âmbar (autos solicitados) com tooltip na coluna CNJ
+- [x] Adicionar filtro rápido "Com autos" na barra de filtros
