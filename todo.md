@@ -837,3 +837,11 @@
 - [ ] Integrar dados extraídos no prompt do resumo IA (admin.gerarResumoProcesso)
 - [x] Atualizar ProcessoDetalhe: botão "Extrair dados" por documento
 - [x] Atualizar ProcessoDetalhe: seção "Dados da Sentença" com badge e valores
+
+## Investigação: Extração LLM retornando "Não identificado" (Abr 2026)
+
+- [x] Buscar URL do PDF no banco (processo 1014401-24.2025.8.11.0003)
+- [x] Verificar acessibilidade pública da URL CloudFront — HTTP 200 mas Content-Type: text/html!
+- [x] Verificar se PDF tem texto selecionável — arquivos de sentença são HTML puro, alvarás são PDF real
+- [x] Inspecionar prompt e resposta bruta — LLM não conseguia processar HTML como PDF
+- [x] Corrigir: detectar Content-Type antes de enviar; HTML → extrair texto; PDF → file_url

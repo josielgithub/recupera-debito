@@ -1005,19 +1005,61 @@ Para confianca: alta se as informações estão explícitas. media se precisou i
     : { valor_alvara: null, data_deposito_alvara: null, texto_relevante: null, confianca: "baixa" };
 
   try {
+    // Detectar se o arquivo é HTML disfarçado de PDF (padrão TJMT e outros tribunais)
+    // Nesses casos, o arquivo tem extensão .pdf mas é HTML puro
+    // Precisamos baixar e extrair o texto antes de enviar para a LLM
+    let userContent: Array<{ type: "file_url"; file_url: { url: string; mime_type: "application/pdf" } } | { type: "text"; text: string }>;
+
+    try {
+      const headRes = await fetch(urlS3, { method: "HEAD" });
+      const contentType = headRes.headers.get("content-type") ?? "";
+      const isHtml = contentType.includes("text/html");
+
+      if (isHtml) {
+        // Baixar e extrair texto do HTML
+        const htmlRes = await fetch(urlS3);
+        const htmlContent = await htmlRes.text();
+        // Remover tags HTML e decodificar entidades
+        const textContent = htmlContent
+          .replace(/<[^>]+>/g, " ")
+          .replace(/&nbsp;/g, " ")
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&ccedil;/gi, "ç")
+          .replace(/&atilde;/gi, "ã")
+          .replace(/&otilde;/gi, "õ")
+          .replace(/&eacute;/gi, "é")
+          .replace(/&ecirc;/gi, "ê")
+          .replace(/&oacute;/gi, "ó")
+          .replace(/&aacute;/gi, "á")
+          .replace(/&iacute;/gi, "í")
+          .replace(/&uacute;/gi, "ú")
+          .replace(/&#[0-9]+;/g, (m) => { try { return String.fromCharCode(parseInt(m.slice(2, -1))); } catch { return m; } })
+          .replace(/\s+/g, " ")
+          .trim();
+        console.log(`[LLM] Arquivo HTML detectado (${contentType}), extraindo texto: ${textContent.slice(0, 100)}...`);
+        userContent = [{ type: "text" as const, text: `${userPrompt}\n\n---CONTEÚDO DO DOCUMENTO---\n${textContent}` }];
+      } else {
+        // PDF real — enviar via file_url
+        userContent = [
+          { type: "file_url" as const, file_url: { url: urlS3, mime_type: "application/pdf" as const } },
+          { type: "text" as const, text: userPrompt },
+        ];
+      }
+    } catch (fetchErr) {
+      // Fallback: tentar como PDF se não conseguir fazer HEAD
+      console.warn("[LLM] Não foi possível verificar Content-Type, tentando como PDF:", fetchErr);
+      userContent = [
+        { type: "file_url" as const, file_url: { url: urlS3, mime_type: "application/pdf" as const } },
+        { type: "text" as const, text: userPrompt },
+      ];
+    }
+
     const response = await invokeLLM({
       messages: [
         { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: [
-            {
-              type: "file_url" as const,
-              file_url: { url: urlS3, mime_type: "application/pdf" as const },
-            },
-            { type: "text" as const, text: userPrompt },
-          ],
-        },
+        { role: "user", content: userContent },
       ],
     });
 
