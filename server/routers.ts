@@ -89,6 +89,7 @@ import {
   iniciarAnaliseIA,
   verificarAnaliseIA,
   buscarProcessosPorCpfJudit,
+  extrairDadosDocumento,
 } from "./judit";
 import { updateAiSummary, updateValorObtido, getImportJob, listImportJobs,
   listInvestidores, upsertInvestidor, vincularInvestidorAoProcesso,
@@ -113,6 +114,10 @@ import { updateAiSummary, updateValorObtido, getImportJob, listImportJobs,
   listProcessoAutos,
   insertProcessoAuto,
   marcarAutosDisponiveis,
+  upsertSentencaDados,
+  getSentencaDadosByProcessoId,
+  listarDocumentosParaExtracao,
+  detectarTipoDocumento,
 } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { createHash } from "crypto";
@@ -2591,9 +2596,108 @@ ${JSON.stringify(processo, null, 2)}`;
           throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Erro ao analisar processo com IA" });
         }
       }),
-  }),
 
-  // ─── Convite Público ────────────────────────────────────────────────────────────────
+    // ─── Extração de Dados de Sentenças e Alvarás ──────────────────────────────────────────────────────────────────────────────────────────
+    listarDocumentosParaExtracao: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      return listarDocumentosParaExtracao();
+    }),
+
+    extrairDadosDocumento: protectedProcedure
+      .input(z.object({
+        processoAutosId: z.number(),
+        urlS3: z.string().url(),
+        tipo: z.enum(["sentenca", "alvara"]),
+        processoId: z.number(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const { dados, modeloUsado } = await extrairDadosDocumento(input.urlS3, input.tipo);
+        const isSentenca = input.tipo === "sentenca";
+        const d = dados as unknown as {
+          resultado?: string; cabe_recurso?: boolean | null;
+          valor_sentenca?: number | null; data_sentenca?: string | null;
+          valor_alvara?: number | null; data_deposito_alvara?: string | null;
+          texto_relevante?: string | null; confianca?: string;
+        };
+        await upsertSentencaDados({
+          processoAutosId: input.processoAutosId,
+          processoId: input.processoId,
+          tipo: input.tipo,
+          resultado: isSentenca ? (d.resultado as "procedente" | "improcedente" | "parcialmente_procedente" | "nao_identificado" ?? null) : null,
+          cabeRecurso: isSentenca ? (d.cabe_recurso ?? null) : null,
+          valorSentenca: isSentenca ? (d.valor_sentenca != null ? String(d.valor_sentenca) : null) : null,
+          dataSentenca: isSentenca && d.data_sentenca ? new Date(d.data_sentenca) : null,
+          valorAlvara: !isSentenca ? (d.valor_alvara != null ? String(d.valor_alvara) : null) : null,
+          dataDepositoAlvara: !isSentenca && d.data_deposito_alvara ? new Date(d.data_deposito_alvara) : null,
+          textoExtraido: d.texto_relevante ?? null,
+          confianca: (d.confianca as "alta" | "media" | "baixa") ?? "baixa",
+          modeloUsado,
+        });
+        return { ok: true, dados, modeloUsado };
+      }),
+
+    extrairDadosEmLote: protectedProcedure
+      .input(z.object({
+        apenasNaoExtraidos: z.boolean().default(true),
+        limite: z.number().min(1).max(50).default(10),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const documentos = await listarDocumentosParaExtracao();
+        const pendentes = input.apenasNaoExtraidos
+          ? documentos.filter((d) => !d.jaExtraido)
+          : documentos;
+        const lote = pendentes.slice(0, input.limite);
+        const resultados: Array<{ processoAutosId: number; cnj: string; tipo: string; confianca: string; ok: boolean; erro?: string }> = [];
+        for (const doc of lote) {
+          try {
+            const tipo = doc.tipoDetectado!;
+            const { dados, modeloUsado } = await extrairDadosDocumento(doc.urlS3!, tipo);
+            const d = dados as unknown as {
+              resultado?: string; cabe_recurso?: boolean | null;
+              valor_sentenca?: number | null; data_sentenca?: string | null;
+              valor_alvara?: number | null; data_deposito_alvara?: string | null;
+              texto_relevante?: string | null; confianca?: string;
+            };
+            const isSentenca = tipo === "sentenca";
+            await upsertSentencaDados({
+              processoAutosId: doc.processoAutosId,
+              processoId: doc.processoId,
+              tipo,
+              resultado: isSentenca ? (d.resultado as "procedente" | "improcedente" | "parcialmente_procedente" | "nao_identificado" ?? null) : null,
+              cabeRecurso: isSentenca ? (d.cabe_recurso ?? null) : null,
+              valorSentenca: isSentenca ? (d.valor_sentenca != null ? String(d.valor_sentenca) : null) : null,
+              dataSentenca: isSentenca && d.data_sentenca ? new Date(d.data_sentenca) : null,
+              valorAlvara: !isSentenca ? (d.valor_alvara != null ? String(d.valor_alvara) : null) : null,
+              dataDepositoAlvara: !isSentenca && d.data_deposito_alvara ? new Date(d.data_deposito_alvara) : null,
+              textoExtraido: d.texto_relevante ?? null,
+              confianca: (d.confianca as "alta" | "media" | "baixa") ?? "baixa",
+              modeloUsado,
+            });
+            resultados.push({ processoAutosId: doc.processoAutosId, cnj: doc.cnj, tipo, confianca: d.confianca ?? "baixa", ok: true });
+          } catch (err) {
+            resultados.push({ processoAutosId: doc.processoAutosId, cnj: doc.cnj, tipo: doc.tipoDetectado!, confianca: "baixa", ok: false, erro: String(err) });
+          }
+          await sleep(500);
+        }
+        return {
+          processados: resultados.length,
+          sucesso: resultados.filter((r) => r.ok).length,
+          erros: resultados.filter((r) => !r.ok).length,
+          totalPendentes: pendentes.length,
+          resultados,
+        };
+      }),
+
+    dadosSentencaProcesso: protectedProcedure
+      .input(z.object({ processoId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        return getSentencaDadosByProcessoId(input.processoId);
+      }),
+  }),
+  // ─── Convite Público ──────────────────────────────────────────────────────────────────────────────────────────
   convite: router({
     verificar: publicProcedure
       .input(z.object({ token: z.string() }))
@@ -2676,14 +2780,12 @@ ${JSON.stringify(processo, null, 2)}`;
         await usarConvite(input.token, ctx.user.id);
 
         // Atualizar status para ativo
-        await db.update(usersTable)
+          await db.update(usersTable)
           .set({ statusCadastro: "ativo" })
           .where(eq(usersTable.id, ctx.user.id));
-
         return { ok: true, extraRoles };
       }),
   }),
-
   // ─── Advogado ─────────────────────────────────────────────────────────────────────────────
   advogado: router({
     meusDados: protectedProcedure.query(async ({ ctx }) => {

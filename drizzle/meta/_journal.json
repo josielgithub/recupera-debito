@@ -176,6 +176,13 @@
       "when": 1777317851308,
       "tag": "0024_odd_iron_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1777486908286,
+      "tag": "0025_small_psynapse",
+      "breakpoints": true
     }
   ]
 }

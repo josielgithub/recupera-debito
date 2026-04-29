@@ -22,6 +22,7 @@ import {
   vincularClienteAoProcesso,
 } from "./db";
 import { StatusResumido } from "../drizzle/schema";
+import { invokeLLM } from "./_core/llm";
 
 // ─── Configuração ──────────────────────────────────────────────────────────
 const JUDIT_BASE_URL = process.env.JUDIT_BASE_URL ?? "https://requests.prod.judit.io";
@@ -944,5 +945,93 @@ export async function downloadAnexoJudit(
   } catch (err) {
     console.error(`[Judit] Exceção ao baixar anexo ${attachmentId}:`, err);
     return null;
+  }
+}
+
+// ─── Extração de Dados de Sentenças e Alvarás via LLM ────────────────────
+
+export interface DadosExtraidosSentenca {
+  resultado: "procedente" | "improcedente" | "parcialmente_procedente" | "nao_identificado";
+  cabe_recurso: boolean | null;
+  valor_sentenca: number | null;
+  data_sentenca: string | null; // YYYY-MM-DD
+  texto_relevante: string | null;
+  confianca: "alta" | "media" | "baixa";
+}
+
+export interface DadosExtraidosAlvara {
+  valor_alvara: number | null;
+  data_deposito_alvara: string | null; // YYYY-MM-DD
+  texto_relevante: string | null;
+  confianca: "alta" | "media" | "baixa";
+}
+
+export type DadosExtraidos = DadosExtraidosSentenca | DadosExtraidosAlvara;
+
+export async function extrairDadosDocumento(
+  urlS3: string,
+  tipo: "sentenca" | "alvara"
+): Promise<{ dados: DadosExtraidos; modeloUsado: string }> {
+  const systemPrompt = `Você é um especialista em análise de processos judiciais brasileiros de recuperação de crédito.
+Analise o documento judicial e extraia APENAS as informações solicitadas.
+Responda SOMENTE em JSON válido, sem texto adicional.
+Se não encontrar uma informação, use null.
+Seja preciso — não invente dados que não estão no documento.`;
+
+  const userPrompt =
+    tipo === "sentenca"
+      ? `Analise esta sentença judicial e retorne um JSON com exatamente estes campos:
+{
+  "resultado": "procedente" | "improcedente" | "parcialmente_procedente" | "nao_identificado",
+  "cabe_recurso": true | false | null,
+  "valor_sentenca": número em reais ou null,
+  "data_sentenca": "YYYY-MM-DD" ou null,
+  "texto_relevante": "trecho de até 200 caracteres com a conclusão principal da sentença",
+  "confianca": "alta" | "media" | "baixa"
+}
+
+Para cabe_recurso: true se a sentença mencionar prazo de recurso, apelação possível ou não transitou em julgado. false se mencionar trânsito em julgado ou que não cabe mais recurso.
+Para confianca: alta se as informações estão explícitas. media se precisou interpretar. baixa se o documento está incompleto ou ilegível.`
+      : `Analise este alvará judicial e retorne um JSON com exatamente estes campos:
+{
+  "valor_alvara": número em reais ou null,
+  "data_deposito_alvara": "YYYY-MM-DD" ou null,
+  "texto_relevante": "trecho de até 200 caracteres com o valor e destinatário do alvará",
+  "confianca": "alta" | "media" | "baixa"
+}`;
+
+  const fallback: DadosExtraidos = tipo === "sentenca"
+    ? { resultado: "nao_identificado", cabe_recurso: null, valor_sentenca: null, data_sentenca: null, texto_relevante: null, confianca: "baixa" }
+    : { valor_alvara: null, data_deposito_alvara: null, texto_relevante: null, confianca: "baixa" };
+
+  try {
+    const response = await invokeLLM({
+      messages: [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: [
+            {
+              type: "file_url" as const,
+              file_url: { url: urlS3, mime_type: "application/pdf" as const },
+            },
+            { type: "text" as const, text: userPrompt },
+          ],
+        },
+      ],
+    });
+
+    const rawContent = response.choices?.[0]?.message?.content;
+    const modeloUsado = (response as unknown as { model?: string }).model ?? "gemini";
+
+    if (typeof rawContent !== "string") throw new Error("Resposta da LLM não é string");
+
+    // Limpar markdown code blocks se a LLM retornar ```json ... ```
+    const cleaned = rawContent.replace(/^```(?:json)?\n?|\n?```$/g, "").trim();
+    const parsed = JSON.parse(cleaned) as DadosExtraidos;
+    return { dados: parsed, modeloUsado };
+  } catch (err) {
+    console.error("[LLM] Erro ao extrair dados do documento:", err);
+    return { dados: fallback, modeloUsado: "gemini" };
   }
 }

@@ -825,3 +825,15 @@
 - [x] Adicionar ícone clipe azul (autos disponíveis) com tooltip na coluna CNJ
 - [x] Adicionar ícone relógio âmbar (autos solicitados) com tooltip na coluna CNJ
 - [x] Adicionar filtro rápido "Com autos" na barra de filtros
+
+## Extração automática de dados de sentenças e alvarás via LLM (Abr 2026)
+
+- [x] Criar tabela processo_sentenca_dados no schema Drizzle
+- [x] Gerar migration SQL e aplicar via webdev_execute_sql
+- [x] Criar função extrairDadosDocumento em server/judit.ts
+- [x] Criar rota tRPC admin.listarDocumentosParaExtracao
+- [x] Criar rota tRPC admin.extrairDadosDocumento
+- [x] Criar rota tRPC admin.extrairDadosEmLote
+- [ ] Integrar dados extraídos no prompt do resumo IA (admin.gerarResumoProcesso)
+- [x] Atualizar ProcessoDetalhe: botão "Extrair dados" por documento
+- [x] Atualizar ProcessoDetalhe: seção "Dados da Sentença" com badge e valores

@@ -53,6 +53,9 @@ import {
   LOTE_IMPORTACAO_ERRO_MOTIVO,
   processoAutos,
   ProcessoAuto,
+  processoSentencaDados,
+  ProcessoSentencaDados,
+  InsertProcessoSentencaDados,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -2675,4 +2678,131 @@ export async function marcarAutosSolicitado(processoId: number): Promise<void> {
   await db.update(processos)
     .set({ autosSolicitadoEm: new Date() })
     .where(eq(processos.id, processoId));
+}
+
+// ─── Sentença / Alvará — dados extraídos via LLM ──────────────────────────
+
+// Palavras-chave para detectar tipo de documento pelo nome do arquivo
+const SENTENCA_KEYWORDS = ["sentença", "sentenca", "decisão", "decisao", "julgamento"];
+const ALVARA_KEYWORDS = ["alvará", "alvara", "alvará de levantamento", "depósito judicial", "deposito judicial"];
+
+export function detectarTipoDocumento(nomeArquivo: string | null | undefined): "sentenca" | "alvara" | null {
+  if (!nomeArquivo) return null;
+  const lower = nomeArquivo.toLowerCase();
+  if (ALVARA_KEYWORDS.some((k) => lower.includes(k))) return "alvara";
+  if (SENTENCA_KEYWORDS.some((k) => lower.includes(k))) return "sentenca";
+  return null;
+}
+
+export async function insertSentencaDados(data: InsertProcessoSentencaDados): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(processoSentencaDados).values(data);
+  return (result as unknown as { insertId: number }).insertId;
+}
+
+export async function getSentencaDadosByProcessoAutosId(processoAutosId: number): Promise<ProcessoSentencaDados | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select()
+    .from(processoSentencaDados)
+    .where(eq(processoSentencaDados.processoAutosId, processoAutosId))
+    .orderBy(desc(processoSentencaDados.extraidoEm))
+    .limit(1);
+  return result[0];
+}
+
+export async function getSentencaDadosByProcessoId(processoId: number): Promise<ProcessoSentencaDados[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(processoSentencaDados)
+    .where(eq(processoSentencaDados.processoId, processoId))
+    .orderBy(desc(processoSentencaDados.extraidoEm));
+}
+
+export async function upsertSentencaDados(data: InsertProcessoSentencaDados): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  // Verificar se já existe registro para este processoAutosId
+  const existing = await getSentencaDadosByProcessoAutosId(data.processoAutosId);
+  if (existing) {
+    // Atualizar registro existente
+    await db
+      .update(processoSentencaDados)
+      .set({
+        tipo: data.tipo,
+        resultado: data.resultado,
+        cabeRecurso: data.cabeRecurso,
+        valorSentenca: data.valorSentenca,
+        dataSentenca: data.dataSentenca,
+        valorAlvara: data.valorAlvara,
+        dataDepositoAlvara: data.dataDepositoAlvara,
+        textoExtraido: data.textoExtraido,
+        confianca: data.confianca,
+        extraidoEm: new Date(),
+        modeloUsado: data.modeloUsado,
+      })
+      .where(eq(processoSentencaDados.id, existing.id));
+    return existing.id;
+  }
+  // Inserir novo
+  return insertSentencaDados(data);
+}
+
+export async function listarDocumentosParaExtracao(): Promise<Array<{
+  processoAutosId: number;
+  processoId: number;
+  cnj: string;
+  nomeArquivo: string | null;
+  urlS3: string | null;
+  tipoDetectado: "sentenca" | "alvara" | null;
+  jaExtraido: boolean;
+  confiancaExtracao: string | null;
+  resultadoExtracao: string | null;
+}>> {
+  const db = await getDb();
+  if (!db) return [];
+  // Buscar todos os processo_autos com urlS3 preenchido
+  const rows = await db
+    .select({
+      processoAutosId: processoAutos.id,
+      processoId: processoAutos.processoId,
+      cnj: processos.cnj,
+      nomeArquivo: processoAutos.nomeArquivo,
+      urlS3: processoAutos.urlS3,
+      statusResumido: processos.statusResumido,
+    })
+    .from(processoAutos)
+    .innerJoin(processos, eq(processoAutos.processoId, processos.id))
+    .where(sql`${processoAutos.urlS3} IS NOT NULL AND ${processoAutos.urlS3} != ''`)
+    .orderBy(
+      // Priorizar processos concluido_ganho
+      sql`CASE WHEN ${processos.statusResumido} = 'concluido_ganho' THEN 0 ELSE 1 END`,
+      desc(processoAutos.createdAt)
+    );
+
+  // Para cada registro, verificar se já foi extraído e detectar tipo
+  const result = await Promise.all(
+    rows
+      .filter((r) => detectarTipoDocumento(r.nomeArquivo) !== null)
+      .map(async (r) => {
+        const tipoDetectado = detectarTipoDocumento(r.nomeArquivo);
+        const extraido = await getSentencaDadosByProcessoAutosId(r.processoAutosId);
+        return {
+          processoAutosId: r.processoAutosId,
+          processoId: r.processoId,
+          cnj: r.cnj,
+          nomeArquivo: r.nomeArquivo,
+          urlS3: r.urlS3,
+          tipoDetectado,
+          jaExtraido: !!extraido,
+          confiancaExtracao: extraido?.confianca ?? null,
+          resultadoExtracao: extraido?.resultado ?? null,
+        };
+      })
+  );
+  return result;
 }

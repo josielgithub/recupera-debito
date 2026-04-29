@@ -40,6 +40,10 @@ import {
   Hammer,
   Paperclip,
   FileDown,
+  Zap,
+  TrendingUp,
+  XCircle,
+  HelpCircle,
 } from "lucide-react";
 import { Streamdown } from "streamdown";
 import { useState as useStateIA } from "react";
@@ -705,6 +709,32 @@ function DocumentosCard({
   const [baixandoTodos, setBaixandoTodos] = useState(false);
   const [progressoBaixarTodos, setProgressoBaixarTodos] = useState<{ atual: number; total: number } | null>(null);
   const [verificando, setVerificando] = useState(false);
+  const [extraindoId, setExtraindoId] = useState<number | null>(null);
+  const [dadosSentenca, setDadosSentenca] = useState<Record<number, any>>({});
+
+  const extrairDadosMutation = trpc.admin.extrairDadosDocumento.useMutation({
+    onSuccess: (result, variables) => {
+      setExtraindoId(null);
+      setDadosSentenca((prev) => ({ ...prev, [variables.processoAutosId]: result.dados }));
+      toast.success("Dados extraídos com sucesso!");
+    },
+    onError: (err) => {
+      setExtraindoId(null);
+      toast.error("Erro ao extrair dados: " + err.message);
+    },
+  });
+
+  function handleExtrairDados(auto: any) {
+    if (!processoId || !auto.urlS3) return;
+    const tipo = categorizarDocumento({ attachment_name: auto.nomeArquivo } as JuditAttachment).tipo as "sentenca" | "alvara";
+    setExtraindoId(auto.id);
+    extrairDadosMutation.mutate({
+      processoAutosId: auto.id,
+      urlS3: auto.urlS3,
+      tipo,
+      processoId,
+    });
+  }
 
   // Buscar registros da tabela processo_autos (todos os documentos: disponíveis, pending, com erro)
   const { data: autos, isLoading: autosLoading } = trpc.admin.getAutosProcesso.useQuery(
@@ -1024,6 +1054,23 @@ function DocumentosCard({
                               Baixar
                             </Button>
                           </a>
+                          {(categorizarDocumento({ attachment_name: auto.nomeArquivo } as JuditAttachment).tipo === "sentenca" ||
+                            categorizarDocumento({ attachment_name: auto.nomeArquivo } as JuditAttachment).tipo === "alvara") && processoId && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs gap-1 bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100"
+                              disabled={extraindoId === auto.id}
+                              onClick={() => handleExtrairDados(auto)}
+                              title="Extrair dados estruturados via IA (valor, resultado, data)"
+                            >
+                              {extraindoId === auto.id ? (
+                                <><Loader2 className="w-3 h-3 animate-spin" />Extraindo...</>
+                              ) : (
+                                <><Zap className="w-3 h-3" />Extrair</>
+                              )}
+                            </Button>
+                          )}
                         </>
                       )}
                       {status === "processando" && processoId && (
@@ -1153,6 +1200,121 @@ function DocumentosCard({
               )}
             </div>
           )}
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
+// ─── Componente Dados da Sentença / Alvará (extraídos via IA) ──────────────────────────────────────
+function DadosSentencaCard({ processoId }: { processoId: number }) {
+  const [expandido, setExpandido] = useState(true);
+  const { data: registros, isLoading } = trpc.admin.dadosSentencaProcesso.useQuery({ processoId });
+
+  if (isLoading) return null;
+  if (!registros || registros.length === 0) return null;
+
+  function formatValor(v: string | null | undefined) {
+    if (!v) return null;
+    const n = parseFloat(v);
+    if (isNaN(n)) return v;
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
+  }
+
+  function ConfiancaBadge({ c }: { c: string | null | undefined }) {
+    if (!c) return null;
+    const cls = c === "alta" ? "bg-green-100 text-green-800 border-green-200" :
+                c === "media" ? "bg-yellow-100 text-yellow-800 border-yellow-200" :
+                "bg-red-100 text-red-700 border-red-200";
+    return <Badge className={`text-xs ${cls} hover:${cls}`}>{c === "alta" ? "Alta" : c === "media" ? "Média" : "Baixa"} confiança</Badge>;
+  }
+
+  function ResultadoBadge({ r }: { r: string | null | undefined }) {
+    if (!r) return null;
+    const map: Record<string, { label: string; cls: string }> = {
+      procedente: { label: "Procedente", cls: "bg-green-100 text-green-800 border-green-200" },
+      improcedente: { label: "Improcedente", cls: "bg-red-100 text-red-700 border-red-200" },
+      parcialmente_procedente: { label: "Parcialmente procedente", cls: "bg-yellow-100 text-yellow-800 border-yellow-200" },
+      nao_identificado: { label: "Não identificado", cls: "bg-gray-100 text-gray-600 border-gray-200" },
+    };
+    const info = map[r] ?? { label: r, cls: "bg-gray-100 text-gray-600 border-gray-200" };
+    return <Badge className={`text-xs ${info.cls} hover:${info.cls}`}>{info.label}</Badge>;
+  }
+
+  return (
+    <Card className="border-purple-200 dark:border-purple-800">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Zap className="w-4 h-4 text-purple-500" />
+            Dados Extraídos via IA
+            <Badge className="text-xs bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-100">
+              {registros.length} documento{registros.length !== 1 ? "s" : ""}
+            </Badge>
+          </CardTitle>
+          <Button variant="ghost" size="sm" onClick={() => setExpandido((v) => !v)} className="h-7 w-7 p-0">
+            {expandido ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </Button>
+        </div>
+      </CardHeader>
+      {expandido && (
+        <CardContent className="space-y-4">
+          {registros.map((reg: any) => (
+            <div key={reg.id} className="rounded-lg border bg-muted/10 p-4 space-y-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                {reg.tipo === "sentenca" ? (
+                  <Badge className="text-xs bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-100"><ScrollText className="w-3 h-3 mr-1" />Sentença</Badge>
+                ) : (
+                  <Badge className="text-xs bg-green-100 text-green-800 border-green-200 hover:bg-green-100"><Stamp className="w-3 h-3 mr-1" />Alvará</Badge>
+                )}
+                <ConfiancaBadge c={reg.confianca} />
+                {reg.resultado && <ResultadoBadge r={reg.resultado} />}
+                {reg.cabeRecurso === true && <Badge className="text-xs bg-orange-100 text-orange-800 border-orange-200">Cabe recurso</Badge>}
+                {reg.cabeRecurso === false && <Badge className="text-xs bg-gray-100 text-gray-600 border-gray-200">Sem recurso</Badge>}
+                <span className="text-xs text-muted-foreground ml-auto">
+                  Extraído em {reg.criadoEm ? new Date(reg.criadoEm).toLocaleDateString("pt-BR") : "—"}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
+                {reg.valorSentenca && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Valor da sentença</p>
+                    <p className="text-sm font-semibold text-green-700">{formatValor(reg.valorSentenca)}</p>
+                  </div>
+                )}
+                {reg.dataSentenca && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Data da sentença</p>
+                    <p className="text-sm font-medium">{new Date(reg.dataSentenca).toLocaleDateString("pt-BR")}</p>
+                  </div>
+                )}
+                {reg.valorAlvara && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Valor do alvará</p>
+                    <p className="text-sm font-semibold text-green-700">{formatValor(reg.valorAlvara)}</p>
+                  </div>
+                )}
+                {reg.dataDepositoAlvara && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Data depósito alvará</p>
+                    <p className="text-sm font-medium">{new Date(reg.dataDepositoAlvara).toLocaleDateString("pt-BR")}</p>
+                  </div>
+                )}
+                {reg.modeloUsado && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Modelo IA</p>
+                    <p className="text-xs font-mono text-muted-foreground">{reg.modeloUsado}</p>
+                  </div>
+                )}
+              </div>
+              {reg.textoExtraido && (
+                <div className="rounded-md bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Trecho relevante extraído</p>
+                  <p className="text-xs text-foreground italic">"{reg.textoExtraido}"</p>
+                </div>
+              )}
+            </div>
+          ))}
         </CardContent>
       )}
     </Card>
@@ -1654,6 +1816,9 @@ export default function ProcessoDetalhe() {
           cnj={cnj}
         />
       )}
+
+      {/* ─── Dados Estruturados da Sentença / Alvará ─── */}
+      {(data as any).id && <DadosSentencaCard processoId={(data as any).id} />}
 
       {/* ─── Histórico Completo de Movimentações ─── */}
       <MovimentacoesTimeline cnj={cnj} />

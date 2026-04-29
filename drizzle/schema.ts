@@ -416,3 +416,28 @@ export const operacoesIdempotentes = mysqlTable("operacoes_idempotentes", {
 });
 export type OperacaoIdempotente = typeof operacoesIdempotentes.$inferSelect;
 export type InsertOperacaoIdempotente = typeof operacoesIdempotentes.$inferInsert;
+
+// ─── Dados Extraídos de Sentenças e Alvarás (via LLM) ─────────────────────
+export const processoSentencaDados = mysqlTable("processo_sentenca_dados", {
+  id: int("id").autoincrement().primaryKey(),
+  processoId: int("processo_id").notNull(),                    // FK processos.id
+  processoAutosId: int("processo_autos_id").notNull(),         // FK processo_autos.id — qual documento foi analisado
+  tipo: mysqlEnum("tipo", ["sentenca", "alvara"]).notNull(),
+  resultado: mysqlEnum("resultado", [
+    "procedente",
+    "improcedente",
+    "parcialmente_procedente",
+    "nao_identificado",
+  ]),
+  cabeRecurso: boolean("cabe_recurso"),                        // nullable
+  valorSentenca: decimal("valor_sentenca", { precision: 15, scale: 2 }), // nullable
+  dataSentenca: timestamp("data_sentenca"),                    // nullable
+  valorAlvara: decimal("valor_alvara", { precision: 15, scale: 2 }),     // nullable
+  dataDepositoAlvara: timestamp("data_deposito_alvara"),       // nullable
+  textoExtraido: text("texto_extraido"),                       // trecho relevante extraído pela LLM
+  confianca: mysqlEnum("confianca", ["alta", "media", "baixa"]).notNull().default("media"),
+  extraidoEm: timestamp("extraido_em").defaultNow().notNull(),
+  modeloUsado: varchar("modelo_usado", { length: 128 }),
+});
+export type ProcessoSentencaDados = typeof processoSentencaDados.$inferSelect;
+export type InsertProcessoSentencaDados = typeof processoSentencaDados.$inferInsert;
