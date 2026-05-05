@@ -29,11 +29,14 @@ import {
   ExternalLink,
   Brain,
   Scale,
+  Copy,
+  Link,
 } from "lucide-react";
 
 // ─── Seção 1: Status das Integrações ─────────────────────────────────────────
 function SecaoStatusIntegracoes() {
   const { data: metricsJudit } = trpc.admin.metricsJudit.useQuery();
+  const { data: statusWebhook } = trpc.admin.statusWebhook.useQuery();
 
   const integracoes = [
     {
@@ -116,6 +119,42 @@ function SecaoStatusIntegracoes() {
             </div>
           );
         })}
+        {/* Card: Endpoint do Webhook Judit */}
+        <div className="flex items-start gap-3 rounded-lg border p-4 bg-orange-50 border-orange-200">
+          <Link className="h-5 w-5 mt-0.5 flex-shrink-0 text-orange-600" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-sm">Endpoint do Webhook Judit</span>
+              <Badge variant="outline" className="text-green-700 border-green-300 bg-green-50 text-xs">
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                Ativo
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Configure esta URL no painel da Judit para receber atualizações automáticas dos processos
+            </p>
+            <div className="flex items-center gap-2 mt-2">
+              <code className="text-xs bg-orange-100 border border-orange-200 rounded px-2 py-1 font-mono break-all flex-1">
+                {statusWebhook?.webhookUrl ?? "Carregando..."}
+              </code>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 flex-shrink-0 bg-white"
+                onClick={() => {
+                  const url = statusWebhook?.webhookUrl;
+                  if (url) {
+                    navigator.clipboard.writeText(url).then(() => toast.success("URL copiada!"));
+                  }
+                }}
+                disabled={!statusWebhook?.webhookUrl}
+              >
+                <Copy className="h-3.5 w-3.5 mr-1" />
+                Copiar URL
+              </Button>
+            </div>
+          </div>
+        </div>
         <p className="text-xs text-muted-foreground pt-1">
           Para verificar o consumo detalhado da LLM Manus, acesse{" "}
           <a

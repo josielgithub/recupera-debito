@@ -845,3 +845,9 @@
 - [x] Verificar se PDF tem texto selecionável — arquivos de sentença são HTML puro, alvarás são PDF real
 - [x] Inspecionar prompt e resposta bruta — LLM não conseguia processar HTML como PDF
 - [x] Corrigir: detectar Content-Type antes de enviar; HTML → extrair texto; PDF → file_url
+
+## Correções de rotas webhook e AdminConfig
+
+- [x] Remover duplicata da rota /api/judit/webhook no index.ts
+- [x] Adicionar WEBHOOK_BASE_URL ao env com valor padrão
+- [x] Adicionar card "Endpoint do Webhook Judit" no AdminConfig.tsx

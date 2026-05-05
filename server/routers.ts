@@ -1904,6 +1904,7 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         ? (agora.getTime() - new Date(ultimoWebhookEm).getTime()) / (1000 * 60 * 60)
         : null;
 
+      const { ENV } = await import("./_core/env");
       return {
         ultimoWebhookEm,
         horasDesdeUltimoWebhook,
@@ -1915,6 +1916,7 @@ Se não for possível identificar um valor específico, responda: { "valor": nul
         alertaMensagem: horasDesdeUltimoWebhook !== null && horasDesdeUltimoWebhook > 24
           ? `Nenhum webhook recebido há ${Math.round(horasDesdeUltimoWebhook)}h — verifique se o deploy está atualizado`
           : null,
+        webhookUrl: `${ENV.webhookBaseUrl}/api/judit/webhook`,
       };
     }),
 
