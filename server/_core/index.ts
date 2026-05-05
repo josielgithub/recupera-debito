@@ -334,7 +334,8 @@ async function startServer() {
   });
 
   // ── Rota legada /api/judit/callback (mantida por compatibilidade) ──────────
-  app.post("/api/judit/callback", async (req, res) => {
+  // Handler reutilizavel para webhook (tanto /api/judit/callback quanto /api/judit/webhook)
+  const juditWebhookHandler = async (req: any, res: any) => {
     try {
       const payload = req.body as Record<string, unknown>;
       const cnj = (
@@ -344,26 +345,32 @@ async function startServer() {
       ) as string | undefined;
 
       if (!cnj) {
-        console.warn("[Judit Callback] CNJ ausente no payload:", payload);
+        console.warn("[Judit Webhook] CNJ ausente no payload:", payload);
         return res.status(400).json({ erro: "CNJ ausente" });
       }
 
       const processo = await getProcessoByCnj(cnj);
       if (!processo) {
-        console.warn(`[Judit Callback] Processo não encontrado: ${cnj}`);
-        return res.status(404).json({ erro: "Processo não encontrado" });
+        console.warn(`[Judit Webhook] Processo nao encontrado: ${cnj}`);
+        return res.status(404).json({ erro: "Processo nao encontrado" });
       }
 
       const { statusResumido, statusOriginal } = mapearStatusJudit(payload);
       await updateProcessoStatus(cnj, statusResumido, statusOriginal, payload);
 
-      console.log(`[Judit Callback] Processo ${cnj} atualizado → ${statusResumido} (${statusOriginal})`);
+      console.log(`[Judit Webhook] Processo ${cnj} atualizado -> ${statusResumido} (${statusOriginal})`);
       return res.status(200).json({ ok: true });
     } catch (err) {
-      console.error("[Judit Callback] Erro:", err);
+      console.error("[Judit Webhook] Erro:", err);
       return res.status(500).json({ erro: "Erro interno" });
     }
-  });
+  };
+
+  // Rota original (mantida para compatibilidade)
+  app.post("/api/judit/callback", juditWebhookHandler);
+
+  // Rota alias (novo endpoint que a Judit pode usar)
+  app.post("/api/judit/webhook", juditWebhookHandler);
 
   // tRPC
   app.use(
